@@ -1,0 +1,165 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.main = main;
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const index_1 = require("../index");
+const lexer_1 = require("../lexer/lexer");
+const parser_1 = require("../parser/parser");
+const repl_1 = require("./repl");
+const help_1 = require("./help");
+const server_1 = require("../playground/server");
+async function main() {
+    const args = process.argv.slice(2);
+    if (args.length === 0) {
+        (0, repl_1.startRepl)();
+        return;
+    }
+    const command = args[0];
+    if (command === "--version" || command === "-v" || command === "version") {
+        console.log("PLAIN Language version 1.0.0");
+        return;
+    }
+    if (command === "help" || command === "--help" || command === "-h") {
+        console.log((0, help_1.getHelp)(args[1]));
+        return;
+    }
+    if (command === "repl") {
+        (0, repl_1.startRepl)();
+        return;
+    }
+    if (command === "examples" || command === "example") {
+        const examplesDir = path.resolve(__dirname, "..", "..", "examples");
+        const target = args[1] === "run" ? args[2] : args[1];
+        if (!target) {
+            console.log("\n=== PLAIN Example Programs ===");
+            console.log("Run any example with: plain examples <number_or_name>\n");
+            if (fs.existsSync(examplesDir)) {
+                const files = fs.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+                for (const file of files) {
+                    console.log(`  - ${file.replace(".plain", "")}  (plain examples ${file.split("_")[0]})`);
+                }
+            }
+            console.log("\nExample: plain examples 01_hello\n");
+            return;
+        }
+        if (fs.existsSync(examplesDir)) {
+            const files = fs.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+            const match = files.find((f) => f.toLowerCase() === target.toLowerCase() ||
+                f.toLowerCase().startsWith(target.toLowerCase()) ||
+                f.toLowerCase().includes(target.toLowerCase()));
+            if (match) {
+                const fullPath = path.join(examplesDir, match);
+                const source = fs.readFileSync(fullPath, "utf-8");
+                console.log(`--- Running: ${match} ---\n`);
+                try {
+                    await (0, index_1.runPlain)(source, { filename: match, baseDir: examplesDir });
+                }
+                catch (err) {
+                    console.error((0, index_1.formatError)(err, source));
+                }
+                return;
+            }
+        }
+        console.error(`Error: Could not find example matching "${target}". Run 'plain examples' to see the list.`);
+        return;
+    }
+    if (command === "playground") {
+        const port = args[1] ? parseInt(args[1], 10) : 3000;
+        (0, server_1.startPlayground)(port);
+        return;
+    }
+    if (command === "check") {
+        const filename = args[1];
+        if (!filename) {
+            console.error("Error: Please provide a .plain file to check.");
+            process.exit(1);
+        }
+        const filePath = path.resolve(process.cwd(), filename);
+        if (!fs.existsSync(filePath)) {
+            console.error(`Error: File not found: "${filename}"`);
+            process.exit(1);
+        }
+        const source = fs.readFileSync(filePath, "utf-8");
+        try {
+            const lexer = new lexer_1.Lexer(source, filename);
+            const tokens = lexer.tokenize();
+            const parser = new parser_1.Parser(tokens, source, filename);
+            parser.parse();
+            console.log(`✓ Syntax OK: "${filename}" is valid PLAIN code.`);
+        }
+        catch (err) {
+            console.error((0, index_1.formatError)(err, source));
+            process.exit(1);
+        }
+        return;
+    }
+    // File execution: `plain run <file.plain>` or `plain <file.plain>`
+    let filename = command;
+    if (command === "run") {
+        if (!args[1]) {
+            console.error("Error: Please provide a .plain file to run.");
+            process.exit(1);
+        }
+        filename = args[1];
+    }
+    const filePath = path.resolve(process.cwd(), filename);
+    if (!fs.existsSync(filePath)) {
+        console.error(`Error: File not found: "${filename}"`);
+        process.exit(1);
+    }
+    if (!filename.endsWith(".plain")) {
+        console.warn(`[Note] PLAIN programs usually end with '.plain', but running "${filename}" anyway.\n`);
+    }
+    const source = fs.readFileSync(filePath, "utf-8");
+    try {
+        await (0, index_1.runPlain)(source, {
+            filename,
+            baseDir: path.dirname(filePath)
+        });
+    }
+    catch (err) {
+        console.error((0, index_1.formatError)(err, source));
+        process.exit(1);
+    }
+}
+if (require.main === module) {
+    main().catch((err) => {
+        console.error((0, index_1.formatError)(err));
+        process.exit(1);
+    });
+}
+//# sourceMappingURL=cli.js.map

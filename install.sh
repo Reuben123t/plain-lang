@@ -59,3 +59,4 @@ echo "  plain playground      # Open visual code editor in browser"
 echo "  plain examples        # View and run built-in examples"
 echo "  plain <file.plain>    # Run any .plain program"
 echo ""
+

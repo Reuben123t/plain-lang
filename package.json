@@ -20,8 +20,7 @@
     "build": "tsc",
     "watch": "tsc -w",
     "test": "node --test --import tsx tests/**/*.test.ts",
-    "plain": "tsx src/cli/cli.ts",
-    "prepare": "npm run build"
+    "plain": "tsx src/cli/cli.ts"
   },
   "keywords": [
     "plain",

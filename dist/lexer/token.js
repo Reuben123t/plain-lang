@@ -1,0 +1,78 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.TokenType = void 0;
+var TokenType;
+(function (TokenType) {
+    // Literals
+    TokenType["Number"] = "Number";
+    TokenType["String"] = "String";
+    TokenType["Boolean"] = "Boolean";
+    TokenType["Nothing"] = "Nothing";
+    TokenType["Identifier"] = "Identifier";
+    // Keywords & English Words
+    TokenType["Set"] = "Set";
+    TokenType["To"] = "To";
+    TokenType["Say"] = "Say";
+    TokenType["Show"] = "Show";
+    TokenType["Ask"] = "Ask";
+    TokenType["And"] = "And";
+    TokenType["Save"] = "Save";
+    TokenType["As"] = "As";
+    TokenType["Clear"] = "Clear";
+    TokenType["Screen"] = "Screen";
+    TokenType["If"] = "If";
+    TokenType["Then"] = "Then";
+    TokenType["Otherwise"] = "Otherwise";
+    TokenType["Repeat"] = "Repeat";
+    TokenType["Times"] = "Times";
+    TokenType["While"] = "While";
+    TokenType["For"] = "For";
+    TokenType["Each"] = "Each";
+    TokenType["In"] = "In";
+    TokenType["End"] = "End";
+    TokenType["Give"] = "Give";
+    TokenType["Back"] = "Back";
+    TokenType["Item"] = "Item";
+    TokenType["Of"] = "Of";
+    TokenType["Add"] = "Add";
+    TokenType["Remove"] = "Remove";
+    TokenType["From"] = "From";
+    TokenType["Wait"] = "Wait";
+    // Operators & Comparison English words
+    TokenType["Is"] = "Is";
+    TokenType["Equal"] = "Equal";
+    TokenType["Not"] = "Not";
+    TokenType["Greater"] = "Greater";
+    TokenType["Less"] = "Less";
+    TokenType["Than"] = "Than";
+    TokenType["At"] = "At";
+    TokenType["Least"] = "Least";
+    TokenType["Most"] = "Most";
+    TokenType["Plus"] = "Plus";
+    TokenType["Minus"] = "Minus";
+    TokenType["Divided"] = "Divided";
+    TokenType["By"] = "By";
+    TokenType["Remainder"] = "Remainder";
+    TokenType["Or"] = "Or";
+    // Symbols
+    TokenType["PlusSign"] = "PlusSign";
+    TokenType["MinusSign"] = "MinusSign";
+    TokenType["StarSign"] = "StarSign";
+    TokenType["SlashSign"] = "SlashSign";
+    TokenType["PercentSign"] = "PercentSign";
+    TokenType["EqualEqual"] = "EqualEqual";
+    TokenType["BangEqual"] = "BangEqual";
+    TokenType["LessSign"] = "LessSign";
+    TokenType["GreaterSign"] = "GreaterSign";
+    TokenType["LessEqual"] = "LessEqual";
+    TokenType["GreaterEqual"] = "GreaterEqual";
+    TokenType["LeftParen"] = "LeftParen";
+    TokenType["RightParen"] = "RightParen";
+    TokenType["LeftBracket"] = "LeftBracket";
+    TokenType["RightBracket"] = "RightBracket";
+    TokenType["Comma"] = "Comma";
+    // Formatting & Flow
+    TokenType["Newline"] = "Newline";
+    TokenType["EOF"] = "EOF";
+})(TokenType || (exports.TokenType = TokenType = {}));
+//# sourceMappingURL=token.js.map

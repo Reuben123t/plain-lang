@@ -81,3 +81,4 @@ Write-Host "  plain playground      # Open visual code editor in browser" -Foreg
 Write-Host "  plain examples        # View and run built-in examples" -ForegroundColor Cyan
 Write-Host "  plain <file.plain>    # Run any .plain program" -ForegroundColor Cyan
 Write-Host ""
+
