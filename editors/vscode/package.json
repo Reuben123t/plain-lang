@@ -1,0 +1,35 @@
+{
+  "name": "plain-language-support",
+  "displayName": "PLAIN Language Support",
+  "description": "Syntax highlighting and language support for the PLAIN programming language (.plain)",
+  "version": "1.0.0",
+  "publisher": "reuben",
+  "engines": {
+    "vscode": "^1.75.0"
+  },
+  "categories": [
+    "Programming Languages"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "plain",
+        "aliases": [
+          "PLAIN",
+          "plain"
+        ],
+        "extensions": [
+          ".plain"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "plain",
+        "scopeName": "source.plain",
+        "path": "./syntaxes/plain.tmLanguage.json"
+      }
+    ]
+  }
+}

@@ -1,0 +1,7 @@
+# Simple Calculator in PLAIN
+# Demonstrates variables and readable English math operators.
+
+set first to 12
+set second to 8
+set answer to first plus second
+say answer

@@ -1,0 +1,20 @@
+# To-Do List in PLAIN
+# Demonstrates list manipulation: adding, removing, and iterating.
+
+set tasks to ["Buy milk", "Read chapter 1", "Clean desk"]
+
+say "Original tasks:"
+for each task in tasks
+    say "- " plus task
+end
+
+say "Adding a new task..."
+add "Walk the dog" to tasks
+
+say "Removing completed task..."
+remove "Buy milk" from tasks
+
+say "Updated tasks (total: " plus count(tasks) plus "):"
+for each task in tasks
+    say "- " plus task
+end

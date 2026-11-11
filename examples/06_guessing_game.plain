@@ -1,0 +1,30 @@
+# Guessing Game in PLAIN
+# Demonstrates random numbers, repeat while loops, and comparisons.
+
+set secret to random between(1, 10)
+set lives to 3
+set won to false
+
+say "I picked a secret number between 1 and 10."
+say "You have 3 tries to guess it."
+
+repeat while lives is greater than 0
+    ask "Enter your guess:" and save as guess_text
+    set guess to to number(guess_text)
+
+    if guess is equal to secret then
+        say "Congratulations! You guessed correctly!"
+        set won to true
+        set lives to 0
+    otherwise if guess is greater than secret then
+        say "Too high!"
+        set lives to lives minus 1
+    otherwise
+        say "Too low!"
+        set lives to lives minus 1
+    end
+end
+
+if won is false then
+    say "Game over! The secret was " plus secret
+end

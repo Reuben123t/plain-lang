@@ -1,0 +1,17 @@
+# Files and Time in PLAIN
+# Demonstrates safe file I/O, current date/time, and pausing.
+
+say "Today is: " plus today()
+say "Current time is: " plus current_time()
+
+set filename to "welcome.txt"
+set message to "Hello from PLAIN! Created on " plus today()
+
+say "Writing message to " plus filename
+write_file(filename, message)
+
+if file_exists(filename) then
+    say "File exists! Reading content back:"
+    set saved_text to read_file(filename)
+    say saved_text
+end

@@ -1,0 +1,11 @@
+# Age Check in PLAIN
+# Demonstrates user input, type conversion, and conditionals.
+
+ask "How old are you?" and save as age_text
+set age to to number(age_text)
+
+if age is at least 18 then
+    say "You are an adult."
+otherwise
+    say "You are under 18."
+end

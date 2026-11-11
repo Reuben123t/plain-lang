@@ -1,0 +1,8 @@
+# Custom Functions in PLAIN
+# Demonstrates defining and calling functions in natural English.
+
+to double number
+    give back number times 2
+end
+
+say double 12
