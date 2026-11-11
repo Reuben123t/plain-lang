@@ -37,12 +37,31 @@ No semicolons. No curly braces. Just clear English instructions.
 
 ## Quick Installation & Downloading
 
-### 1. Download and Run from GitHub
-To download this package from GitHub to your computer:
+### 🚀 Automatic 1-Line Terminal Install (Recommended)
 
+Paste this into your terminal to automatically download, build, and install PLAIN:
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.ps1 | iex
+```
+
+**macOS / Linux (Bash / Curl):**
+```bash
+curl -fsSL https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.sh | bash
+```
+
+**Universal via NPM:**
+```bash
+npm install -g https://github.com/Reuben123t/plain-lang.git
+```
+
+---
+
+### Manual Download and Install from GitHub
 ```bash
 # Clone the repository
-git clone https://github.com/reuben/plain-lang.git
+git clone https://github.com/Reuben123t/plain-lang.git
 
 # Enter the directory
 cd plain-lang
@@ -55,19 +74,7 @@ npm run build
 npm link
 ```
 
-### 2. Push to Your Own GitHub Repository
-To push this language package to your own GitHub account:
-
-```bash
-git init
-git add .
-git commit -m "Initial commit of PLAIN programming language"
-git branch -M main
-git remote add origin https://github.com/<YOUR-USERNAME>/plain-lang.git
-git push -u origin main
-```
-
-### 3. Run Directly with NPX (Zero Setup)
+### Run Instantly with NPX (Zero Install)
 ```bash
 npx plain-lang run my_program.plain
 ```
@@ -283,3 +290,4 @@ npm test
 ## License
 
 MIT License. Free for education, personal, and commercial use.
+

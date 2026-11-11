@@ -41,3 +41,4 @@ export async function runPlain(
   await interpreter.run(ast);
   return interpreter;
 }
+

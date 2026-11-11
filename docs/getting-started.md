@@ -8,9 +8,26 @@ Whether you have never written a line of code in your life or you want a languag
 
 ## 1. Installation
 
-### Option A: Install from GitHub
+### Option A: Automatic 1-Line Terminal Install (Recommended)
+
+**Windows (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.ps1 | iex
+```
+
+**macOS / Linux:**
 ```bash
-git clone https://github.com/reuben/plain-lang.git
+curl -fsSL https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.sh | bash
+```
+
+**Universal via NPM:**
+```bash
+npm install -g https://github.com/Reuben123t/plain-lang.git
+```
+
+### Option B: Clone & Build Manually from GitHub
+```bash
+git clone https://github.com/Reuben123t/plain-lang.git
 cd plain-lang
 npm install
 npm run build
@@ -18,7 +35,7 @@ npm link
 ```
 Now the `plain` command is available everywhere in your terminal!
 
-### Option B: Run Directly with NPX (No installation required)
+### Option C: Run Directly with NPX (No installation required)
 ```bash
 npx plain-lang run my_program.plain
 ```
@@ -173,3 +190,4 @@ Suggestion: Make sure the number you are dividing by is not 0.
 ## 7. VS Code Extension
 
 For colorful syntax highlighting in Visual Studio Code, check the `editors/vscode` directory. Copy the folder to `~/.vscode/extensions/plain-language-support` and enjoy beautiful syntax highlighting for all `.plain` files!
+

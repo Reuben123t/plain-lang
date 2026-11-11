@@ -18,3 +18,4 @@ say "Updated tasks (total: " plus count(tasks) plus "):"
 for each task in tasks
     say "- " plus task
 end
+

@@ -52,5 +52,25 @@ export function createStandardEnvironment(options?: {
   register("write_file", (path, content) => fileSandbox.writeFile(path, content));
   register("file_exists", (path) => fileSandbox.fileExists(path));
 
+  // Register aliases for maximum beginner friendliness
+  register("to_number", mathBuiltins.to_number);
+  register("number", mathBuiltins.to_number);
+  register("to_text", mathBuiltins.to_text);
+  register("text", mathBuiltins.to_text);
+  register("len", textBuiltins.length);
+  register("size", textBuiltins.length);
+  register("print", (val) => (options?.onSay ? options.onSay(String(val)) : console.log(val)));
+
+  // Space aliases for direct identifier lookups
+  register("starts with", textBuiltins.starts_with);
+  register("ends with", textBuiltins.ends_with);
+  register("random between", mathBuiltins.random_between);
+  register("days between", (d1, d2) => timeBuiltins.days_between(d1, d2));
+  register("current time", () => timeBuiltins.current_time());
+  register("read file", (path) => fileSandbox.readFile(path));
+  register("write file", (path, content) => fileSandbox.writeFile(path, content));
+  register("file exists", (path) => fileSandbox.fileExists(path));
+
   return env;
 }
+

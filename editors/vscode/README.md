@@ -24,3 +24,4 @@ cd editors/vscode
 vsce package
 code --install-extension plain-language-support-1.0.0.vsix
 ```
+

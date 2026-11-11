@@ -3,3 +3,4 @@
 
 set marks to [80, 90, 70, 100]
 say average(marks)
+

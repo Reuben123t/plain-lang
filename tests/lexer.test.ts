@@ -53,3 +53,4 @@ describe("Lexer", () => {
     assert.strictEqual(tokens[1].value, "Visible");
   });
 });
+

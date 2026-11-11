@@ -32,6 +32,47 @@ export async function main(): Promise<void> {
     return;
   }
 
+  if (command === "examples" || command === "example") {
+    const examplesDir = path.resolve(__dirname, "..", "..", "examples");
+    const target = args[1] === "run" ? args[2] : args[1];
+
+    if (!target) {
+      console.log("\n=== PLAIN Example Programs ===");
+      console.log("Run any example with: plain examples <number_or_name>\n");
+      if (fs.existsSync(examplesDir)) {
+        const files = fs.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+        for (const file of files) {
+          console.log(`  - ${file.replace(".plain", "")}  (plain examples ${file.split("_")[0]})`);
+        }
+      }
+      console.log("\nExample: plain examples 01_hello\n");
+      return;
+    }
+
+    if (fs.existsSync(examplesDir)) {
+      const files = fs.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+      const match = files.find(
+        (f) =>
+          f.toLowerCase() === target.toLowerCase() ||
+          f.toLowerCase().startsWith(target.toLowerCase()) ||
+          f.toLowerCase().includes(target.toLowerCase())
+      );
+      if (match) {
+        const fullPath = path.join(examplesDir, match);
+        const source = fs.readFileSync(fullPath, "utf-8");
+        console.log(`--- Running: ${match} ---\n`);
+        try {
+          await runPlain(source, { filename: match, baseDir: examplesDir });
+        } catch (err: any) {
+          console.error(formatError(err, source));
+        }
+        return;
+      }
+    }
+    console.error(`Error: Could not find example matching "${target}". Run 'plain examples' to see the list.`);
+    return;
+  }
+
   if (command === "playground") {
     const port = args[1] ? parseInt(args[1], 10) : 3000;
     startPlayground(port);
@@ -101,3 +142,4 @@ if (require.main === module) {
     process.exit(1);
   });
 }
+

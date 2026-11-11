@@ -34,6 +34,10 @@
     "english",
     "education"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Reuben123t/plain-lang.git"
+  },
   "author": "Reuben",
   "license": "MIT",
   "devDependencies": {

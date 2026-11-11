@@ -68,3 +68,4 @@ export function getPlainTypeName(value: PlainValue): string {
   if (isPlainFunction(value)) return "function";
   return typeof value;
 }
+

@@ -71,3 +71,4 @@ describe("Error handling and formatting", () => {
     assert.ok(capturedError.suggestion?.includes("1-based indexing"));
   });
 });
+

@@ -77,3 +77,4 @@ export const mathBuiltins: Record<string, (...args: any[]) => any> = {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 };
+

@@ -121,3 +121,4 @@ PLAIN features five intuitive data types:
 - `read_file(PATH)`: Reads UTF-8 file inside the project workspace.
 - `write_file(PATH, TEXT)`: Writes text to file inside project workspace.
 - `file_exists(PATH)`: Returns true if file exists, false otherwise.
+

@@ -32,3 +32,4 @@ export function formatError(error: unknown, fallbackSource?: string): string {
 
   return result;
 }
+

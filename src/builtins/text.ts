@@ -49,3 +49,4 @@ export const textBuiltins: Record<string, (...args: any[]) => any> = {
     return plainToString(target).endsWith(plainToString(part));
   }
 };
+

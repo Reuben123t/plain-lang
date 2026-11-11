@@ -37,3 +37,4 @@ export class PlainError extends Error {
     Object.setPrototypeOf(this, PlainError.prototype);
   }
 }
+

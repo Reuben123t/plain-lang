@@ -101,3 +101,4 @@ remove "green" from colors
     assert.strictEqual(program.body[3].type, "ListRemoveStatement");
   });
 });
+
