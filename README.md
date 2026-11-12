@@ -232,66 +232,85 @@ set result to add 4 and 6
 say result
 ```
 
-### 8. 🎓 150+ Student & Academic Built-In Functions (10/10 for Students)
+### 8. 🚀 350+ Built-In Functions: Web, Data Science, AI & Automation
 
-PLAIN comes out-of-the-box with **over 150+ specialized functions** (260+ with aliases) across every subject a student encounters:
+PLAIN is a complete ecosystem out-of-the-box with **350+ functions and English aliases** covering:
 
-#### 📐 Mathematics & Algebra (46 Functions)
+#### 🌐 1. Web Development (HTTP Servers & Templates)
+- **HTTP Server**: `start_server(port, handler_fn)` — creates a live web server handling GET/POST requests and JSON/HTML responses.
+- **Static File Hosting**: `serve_static_files(port, folder)` — serves `.html`, `.css`, `.js`, and media files with one command.
+- **HTML Document Builder**: `html_page(title, body)` — generates responsive, modern HTML5 pages with clean CSS.
+- **HTML Markup**: `html_tag(tag, content, attrs)` (e.g. `<button>`), `html_table(headers, rows)` (auto-styles table).
+- **Templates**: `render_template(template, data_dict)` — replaces `{{variable}}` with data.
+- **HTTP Client**: `http_get(url, headers)`, `http_post(url, json_data, headers)`, `send_webhook(url, payload)`.
+
+#### 📊 2. Data Science (CSV, DataFrames & Visualizations)
+- **CSV Data Pipelines**: `read_csv(filepath)`, `write_csv(filepath, rows)`, `parse_csv(text)`, `to_csv(table)`.
+- **Table Operations**: `table_column(table, name_or_idx)`, `table_headers(table)`, `table_rows(table)`.
+- **Filtering & Sorting**: `filter_table(table, column, op, value)` (supports `==`, `>`, `<`, `contains`), `sort_table(table, col, asc)`.
+- **Aggregation**: `group_by_count(table, col)`, `group_by_sum(table, group_col, sum_col)`.
+- **Feature Scaling**: `normalize_data(numbers)` (Min-Max 0-1), `standardize_data(numbers)` (Z-score).
+- **Terminal ASCII Charts**: `ascii_bar_chart(labels, values, width)`, `ascii_histogram(data, bins)`.
+- **Interactive Web Charts**: `export_html_chart(title, type, labels, data, filepath)` — exports standalone HTML/JS charts!
+
+#### 🤖 3. Artificial Intelligence & Machine Learning
+- **K-Nearest Neighbors**: `knn_classify(train_x, train_y, test_point, k)` (classification), `knn_predict(...)` (regression).
+- **Clustering**: `kmeans_cluster(data, k, max_iters)` — Lloyd's K-Means clustering algorithm with centroid discovery.
+- **Sentiment Analysis**: `sentiment_analyze(text)` — detects positive/negative sentiment, negation, and intensity.
+- **Text Classification**: `train_text_classifier(docs, labels)` and `classify_text(model, text)` — Naive Bayes text classifier!
+- **Vector Embeddings**: `vector_dot(v1, v2)`, `vector_magnitude(v)`, `cosine_similarity(v1, v2)` (semantic similarity $-1$ to $1$), `vector_distance(v1, v2)`.
+- **Neural Networks**: `sigmoid(x)`, `relu(x)`, `softmax(list)`, `neural_forward(weights, biases, inputs, activation)`.
+- **Linear & Polynomial ML**: `predict_linear(x_vals, y_vals, target_x)`.
+- **LLM Prompting & API**: `ai_prompt(template, variables)`, `ai_chat(prompt, system_prompt, api_key, model)`.
+
+#### ⚙️ 4. Task Automation (Shell, File Workflows & Logging)
+- **Shell Commands**: `run_command(cmd)` (or `shell`) — executes system commands and captures stdout/stderr.
+- **Recursive File Search**: `find_files(directory, pattern)`, `walk_directory(directory)`.
+- **File Management**: `copy_file(src, dest)`, `move_file(src, dest)`, `batch_rename(dir, find, replace)`, `batch_delete(dir, pattern)`.
+- **Integrity**: `checksum_file(path, "sha256")`, `checksum_file(path, "md5")`.
+- **Structured Logging**: `log_info(msg)`, `log_warn(msg)`, `log_error(msg)` with ISO timestamps.
+- **Environment & Clipboard**: `parse_env_file(".env")`, `get_clipboard()`, `set_clipboard(text)`.
+
+#### 📐 5. Mathematics & Algebra (46 Functions)
 - **Powers & Roots**: `square(x)`, `cube(x)`, `square_root(x)` (or `sqrt`), `cube_root(x)`, `power(base, exp)`
 - **Number Theory**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `is_prime(n)`, `next_prime(n)`, `primes_up_to(n)`, `factors(n)`, `is_even(n)`, `is_odd(n)`
 - **Algebra & Finance**: `percentage(part, total)`, `percent_change(old, new)`, `simple_interest(p, r, t)`, `compound_interest(p, r, t, n)`, `permutations(n, r)`, `combinations(n, r)`, `quadratic_roots(a, b, c)`
 - **Trigonometry & Calculus**: `sine(rad)`, `cosine(rad)`, `tangent(rad)`, `arcsine(x)`, `arccosine(x)`, `arctangent(x)`, `to_degrees(rad)`, `to_radians(deg)`, `log(x)`, `log10(x)`, `log2(x)`, `exp(x)`, `pi()`, `euler_e()`
 - **Basic & Clamping**: `round(x, dec)`, `floor(x)`, `ceiling(x)`, `absolute(x)`, `minimum(...)`, `maximum(...)`, `sign(x)`, `clamp(val, min, max)`, `random_between(min, max)`
 
-#### 📏 Geometry & 3D Shapes (15 Functions)
+#### 📏 6. Geometry & 3D Shapes (15 Functions)
 - **Distance & 2D**: `hypotenuse(a, b)`, `distance_2d(x1, y1, x2, y2)`, `distance_3d(...)`
 - **Areas & Perimeters**: `area_circle(r)`, `circumference_circle(r)`, `area_triangle(b, h)`, `area_rectangle(w, h)`, `perimeter_rectangle(w, h)`, `area_trapezoid(a, b, h)`
 - **3D Volumes & Surface Areas**: `volume_cube(s)`, `volume_sphere(r)`, `surface_area_sphere(r)`, `volume_cylinder(r, h)`, `surface_area_cylinder(r, h)`, `volume_cone(r, h)`
 
-#### 📊 Statistics & Data Analysis (16 Functions)
-- **Averages & Center**: `mean(list)`, `median(list)`, `mode(list)`
-- **Spread & Dispersion**: `range_of(list)`, `variance(list)`, `standard_deviation(list)` (or `stdev`), `z_score(val, mean, stdev)`
-- **Distributions & Quantiles**: `percentile(list, p)`, `quartiles(list)`, `iqr(list)`, `frequency_table(list)`
-- **Bivariate & Regression**: `covariance(x, y)`, `correlation(x, y)`, `linear_regression(x, y)` (returns `[slope, intercept]`), `cumulative_sum(list)`, `product_of(list)`
+#### 📊 7. Statistics (16 Functions)
+- `mean(list)`, `median(list)`, `mode(list)`, `range_of(list)`, `variance(list)`, `standard_deviation(list)` (or `stdev`), `z_score(...)`, `percentile(list, p)`, `quartiles(list)`, `iqr(list)`, `frequency_table(list)`, `covariance(x, y)`, `correlation(x, y)`, `linear_regression(x, y)`, `cumulative_sum(list)`, `product_of(list)`
 
-#### ⚛️ Science, Physics & Chemistry (18 Functions)
-- **Chemistry & Elements**: `atomic_mass("Au")`, `atomic_number("C")`, `element_name("Fe")`, `density(mass, vol)`
-- **Motion & Mechanics**: `speed(dist, time)`, `acceleration(v1, v2, time)`, `force(m, a)`, `momentum(m, v)`, `kinetic_energy(m, v)`, `potential_energy(m, h, g)`, `work_done(f, d)`, `power_watts(work, time)`
-- **Electricity (Ohm's Law)**: `ohms_voltage(i, r)`, `ohms_current(v, r)`, `ohms_resistance(v, i)`, `electrical_power(v, i)`
-- **Gravity & Projectiles**: `free_fall_time(height, g)`, `projectile_range(v, angle_deg, g)`
+#### ⚛️ 8. Science, Physics & Chemistry (18 Functions)
+- **Chemistry**: `atomic_mass("Au")`, `atomic_number("C")`, `element_name("Fe")`, `density(m, v)`
+- **Mechanics**: `speed(d, t)`, `acceleration(v1, v2, t)`, `force(m, a)`, `momentum(m, v)`, `kinetic_energy(m, v)`, `potential_energy(m, h, g)`, `work_done(f, d)`, `power_watts(w, t)`
+- **Electricity & Gravity**: `ohms_voltage(i, r)`, `ohms_current(v, r)`, `ohms_resistance(v, i)`, `electrical_power(v, i)`, `free_fall_time(h, g)`, `projectile_range(v, angle, g)`
 
-#### 🎒 Letter Grades, GPA & Unit Conversions (22 Functions)
-- **Academics**: `letter_grade(pct)` (e.g. 95 -> "A"), `gpa_from_percentage(pct)` (e.g. 95 -> 4.0), `gpa_from_grades(list_of_letter_grades)`, `weighted_score(scores, weights)`
-- **Temperature**: `celsius_to_fahrenheit(c)`, `fahrenheit_to_celsius(f)`, `celsius_to_kelvin(c)`, `kelvin_to_celsius(k)`
-- **Length**: `km_to_miles(km)`, `miles_to_km(mi)`, `meters_to_feet(m)`, `feet_to_meters(ft)`, `cm_to_inches(cm)`, `inches_to_cm(in)`
-- **Mass & Volume**: `kg_to_pounds(kg)`, `pounds_to_kg(lbs)`, `grams_to_ounces(g)`, `ounces_to_grams(oz)`, `liters_to_gallons(l)`, `gallons_to_liters(gal)`
-- **Time Conversions**: `hours_to_minutes(h)`, `minutes_to_seconds(m)`
+#### 🎒 9. Student Grades, GPA & Unit Conversions (22 Functions)
+- `letter_grade(pct)`, `gpa_from_percentage(pct)`, `gpa_from_grades(list)`, `weighted_score(scores, weights)`
+- `celsius_to_fahrenheit`, `fahrenheit_to_celsius`, `celsius_to_kelvin`, `kelvin_to_celsius`
+- `km_to_miles`, `miles_to_km`, `meters_to_feet`, `feet_to_meters`, `cm_to_inches`, `inches_to_cm`
+- `kg_to_pounds`, `pounds_to_kg`, `grams_to_ounces`, `ounces_to_grams`, `liters_to_gallons`, `gallons_to_liters`
 
-#### 📝 Text & String Processing (36 Functions)
-- **Case Conversion**: `uppercase(s)`, `lowercase(s)`, `title_case(s)`, `camel_case(s)`, `snake_case(s)`, `kebab_case(s)`
-- **Inspection & Counting**: `length(s)`, `word_count(s)`, `line_count(s)`, `char_count(s)`, `count_vowels(s)`, `count_consonants(s)`
-- **Validation**: `is_digit(s)`, `is_alpha(s)`, `is_alphanumeric(s)`, `is_uppercase(s)`, `is_lowercase(s)`, `is_palindrome(s)`
-- **Transformation & Cryptography**: `reverse_text(s)`, `trim(s)`, `pad_start(s, len, ch)`, `pad_end(s, len, ch)`, `repeat_text(s, n)`, `caesar_cipher(s, shift)`, `base64_encode(s)`, `base64_decode(s)`, `slugify(s)`
-- **Splitting & Slicing**: `split_text(s, sep)`, `words(s)`, `lines(s)`, `slice_text(s, start, end)`
+#### 📝 10. Text & String Processing (36 Functions)
+- `uppercase`, `lowercase`, `title_case`, `camel_case`, `snake_case`, `kebab_case`, `length`, `word_count`, `line_count`, `char_count`, `is_palindrome`, `caesar_cipher`, `base64_encode`, `base64_decode`, `slugify`, `split_text`, `slice_text`, `trim`, `pad_start`, `pad_end`
 
-#### 📋 List & Array Algorithms (28 Functions)
-- **Querying & Slicing**: `count(l)`, `first(l)`, `last(l)`, `item_of(l, idx)`, `find_index(l, item)`, `slice_list(l, start, end)`, `take(l, n)`, `drop(l, n)`, `is_empty(l)`, `is_sorted(l)`
-- **Set & Multi-List Ops**: `unique(l)`, `intersection(a, b)`, `union(a, b)`, `difference(a, b)`, `zip(a, b)`, `chunk(l, size)`, `flatten(l)`
-- **Ordering & Mutation**: `sort(l)`, `reverse(l)`, `shuffle(l)`, `sample(l, n)`, `insert_at(l, idx, item)`, `fill_list(val, n)`, `range_list(start, end, step)`
+#### 📋 11. Lists & Arrays (28 Functions)
+- `count`, `first`, `last`, `item_of`, `sort`, `reverse`, `sum`, `average`, `highest`, `lowest`, `unique`, `shuffle`, `sample`, `chunk`, `intersection`, `union`, `difference`, `zip`, `find_index`, `slice_list`, `is_sorted`, `range_list`
 
-#### 📅 Date, Time & Calendars (17 Functions)
-- `today()`, `current_time()`, `current_year()`, `current_month()`, `current_month_name()`, `current_day()`, `current_hour()`, `current_minute()`, `current_second()`, `timestamp()`, `day_of_week()`, `is_leap_year(y)`, `days_in_month(y, m)`, `days_between(d1, d2)`, `add_days(d, n)`, `format_date(d, fmt)`, `sleep(sec)`
+#### 📅 12. Date & Time (17 Functions)
+- `today()`, `current_time()`, `current_year()`, `current_month()`, `day_of_week()`, `is_leap_year(y)`, `days_in_month(y, m)`, `days_between(d1, d2)`, `add_days(d, n)`, `format_date(d, fmt)`, `sleep(sec)`
 
-#### 🎲 System, Games & Student Dictionary (18 Functions)
-- **Student Dictionary**: `define_word("photosynthesis")` — built-in definitions for key academic concepts!
-- **Interactive & Games**: `roll_dice(sides, count)`, `flip_coin()`, `pick_card()`, `deck_of_cards()`, `flashcard()`, `banner("trophy")`, `beep()`
-- **System & Security**: `os_platform()`, `os_arch()`, `cpu_count()`, `memory_usage()`, `get_env(key)`, `random_id(len)`, `generate_password(len)`, `hash_text(s)`, `uuid()`, `to_json(v)`, `from_json(s)`
+#### 🎲 13. System, Games & Offline Reference (18 Functions)
+- `define_word(word)` (offline dictionary), `roll_dice(sides, count)`, `flip_coin()`, `pick_card()`, `deck_of_cards()`, `flashcard()`, `banner("trophy")`, `beep()`, `os_platform()`, `os_arch()`, `cpu_count()`, `memory_usage()`, `random_id(len)`, `generate_password(len)`, `hash_text(s)`
 
-#### 📁 Sandboxed Safe File I/O (9 Functions)
+#### 📁 14. Sandboxed Safe File I/O (9 Functions)
 - `read_file(path)`, `write_file(path, text)`, `append_file(path, text)`, `file_exists(path)`, `delete_file(path)`, `list_files(dir)`, `file_size(path)`, `create_folder(dir)`, `folder_exists(dir)`
-
-#### 🌐 Network & Web (5 Functions)
-- `fetch_text(url)`, `fetch_json(url)`, `url_encode(text)`, `url_decode(text)`, `is_valid_url(text)`
 
 ---
 

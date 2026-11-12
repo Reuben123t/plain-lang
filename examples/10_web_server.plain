@@ -1,0 +1,34 @@
+# Web Development in PLAIN
+# Demonstrates HTML generation, responsive pages, and HTTP templates.
+
+say "=== PLAIN Web Development Suite ==="
+
+# 1. HTML Tag Generation
+set button_html to html_tag("button", "Click to Enroll", "class='btn primary'")
+say "1. Generated HTML Button:"
+say button_html
+
+# 2. HTML Table Generation
+set headers to ["Student ID", "Course", "Grade"]
+set rows to [
+    ["STU-101", "Introduction to AI", "A"],
+    ["STU-102", "Data Science Fundamentals", "A+"],
+    ["STU-103", "Web Development", "B+"]
+]
+set table_html to html_table(headers, rows)
+say "2. Generated HTML Table:"
+say table_html
+
+# 3. Dynamic HTML Template Rendering
+set template to "<h1>Hello, {{student_name}}!</h1><p>Your current enrolled major is: <b>{{major}}</b>.</p>"
+set data to ["student_name: Reuben", "major: Artificial Intelligence & Computer Science"]
+set rendered to render_template(template, data)
+say "3. Rendered Template:"
+say rendered
+
+# 4. Generate a Full Modern HTML5 Document
+set full_page to html_page("Student Portal", rendered + table_html + "<p>" + button_html + "</p>")
+write_file("student_portal.html", full_page)
+say "4. Complete HTML page exported to 'student_portal.html'!"
+
+say "=== Web Suite Completed Successfully! ==="

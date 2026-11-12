@@ -1,0 +1,37 @@
+# Task Automation in PLAIN
+# Demonstrates shell execution, file searching, checksums, and structured logging.
+
+say "=== PLAIN Task Automation Suite ==="
+
+# 1. Structured Logging
+log_info("Starting daily automated maintenance task...")
+log_warn("Scanning workspace directories for temporary files...")
+
+# 2. Shell Command Automation
+set node_ver to run_command("node --version")
+say "1. Local Runtime Environment: " + node_ver
+
+# 3. Find Files by Extension
+set plain_files to find_files("examples", ".plain")
+say "2. Discovered " + to_text(count(plain_files)) + " PLAIN example scripts in examples folder:"
+for each f in plain_files
+    say "   - " + f
+end
+
+# 4. File Integrity Checksum (SHA256)
+set checksum to checksum_file("package.json", "sha256")
+say "3. package.json SHA-256 Checksum: " + checksum
+
+# 5. Environment File Parsing Simulation
+write_file(".env.demo", "APP_NAME=StudentPortal\nPORT=8080\nDEBUG=true")
+set env_entries to parse_env_file(".env.demo")
+say "4. Parsed Environment Variables:"
+for each entry in env_entries
+    say "   " + entry
+end
+
+# Cleanup demo file
+delete_file(".env.demo")
+
+log_info("All automated workflow tasks completed successfully!")
+say "=== Automation Suite Completed Successfully! ==="

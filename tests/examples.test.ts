@@ -89,5 +89,42 @@ end
     assert.ok(outputs.includes("Updated tasks (total: 3):"));
     assert.ok(outputs.includes("- Walk the dog"));
   });
+
+  test("runs 09_student_science.plain", async () => {
+    const code = fs.readFileSync(path.join(examplesDir, "09_student_science.plain"), "utf-8");
+    const outputs: string[] = [];
+    await runPlain(code, { onSay: (s) => outputs.push(s) });
+    assert.ok(outputs[0].includes("PLAIN Student Science"));
+    assert.ok(outputs[outputs.length - 1].includes("Successfully"));
+  });
+
+  test("runs 10_web_server.plain", async () => {
+    const code = fs.readFileSync(path.join(examplesDir, "10_web_server.plain"), "utf-8");
+    const outputs: string[] = [];
+    await runPlain(code, { onSay: (s) => outputs.push(s) });
+    assert.ok(outputs[0].includes("Web Development Suite"));
+    if (fs.existsSync("student_portal.html")) fs.unlinkSync("student_portal.html");
+  });
+
+  test("runs 11_data_science.plain", async () => {
+    const code = fs.readFileSync(path.join(examplesDir, "11_data_science.plain"), "utf-8");
+    const outputs: string[] = [];
+    await runPlain(code, { onSay: (s) => outputs.push(s) });
+    assert.ok(outputs[0].includes("Data Science Suite"));
+  });
+
+  test("runs 12_machine_learning.plain", async () => {
+    const code = fs.readFileSync(path.join(examplesDir, "12_machine_learning.plain"), "utf-8");
+    const outputs: string[] = [];
+    await runPlain(code, { onSay: (s) => outputs.push(s) });
+    assert.ok(outputs[0].includes("Artificial Intelligence & ML Suite"));
+  });
+
+  test("runs 13_task_automation.plain", async () => {
+    const code = fs.readFileSync(path.join(examplesDir, "13_task_automation.plain"), "utf-8");
+    const outputs: string[] = [];
+    await runPlain(code, { onSay: (s) => outputs.push(s) });
+    assert.ok(outputs[0].includes("Task Automation Suite"));
+  });
 });
 

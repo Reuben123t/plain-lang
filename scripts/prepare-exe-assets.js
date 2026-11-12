@@ -45,3 +45,4 @@ fs.closeSync(fd);
 
 const stat = fs.statSync(dataFile);
 console.log(`Payload created: ${stat.size} bytes (${(stat.size / 1024 / 1024).toFixed(2)} MB).`);
+

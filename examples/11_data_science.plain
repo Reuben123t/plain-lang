@@ -1,0 +1,44 @@
+# Data Science in PLAIN
+# Demonstrates CSV processing, column filtering, aggregation, and ASCII charts.
+
+say "=== PLAIN Data Science Suite ==="
+
+# 1. Parse CSV Data
+set raw_csv to "Product,Category,Sales,Rating\nMacBook,Electronics,120,4.8\nPython Book,Education,340,4.6\nDesk Lamp,Home,85,4.1\niPad Air,Electronics,210,4.7\nNotebook,Education,500,4.3"
+
+set table to parse_csv(raw_csv)
+say "1. Parsed CSV Rows: " + to_text(count(table))
+
+# 2. Extract Columns
+set sales_col to table_column(table, "Sales")
+say "2. Sales Column: " + to_text(sales_col)
+
+# 3. Descriptive Statistics
+set stats to describe_column(sales_col)
+say "3. Column Statistics:"
+for each stat in stats
+    say "   - " + stat
+end
+
+# 4. Filter Table (Electronics only)
+set electronics to filter_table(table, "Category", "==", "Electronics")
+say "4. Electronics Products:"
+for each row in electronics
+    say "   " + to_text(row)
+end
+
+# 5. Group By Category & Sum Sales
+set grouped_sales to group_by_sum(table, "Category", "Sales")
+say "5. Total Sales by Category:"
+for each group in grouped_sales
+    say "   " + to_text(group)
+end
+
+# 6. Terminal ASCII Bar Chart
+say "6. Sales Distribution Bar Chart:"
+set categories to ["Electronics", "Education", "Home"]
+set totals to [330, 840, 85]
+set chart to ascii_bar_chart(categories, totals, 25)
+say chart
+
+say "=== Data Science Suite Completed Successfully! ==="

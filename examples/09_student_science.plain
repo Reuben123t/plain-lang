@@ -33,3 +33,4 @@ say "6. Vocabulary Word 'photosynthesis':"
 say "   " + define_word("photosynthesis")
 
 say "=== All Calculations Completed Successfully! ==="
+

@@ -259,4 +259,72 @@ PLAIN features five intuitive data types:
 - `url_encode(text)`, `url_decode(text)`: URL percent encoding.
 - `is_valid_url(text)`: Validates web URLs.
 
+### P. Web Development
+- `start_server(port, handler_fn)`: Starts a lightweight HTTP server. The handler function receives `(method, path, query, body)` and returns HTML, text, or JSON.
+- `stop_server()`: Closes any active HTTP server.
+- `serve_static_files(port, folder)`: Serves a directory of static assets (`.html`, `.css`, `.js`, images).
+- `html_page(title, body)`: Generates a complete HTML5 document boilerplate with responsive CSS.
+- `html_tag(tag, content, attrs)`: Helper to generate clean HTML markup elements.
+- `html_table(headers, rows)`: Automatically generates and styles an HTML `<table>` from 2D data.
+- `render_template(template, data_dict)`: Replaces `{{key}}` tokens with provided values.
+- `parse_query_string(query_string)`: Parses URL query parameters into key-value pairs.
+- `http_get(url, headers)`: HTTP GET client request with custom headers.
+- `http_post(url, body, headers)`: HTTP POST client request with JSON or text payload.
+- `send_webhook(url, payload)`: Dispatches a JSON webhook POST.
+
+### Q. Data Science
+- `parse_csv(text)`: Parses raw CSV text into a 2D table, respecting quotes and commas.
+- `to_csv(table)`: Serializes a 2D table into CSV format.
+- `read_csv(filepath)`: Reads a CSV file from disk into a 2D table.
+- `write_csv(filepath, table)`: Writes a 2D table to disk as CSV.
+- `table_headers(table)`: Returns the first row of table as header list.
+- `table_rows(table)`: Returns data rows without the header row.
+- `table_column(table, col_name_or_1based_index)`: Extracts column values as a list.
+- `filter_table(table, column, op, target_value)`: Filters table rows based on condition (`==`, `!=`, `>`, `<`, `>=`, `<=`, `contains`).
+- `sort_table(table, column, ascending)`: Sorts table rows by column.
+- `group_by_count(table, column)`: Aggregates counts by distinct column values.
+- `group_by_sum(table, group_col, sum_col)`: Sums numeric column per category.
+- `describe_column(column_data)`: Generates summary statistics (`count`, `min`, `max`, `mean`, `median`, `stdev`).
+- `normalize_data(numbers)`: Min-Max scaling to the range $[0, 1]$.
+- `standardize_data(numbers)`: Z-score scaling (zero mean, unit variance).
+- `train_test_split(dataset, test_ratio)`: Splits dataset into `[train_set, test_set]`.
+- `ascii_bar_chart(labels, values, max_width)`: Renders terminal horizontal bar charts.
+- `ascii_histogram(numbers, bins)`: Renders frequency distribution histograms in ASCII.
+- `export_html_chart(title, type, labels, data, filepath)`: Exports interactive HTML5/Canvas charts to a `.html` file.
+
+### R. Artificial Intelligence & Machine Learning
+- `knn_classify(train_x, train_y, test_point, k)`: K-Nearest Neighbors classifier returning the majority class label.
+- `knn_predict(train_x, train_y, test_point, k)`: K-Nearest Neighbors regression returning average target value.
+- `kmeans_cluster(data, k, max_iters)`: K-Means clustering algorithm discovering centroids and cluster assignments.
+- `sentiment_analyze(text)`: Rule-based lexicon sentiment analyzer returning sentiment label and polarity score.
+- `train_text_classifier(docs, labels)`: Trains a Naive Bayes bag-of-words text classifier model with Laplace smoothing.
+- `classify_text(model, text)`: Classifies new text using the trained Naive Bayes model.
+- `vector_dot(v1, v2)`: Computes dot product $\sum a_i b_i$.
+- `vector_magnitude(v)`: Computes vector norm $\|v\|$.
+- `cosine_similarity(v1, v2)`: Cosine similarity for semantic embeddings (range $-1$ to $1$).
+- `vector_distance(v1, v2)`: Euclidean distance between vectors.
+- `sigmoid(x)`: Sigmoid activation function.
+- `relu(x)`: Rectified Linear Unit activation function.
+- `softmax(vector)`: Softmax probability distribution.
+- `neural_forward(weights, biases, inputs, activation)`: Computes forward pass of a dense layer.
+- `predict_linear(x_vals, y_vals, target_x)`: Linear regression prediction.
+- `ai_prompt(template, variables)`: Substitutes variables into prompt template for LLMs.
+- `ai_chat(prompt, system_prompt, api_key, model)`: Sends chat request to OpenAI/Gemini-compatible LLM endpoint.
+
+### S. Task Automation
+- `run_command(cmd)` / `shell(cmd)`: Executes system command synchronously, returning output text.
+- `walk_directory(dir)`: Recursively lists all file paths in a directory tree.
+- `find_files(dir, pattern)`: Finds files matching extension or substring.
+- `copy_file(src, dest)`: Copies file safely with automatic folder creation.
+- `move_file(src, dest)`: Moves / renames file.
+- `batch_rename(dir, find, replace)`: Bulk renames files in a directory.
+- `batch_delete(dir, pattern)`: Cleans up files matching pattern.
+- `log_info(msg)`, `log_warn(msg)`, `log_error(msg)`: Formatted logger with ISO timestamps.
+- `parse_env_file(filepath)`: Parses `.env` configuration file into environment variables.
+- `checksum_file(filepath, algo)`: Computes file hash (SHA256, MD5) for integrity auditing.
+- `get_clipboard()`: Reads text from system clipboard.
+- `set_clipboard(text)`: Writes text to system clipboard.
+- `delay(seconds)`: Pauses execution.
+
+
 

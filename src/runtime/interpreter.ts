@@ -87,7 +87,8 @@ export class Interpreter {
       onSay: this.onSay,
       onShow: this.onShow,
       onAsk: this.onAsk,
-      onClear: this.onClear
+      onClear: this.onClear,
+      invokeFunction: (fn, args) => this.callFunction(fn, args)
     });
     this.currentEnv = this.globalEnv;
   }
@@ -473,6 +474,14 @@ export class Interpreter {
       evaluatedArgs.push(await this.evaluate(arg));
     }
 
+    return this.callFunction(calleeVal, evaluatedArgs, expr.location);
+  }
+
+  public async callFunction(
+    calleeVal: PlainFunction,
+    evaluatedArgs: PlainValue[],
+    location?: SourceLocation
+  ): Promise<PlainValue> {
     // Native Builtin Function
     if (calleeVal.nativeFn) {
       try {
@@ -482,7 +491,7 @@ export class Interpreter {
         if (err instanceof PlainError) throw err;
         throw new PlainError(
           `Error running function '${calleeVal.name}': ${err.message}`,
-          expr.location,
+          location || { line: 1, column: 1 },
           { kind: "RuntimeError", sourceCode: this.sourceCode }
         );
       }

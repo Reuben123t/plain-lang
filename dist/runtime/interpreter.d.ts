@@ -1,6 +1,7 @@
 import { Expression, Program, Statement } from "../ast/types";
 import { Environment } from "./environment";
-import { PlainValue } from "./values";
+import { PlainFunction, PlainValue } from "./values";
+import { SourceLocation } from "../errors/plain-error";
 export interface InterpreterOptions {
     baseDir?: string;
     sourceCode?: string;
@@ -41,6 +42,7 @@ export declare class Interpreter {
     private evaluateUnary;
     private evaluateBinary;
     private evaluateCall;
+    callFunction(calleeVal: PlainFunction, evaluatedArgs: PlainValue[], location?: SourceLocation): Promise<PlainValue>;
     private valuesEqual;
 }
 //# sourceMappingURL=interpreter.d.ts.map

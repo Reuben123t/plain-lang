@@ -33,8 +33,8 @@ __export(cli_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(cli_exports);
-var fs2 = __toESM(require("fs"));
-var path2 = __toESM(require("path"));
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
 
 // src/errors/plain-error.ts
 var PlainError = class _PlainError extends Error {
@@ -2286,7 +2286,7 @@ var timeBuiltins = {
   sleep: async (secondsVal) => {
     const sec = mathBuiltins.to_number(secondsVal);
     const ms = Math.max(0, sec * 1e3);
-    return new Promise((resolve3) => setTimeout(resolve3, ms));
+    return new Promise((resolve6) => setTimeout(resolve6, ms));
   }
 };
 
@@ -3134,25 +3134,25 @@ A: ${card.answer}`;
 // src/builtins/network.ts
 var networkBuiltins = {
   fetch_text: async (urlVal) => {
-    const url = plainToString(urlVal);
+    const url2 = plainToString(urlVal);
     try {
-      const response = await fetch(url);
+      const response = await fetch(url2);
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
       }
       return await response.text();
     } catch (err) {
       throw new PlainError(
-        `Failed to fetch URL "${url}": ${err.message}`,
+        `Failed to fetch URL "${url2}": ${err.message}`,
         { line: 1, column: 1 },
         { kind: "RuntimeError", suggestion: "Make sure the URL is valid and you have an active internet connection." }
       );
     }
   },
   fetch_json: async (urlVal) => {
-    const url = plainToString(urlVal);
+    const url2 = plainToString(urlVal);
     try {
-      const response = await fetch(url);
+      const response = await fetch(url2);
       if (!response.ok) {
         throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
       }
@@ -3169,7 +3169,7 @@ var networkBuiltins = {
       return convert(data);
     } catch (err) {
       throw new PlainError(
-        `Failed to fetch JSON from "${url}": ${err.message}`,
+        `Failed to fetch JSON from "${url2}": ${err.message}`,
         { line: 1, column: 1 },
         { kind: "RuntimeError" }
       );
@@ -3194,18 +3194,1169 @@ var networkBuiltins = {
   }
 };
 
-// src/builtins/file.ts
+// src/builtins/web.ts
+var http = __toESM(require("http"));
+var url = __toESM(require("url"));
 var fs = __toESM(require("fs"));
 var path = __toESM(require("path"));
+var activeServer = null;
+var MIME_TYPES = {
+  ".html": "text/html; charset=utf-8",
+  ".css": "text/css; charset=utf-8",
+  ".js": "application/javascript; charset=utf-8",
+  ".json": "application/json; charset=utf-8",
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain; charset=utf-8",
+  ".ico": "image/x-icon"
+};
+function createWebBuiltins(context) {
+  return {
+    start_server: async (portVal, handlerVal) => {
+      const port = typeof portVal === "number" ? portVal : parseInt(plainToString(portVal), 10) || 3e3;
+      if (activeServer) {
+        try {
+          activeServer.close();
+        } catch {
+        }
+        activeServer = null;
+      }
+      return new Promise((resolve6, reject) => {
+        const server = http.createServer(async (req, res) => {
+          const parsedUrl = url.parse(req.url || "/", true);
+          const reqPath = parsedUrl.pathname || "/";
+          const method = req.method || "GET";
+          const query = JSON.stringify(parsedUrl.query || {});
+          let body = "";
+          req.on("data", (chunk) => {
+            body += chunk;
+          });
+          req.on("end", async () => {
+            try {
+              let responseBody = "OK";
+              let statusCode = 200;
+              let contentType = "text/html; charset=utf-8";
+              if (isPlainFunction(handlerVal) && context?.invokeFunction) {
+                const handlerResult = await context.invokeFunction(handlerVal, [
+                  method,
+                  reqPath,
+                  query,
+                  body
+                ]);
+                if (typeof handlerResult === "string") {
+                  responseBody = handlerResult;
+                  if (responseBody.trim().startsWith("<")) {
+                    contentType = "text/html; charset=utf-8";
+                  } else if (responseBody.trim().startsWith("{") || responseBody.trim().startsWith("[")) {
+                    contentType = "application/json; charset=utf-8";
+                  } else {
+                    contentType = "text/plain; charset=utf-8";
+                  }
+                } else if (handlerResult !== null && handlerResult !== void 0) {
+                  responseBody = JSON.stringify(handlerResult, null, 2);
+                  contentType = "application/json; charset=utf-8";
+                }
+              } else if (typeof handlerVal === "string") {
+                responseBody = handlerVal;
+              }
+              res.writeHead(statusCode, { "Content-Type": contentType });
+              res.end(responseBody);
+            } catch (err) {
+              res.writeHead(500, { "Content-Type": "text/plain" });
+              res.end("Internal Server Error: " + err.message);
+            }
+          });
+        });
+        server.on("error", (err) => {
+          reject(new PlainError(`Failed to start server on port ${port}: ${err.message}`, { line: 1, column: 1 }, { kind: "RuntimeError" }));
+        });
+        server.listen(port, () => {
+          activeServer = server;
+          resolve6(`Server running at http://localhost:${port}/`);
+        });
+      });
+    },
+    stop_server: () => {
+      if (activeServer) {
+        activeServer.close();
+        activeServer = null;
+        return "Server stopped.";
+      }
+      return "No active server to stop.";
+    },
+    serve_static_files: async (portVal, folderVal) => {
+      const port = typeof portVal === "number" ? portVal : parseInt(plainToString(portVal), 10) || 3e3;
+      const baseDir = path.resolve(plainToString(folderVal));
+      if (activeServer) {
+        activeServer.close();
+        activeServer = null;
+      }
+      return new Promise((resolve6, reject) => {
+        const server = http.createServer((req, res) => {
+          const parsed = url.parse(req.url || "/", true);
+          let safePath = path.normalize(parsed.pathname || "/").replace(/^(\.\.[\/\\])+/, "");
+          if (safePath === "/" || safePath === "") safePath = "/index.html";
+          const filePath = path.join(baseDir, safePath);
+          if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+            res.writeHead(404, { "Content-Type": "text/plain" });
+            res.end("404 Not Found: " + safePath);
+            return;
+          }
+          const ext = path.extname(filePath).toLowerCase();
+          const contentType = MIME_TYPES[ext] || "application/octet-stream";
+          res.writeHead(200, { "Content-Type": contentType });
+          fs.createReadStream(filePath).pipe(res);
+        });
+        server.on("error", (err) => reject(new PlainError(err.message, { line: 1, column: 1 }, { kind: "RuntimeError" })));
+        server.listen(port, () => {
+          activeServer = server;
+          resolve6(`Static server hosting "${baseDir}" at http://localhost:${port}/`);
+        });
+      });
+    },
+    http_get: async (urlVal, headersVal) => {
+      const targetUrl = plainToString(urlVal);
+      const headers = {};
+      if (Array.isArray(headersVal)) {
+        for (const item of headersVal) {
+          const s = plainToString(item);
+          const idx = s.indexOf(":");
+          if (idx !== -1) {
+            headers[s.slice(0, idx).trim()] = s.slice(idx + 1).trim();
+          }
+        }
+      }
+      const res = await fetch(targetUrl, { method: "GET", headers });
+      if (!res.ok) {
+        throw new PlainError(`HTTP GET ${targetUrl} failed with status ${res.status}: ${res.statusText}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+      }
+      return await res.text();
+    },
+    http_post: async (urlVal, bodyVal, headersVal) => {
+      const targetUrl = plainToString(urlVal);
+      const body = typeof bodyVal === "string" ? bodyVal : JSON.stringify(bodyVal);
+      const headers = { "Content-Type": "application/json" };
+      if (Array.isArray(headersVal)) {
+        for (const item of headersVal) {
+          const s = plainToString(item);
+          const idx = s.indexOf(":");
+          if (idx !== -1) {
+            headers[s.slice(0, idx).trim()] = s.slice(idx + 1).trim();
+          }
+        }
+      }
+      const res = await fetch(targetUrl, { method: "POST", headers, body });
+      if (!res.ok) {
+        throw new PlainError(`HTTP POST ${targetUrl} failed with status ${res.status}: ${res.statusText}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+      }
+      return await res.text();
+    },
+    html_page: (titleVal, bodyVal) => {
+      const title = plainToString(titleVal);
+      const bodyContent = plainToString(bodyVal);
+      return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; margin: 0; padding: 2rem; background: #f8fafc; color: #1e293b; line-height: 1.6; }
+    .container { max-width: 900px; margin: 0 auto; background: white; padding: 2.5rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); }
+    h1 { color: #0f172a; margin-top: 0; }
+    table { width: 100%; border-collapse: collapse; margin: 1.5rem 0; }
+    th, td { border: 1px solid #e2e8f0; padding: 10px 14px; text-align: left; }
+    th { background: #f1f5f9; font-weight: 600; }
+    tr:nth-child(even) { background: #f8fafc; }
+    a { color: #2563eb; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    ${bodyContent}
+  </div>
+</body>
+</html>`;
+    },
+    html_tag: (tagVal, contentVal, attrsVal) => {
+      const tag = plainToString(tagVal).trim();
+      const content = contentVal !== void 0 ? plainToString(contentVal) : "";
+      const attrs = attrsVal !== void 0 ? " " + plainToString(attrsVal).trim() : "";
+      return `<${tag}${attrs}>${content}</${tag}>`;
+    },
+    html_table: (headersVal, rowsVal) => {
+      if (!Array.isArray(headersVal) || !Array.isArray(rowsVal)) {
+        throw new PlainError("html_table expects a list of headers and a list of row lists.", { line: 1, column: 1 }, { kind: "TypeError" });
+      }
+      const ths = headersVal.map((h) => `<th>${plainToString(h)}</th>`).join("");
+      const trs = rowsVal.map((row) => {
+        if (!Array.isArray(row)) return `<tr><td>${plainToString(row)}</td></tr>`;
+        const tds = row.map((cell) => `<td>${plainToString(cell)}</td>`).join("");
+        return `<tr>${tds}</tr>`;
+      }).join("\n");
+      return `<table>
+<thead><tr>${ths}</tr></thead>
+<tbody>
+${trs}
+</tbody>
+</table>`;
+    },
+    render_template: (templateVal, dataVal) => {
+      let tpl = plainToString(templateVal);
+      if (Array.isArray(dataVal)) {
+        for (const item of dataVal) {
+          const s = plainToString(item);
+          const idx = s.indexOf(":");
+          if (idx !== -1) {
+            const key = s.slice(0, idx).trim();
+            const val = s.slice(idx + 1).trim();
+            tpl = tpl.replace(new RegExp(`{{\\s*${key}\\s*}}`, "g"), val);
+          }
+        }
+      }
+      return tpl;
+    },
+    parse_query_string: (queryVal) => {
+      const q = plainToString(queryVal).replace(/^\?/, "");
+      const pairs = q.split("&");
+      const result = [];
+      for (const p of pairs) {
+        if (!p) continue;
+        const [k, v] = p.split("=");
+        result.push(`${decodeURIComponent(k || "")}: ${decodeURIComponent(v || "")}`);
+      }
+      return result;
+    },
+    send_webhook: async (urlVal, payloadVal) => {
+      const targetUrl = plainToString(urlVal);
+      const body = typeof payloadVal === "string" ? payloadVal : JSON.stringify(payloadVal);
+      const res = await fetch(targetUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body
+      });
+      return `Webhook sent. Status: ${res.status}`;
+    }
+  };
+}
+
+// src/builtins/datascience.ts
+var fs2 = __toESM(require("fs"));
+var path2 = __toESM(require("path"));
+function parseCsvLine(line) {
+  const result = [];
+  let current = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (char === '"') {
+      if (inQuotes && line[i + 1] === '"') {
+        current += '"';
+        i++;
+      } else {
+        inQuotes = !inQuotes;
+      }
+    } else if (char === "," && !inQuotes) {
+      result.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  result.push(current.trim());
+  return result;
+}
+function getColumnIndex(table, colVal) {
+  if (table.length === 0) return -1;
+  const headers = table[0];
+  if (typeof colVal === "number") {
+    const idx = Math.floor(colVal) - 1;
+    if (idx < 0 || idx >= headers.length) {
+      throw new PlainError(`Column index ${colVal} is out of bounds (table has ${headers.length} columns).`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    return idx;
+  }
+  const colName = plainToString(colVal).toLowerCase();
+  for (let i = 0; i < headers.length; i++) {
+    if (plainToString(headers[i]).toLowerCase() === colName) {
+      return i;
+    }
+  }
+  throw new PlainError(`Column named '${plainToString(colVal)}' not found in table.`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+}
+var datascienceBuiltins = {
+  parse_csv: (textVal) => {
+    const text = plainToString(textVal);
+    const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const table = [];
+    for (const line of lines) {
+      const rawCols = parseCsvLine(line);
+      const row = rawCols.map((c) => {
+        const num = Number(c);
+        return !isNaN(num) && c !== "" ? num : c;
+      });
+      table.push(row);
+    }
+    return table;
+  },
+  to_csv: (tableVal) => {
+    if (!Array.isArray(tableVal)) {
+      throw new PlainError("to_csv expects a 2D list (table).", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    return tableVal.map((row) => {
+      if (!Array.isArray(row)) return `"${plainToString(row)}"`;
+      return row.map((cell) => {
+        const s = plainToString(cell);
+        if (s.includes(",") || s.includes('"') || s.includes("\n")) {
+          return `"${s.replace(/"/g, '""')}"`;
+        }
+        return s;
+      }).join(",");
+    }).join("\n");
+  },
+  read_csv: (filePathVal) => {
+    const fp = path2.resolve(plainToString(filePathVal));
+    if (!fs2.existsSync(fp)) {
+      throw new PlainError(`CSV file not found: "${fp}"`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    const content = fs2.readFileSync(fp, "utf-8");
+    return datascienceBuiltins.parse_csv(content);
+  },
+  write_csv: (filePathVal, tableVal) => {
+    const fp = path2.resolve(plainToString(filePathVal));
+    const content = datascienceBuiltins.to_csv(tableVal);
+    fs2.mkdirSync(path2.dirname(fp), { recursive: true });
+    fs2.writeFileSync(fp, content, "utf-8");
+  },
+  table_headers: (tableVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    return Array.isArray(tableVal[0]) ? tableVal[0] : [];
+  },
+  table_rows: (tableVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length <= 1) return [];
+    return tableVal.slice(1);
+  },
+  table_column: (tableVal, colVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const idx = getColumnIndex(tableVal, colVal);
+    const result = [];
+    for (let i = 1; i < tableVal.length; i++) {
+      const row = tableVal[i];
+      if (Array.isArray(row) && idx < row.length) {
+        result.push(row[idx]);
+      }
+    }
+    return result;
+  },
+  filter_table: (tableVal, colVal, opVal, targetVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const idx = getColumnIndex(tableVal, colVal);
+    const op = plainToString(opVal).trim();
+    const headers = tableVal[0];
+    const result = [headers];
+    for (let i = 1; i < tableVal.length; i++) {
+      const row = tableVal[i];
+      if (!Array.isArray(row) || idx >= row.length) continue;
+      const cell = row[idx];
+      let match = false;
+      if (op === "==" || op === "is equal to" || op === "equals") {
+        match = cell === targetVal || String(cell) === String(targetVal);
+      } else if (op === "!=" || op === "is not equal to") {
+        match = cell !== targetVal && String(cell) !== String(targetVal);
+      } else if (op === ">" || op === "is greater than") {
+        match = Number(cell) > Number(targetVal);
+      } else if (op === "<" || op === "is less than") {
+        match = Number(cell) < Number(targetVal);
+      } else if (op === ">=" || op === "is at least") {
+        match = Number(cell) >= Number(targetVal);
+      } else if (op === "<=" || op === "is at most") {
+        match = Number(cell) <= Number(targetVal);
+      } else if (op === "contains") {
+        match = plainToString(cell).toLowerCase().includes(plainToString(targetVal).toLowerCase());
+      }
+      if (match) {
+        result.push(row);
+      }
+    }
+    return result;
+  },
+  sort_table: (tableVal, colVal, ascendingVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length <= 1) return tableVal;
+    const idx = getColumnIndex(tableVal, colVal);
+    const asc = ascendingVal !== void 0 ? Boolean(ascendingVal) : true;
+    const headers = tableVal[0];
+    const dataRows = tableVal.slice(1).slice();
+    dataRows.sort((a, b) => {
+      const valA = a[idx];
+      const valB = b[idx];
+      if (typeof valA === "number" && typeof valB === "number") {
+        return asc ? valA - valB : valB - valA;
+      }
+      const strA = plainToString(valA);
+      const strB = plainToString(valB);
+      return asc ? strA.localeCompare(strB) : strB.localeCompare(strA);
+    });
+    return [headers, ...dataRows];
+  },
+  group_by_count: (tableVal, colVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0 || !Array.isArray(tableVal[0])) return [];
+    const idx = getColumnIndex(tableVal, colVal);
+    const colName = plainToString(tableVal[0][idx]);
+    const counts = {};
+    for (let i = 1; i < tableVal.length; i++) {
+      const row = tableVal[i];
+      if (Array.isArray(row) && idx < row.length) {
+        const key = plainToString(row[idx]);
+        counts[key] = (counts[key] || 0) + 1;
+      }
+    }
+    const result = [[colName, "Count"]];
+    for (const [k, v] of Object.entries(counts)) {
+      result.push([k, v]);
+    }
+    return result;
+  },
+  group_by_sum: (tableVal, groupColVal, sumColVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0 || !Array.isArray(tableVal[0])) return [];
+    const gIdx = getColumnIndex(tableVal, groupColVal);
+    const sIdx = getColumnIndex(tableVal, sumColVal);
+    const gName = plainToString(tableVal[0][gIdx]);
+    const sName = plainToString(tableVal[0][sIdx]);
+    const sums = {};
+    for (let i = 1; i < tableVal.length; i++) {
+      const row = tableVal[i];
+      if (Array.isArray(row) && gIdx < row.length && sIdx < row.length) {
+        const key = plainToString(row[gIdx]);
+        const val = Number(row[sIdx]) || 0;
+        sums[key] = (sums[key] || 0) + val;
+      }
+    }
+    const result = [[gName, `Total ${sName}`]];
+    for (const [k, v] of Object.entries(sums)) {
+      result.push([k, Math.round(v * 100) / 100]);
+    }
+    return result;
+  },
+  describe_column: (colVal) => {
+    if (!Array.isArray(colVal) || colVal.length === 0) {
+      return ["count: 0"];
+    }
+    const nums = colVal.map((v) => Number(v)).filter((v) => !isNaN(v));
+    if (nums.length === 0) {
+      return [`count: ${colVal.length}`, "type: non-numeric"];
+    }
+    const count = nums.length;
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const mean = statsBuiltins.mean(nums);
+    const median = statsBuiltins.median(nums);
+    const stdev = statsBuiltins.standard_deviation(nums);
+    return [
+      `count: ${count}`,
+      `min: ${min}`,
+      `max: ${max}`,
+      `mean: ${Math.round(mean * 100) / 100}`,
+      `median: ${median}`,
+      `stdev: ${Math.round(stdev * 100) / 100}`
+    ];
+  },
+  normalize_data: (listVal) => {
+    if (!Array.isArray(listVal) || listVal.length === 0) return [];
+    const nums = listVal.map((x) => mathBuiltins.to_number(x));
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    if (max === min) return nums.map(() => 0);
+    return nums.map((x) => Math.round((x - min) / (max - min) * 1e4) / 1e4);
+  },
+  standardize_data: (listVal) => {
+    if (!Array.isArray(listVal) || listVal.length === 0) return [];
+    const nums = listVal.map((x) => mathBuiltins.to_number(x));
+    const mean = statsBuiltins.mean(nums);
+    const stdev = statsBuiltins.standard_deviation(nums);
+    if (stdev === 0) return nums.map(() => 0);
+    return nums.map((x) => Math.round((x - mean) / stdev * 1e4) / 1e4);
+  },
+  train_test_split: (dataVal, testRatioVal) => {
+    if (!Array.isArray(dataVal)) return [[], []];
+    const ratio = testRatioVal !== void 0 ? mathBuiltins.to_number(testRatioVal) : 0.2;
+    const testCount = Math.max(1, Math.floor(dataVal.length * ratio));
+    const shuffled = dataVal.slice().sort(() => Math.random() - 0.5);
+    const test = shuffled.slice(0, testCount);
+    const train = shuffled.slice(testCount);
+    return [train, test];
+  },
+  ascii_bar_chart: (labelsVal, valuesVal, maxWidthVal) => {
+    if (!Array.isArray(labelsVal) || !Array.isArray(valuesVal)) {
+      throw new PlainError("ascii_bar_chart expects labels list and values list.", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    const width = maxWidthVal !== void 0 ? mathBuiltins.to_number(maxWidthVal) : 30;
+    const nums = valuesVal.map((v) => Number(v) || 0);
+    const maxVal = Math.max(...nums, 1);
+    const maxLabelLen = Math.max(...labelsVal.map((l) => plainToString(l).length), 1);
+    const lines = [];
+    for (let i = 0; i < labelsVal.length; i++) {
+      const label = plainToString(labelsVal[i]).padEnd(maxLabelLen);
+      const val = nums[i] || 0;
+      const barLen = Math.round(val / maxVal * width);
+      const bar = "\u2588".repeat(Math.max(0, barLen));
+      lines.push(`${label} | ${bar} ${val}`);
+    }
+    return lines.join("\n");
+  },
+  ascii_histogram: (listVal, binsVal) => {
+    if (!Array.isArray(listVal) || listVal.length === 0) return "";
+    const numBins = binsVal !== void 0 ? Math.max(2, Math.floor(mathBuiltins.to_number(binsVal))) : 5;
+    const nums = listVal.map((v) => Number(v) || 0);
+    const min = Math.min(...nums);
+    const max = Math.max(...nums);
+    const binWidth = (max - min) / numBins || 1;
+    const counts = new Array(numBins).fill(0);
+    for (const n of nums) {
+      let b = Math.floor((n - min) / binWidth);
+      if (b >= numBins) b = numBins - 1;
+      counts[b]++;
+    }
+    const maxCount = Math.max(...counts, 1);
+    const lines = [];
+    for (let i = 0; i < numBins; i++) {
+      const lower = Math.round((min + i * binWidth) * 10) / 10;
+      const upper = Math.round((min + (i + 1) * binWidth) * 10) / 10;
+      const bar = "\u2588".repeat(Math.round(counts[i] / maxCount * 25));
+      lines.push(`[${lower} - ${upper}] | ${bar} (${counts[i]})`);
+    }
+    return lines.join("\n");
+  },
+  export_html_chart: (titleVal, typeVal, labelsVal, dataVal, filePathVal) => {
+    const title = plainToString(titleVal);
+    const chartType = plainToString(typeVal).toLowerCase();
+    const labels = Array.isArray(labelsVal) ? labelsVal.map((l) => plainToString(l)) : [];
+    const data = Array.isArray(dataVal) ? dataVal.map((d) => Number(d) || 0) : [];
+    const fp = path2.resolve(plainToString(filePathVal));
+    const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>${title}</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; display: flex; justify-content: center; padding: 2rem; background: #f8fafc; }
+    .card { background: white; padding: 2rem; border-radius: 12px; box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1); width: 800px; max-width: 95%; }
+    h2 { text-align: center; color: #1e293b; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h2>${title}</h2>
+    <canvas id="myChart"></canvas>
+  </div>
+  <script>
+    const ctx = document.getElementById('myChart').getContext('2d');
+    new Chart(ctx, {
+      type: '${chartType === "line" ? "line" : "bar"}',
+      data: {
+        labels: ${JSON.stringify(labels)},
+        datasets: [{
+          label: '${title}',
+          data: ${JSON.stringify(data)},
+          backgroundColor: 'rgba(59, 130, 246, 0.7)',
+          borderColor: 'rgb(59, 130, 246)',
+          borderWidth: 2
+        }]
+      },
+      options: { responsive: true, scales: { y: { beginAtZero: true } } }
+    });
+  </script>
+</body>
+</html>`;
+    fs2.mkdirSync(path2.dirname(fp), { recursive: true });
+    fs2.writeFileSync(fp, html, "utf-8");
+    return `Interactive HTML chart saved to: ${fp}`;
+  }
+};
+
+// src/builtins/ai.ts
+var POSITIVE_WORDS = /* @__PURE__ */ new Set([
+  "good",
+  "great",
+  "excellent",
+  "amazing",
+  "love",
+  "wonderful",
+  "fantastic",
+  "superb",
+  "brilliant",
+  "awesome",
+  "happy",
+  "best",
+  "beautiful",
+  "positive",
+  "clean",
+  "fast",
+  "easy",
+  "perfect",
+  "success",
+  "helpful",
+  "delight",
+  "impressive"
+]);
+var NEGATIVE_WORDS = /* @__PURE__ */ new Set([
+  "bad",
+  "terrible",
+  "awful",
+  "horrible",
+  "hate",
+  "worst",
+  "poor",
+  "fail",
+  "failure",
+  "broken",
+  "slow",
+  "hard",
+  "difficult",
+  "ugly",
+  "sad",
+  "angry",
+  "negative",
+  "annoying",
+  "boring",
+  "useless",
+  "flaw",
+  "error",
+  "painful"
+]);
+var NEGATION_WORDS = /* @__PURE__ */ new Set(["not", "never", "no", "without", "hardly", "barely"]);
+var INTENSIFIERS = /* @__PURE__ */ new Set(["very", "extremely", "super", "really", "incredibly", "totally"]);
+var aiBuiltins = {
+  vector_dot: (v1Val, v2Val) => {
+    if (!Array.isArray(v1Val) || !Array.isArray(v2Val)) {
+      throw new PlainError("vector_dot expects two numeric lists.", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    if (v1Val.length !== v2Val.length) {
+      throw new PlainError(`Vectors must have equal length (got ${v1Val.length} and ${v2Val.length}).`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    let sum = 0;
+    for (let i = 0; i < v1Val.length; i++) {
+      sum += Number(v1Val[i]) * Number(v2Val[i]);
+    }
+    return Math.round(sum * 1e8) / 1e8;
+  },
+  vector_magnitude: (vVal) => {
+    if (!Array.isArray(vVal)) return 0;
+    let sumSq = 0;
+    for (const x of vVal) {
+      const n = Number(x);
+      sumSq += n * n;
+    }
+    return Math.sqrt(sumSq);
+  },
+  cosine_similarity: (v1Val, v2Val) => {
+    const dot = aiBuiltins.vector_dot(v1Val, v2Val);
+    const mag1 = aiBuiltins.vector_magnitude(v1Val);
+    const mag2 = aiBuiltins.vector_magnitude(v2Val);
+    if (mag1 === 0 || mag2 === 0) return 0;
+    return Math.round(dot / (mag1 * mag2) * 1e6) / 1e6;
+  },
+  vector_distance: (v1Val, v2Val) => {
+    if (!Array.isArray(v1Val) || !Array.isArray(v2Val)) return 0;
+    const len = Math.min(v1Val.length, v2Val.length);
+    let sumSq = 0;
+    for (let i = 0; i < len; i++) {
+      const diff = Number(v1Val[i]) - Number(v2Val[i]);
+      sumSq += diff * diff;
+    }
+    return Math.round(Math.sqrt(sumSq) * 1e6) / 1e6;
+  },
+  knn_classify: (trainXVal, trainYVal, testPointVal, kVal) => {
+    if (!Array.isArray(trainXVal) || !Array.isArray(trainYVal) || !Array.isArray(testPointVal)) {
+      throw new PlainError("knn_classify expects train_x (list of vectors), train_y (labels), and test_point (vector).", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    const k = kVal !== void 0 ? Math.max(1, Math.floor(mathBuiltins.to_number(kVal))) : 3;
+    const distances = [];
+    for (let i = 0; i < trainXVal.length; i++) {
+      const point = trainXVal[i];
+      if (!Array.isArray(point)) continue;
+      const dist = aiBuiltins.vector_distance(point, testPointVal);
+      distances.push({ dist, label: trainYVal[i] });
+    }
+    distances.sort((a, b) => a.dist - b.dist);
+    const neighbors = distances.slice(0, k);
+    const votes = {};
+    let maxCount = 0;
+    let winner = neighbors[0]?.label ?? null;
+    for (const n of neighbors) {
+      const key = plainToString(n.label);
+      if (!votes[key]) votes[key] = { label: n.label, count: 0 };
+      votes[key].count++;
+      if (votes[key].count > maxCount) {
+        maxCount = votes[key].count;
+        winner = n.label;
+      }
+    }
+    return winner;
+  },
+  knn_predict: (trainXVal, trainYVal, testPointVal, kVal) => {
+    if (!Array.isArray(trainXVal) || !Array.isArray(trainYVal) || !Array.isArray(testPointVal)) {
+      throw new PlainError("knn_predict expects train_x (list of vectors), train_y (numeric targets), and test_point (vector).", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    const k = kVal !== void 0 ? Math.max(1, Math.floor(mathBuiltins.to_number(kVal))) : 3;
+    const distances = [];
+    for (let i = 0; i < trainXVal.length; i++) {
+      const point = trainXVal[i];
+      if (!Array.isArray(point)) continue;
+      const dist = aiBuiltins.vector_distance(point, testPointVal);
+      distances.push({ dist, target: Number(trainYVal[i]) || 0 });
+    }
+    distances.sort((a, b) => a.dist - b.dist);
+    const neighbors = distances.slice(0, k);
+    const sum = neighbors.reduce((acc, curr) => acc + curr.target, 0);
+    return Math.round(sum / neighbors.length * 1e4) / 1e4;
+  },
+  kmeans_cluster: (dataVal, kVal, maxItersVal) => {
+    if (!Array.isArray(dataVal) || dataVal.length === 0) return [];
+    const k = kVal !== void 0 ? Math.max(1, Math.floor(mathBuiltins.to_number(kVal))) : 2;
+    const maxIters = maxItersVal !== void 0 ? Math.floor(mathBuiltins.to_number(maxItersVal)) : 20;
+    const points = dataVal.filter((p) => Array.isArray(p));
+    if (points.length < k) return dataVal;
+    const dims = points[0].length;
+    const centroids = points.slice(0, k).map((p) => p.slice());
+    let assignments = new Array(points.length).fill(0);
+    for (let iter = 0; iter < maxIters; iter++) {
+      let changed = false;
+      for (let i = 0; i < points.length; i++) {
+        let minDist = Infinity;
+        let bestC = 0;
+        for (let c = 0; c < k; c++) {
+          const d = aiBuiltins.vector_distance(points[i], centroids[c]);
+          if (d < minDist) {
+            minDist = d;
+            bestC = c;
+          }
+        }
+        if (assignments[i] !== bestC) {
+          assignments[i] = bestC;
+          changed = true;
+        }
+      }
+      if (!changed && iter > 0) break;
+      const sums = Array.from({ length: k }, () => new Array(dims).fill(0));
+      const counts = new Array(k).fill(0);
+      for (let i = 0; i < points.length; i++) {
+        const c = assignments[i];
+        counts[c]++;
+        for (let d = 0; d < dims; d++) {
+          sums[c][d] += points[i][d];
+        }
+      }
+      for (let c = 0; c < k; c++) {
+        if (counts[c] > 0) {
+          for (let d = 0; d < dims; d++) {
+            centroids[c][d] = Math.round(sums[c][d] / counts[c] * 1e4) / 1e4;
+          }
+        }
+      }
+    }
+    return assignments.map((c) => c + 1);
+  },
+  sentiment_analyze: (textVal) => {
+    const text = plainToString(textVal).toLowerCase();
+    const words = text.match(/[a-z']+/g) || [];
+    let score = 0;
+    let isNegated = false;
+    for (let i = 0; i < words.length; i++) {
+      const w = words[i];
+      if (NEGATION_WORDS.has(w)) {
+        isNegated = true;
+        continue;
+      }
+      let multiplier = 1;
+      if (i > 0 && INTENSIFIERS.has(words[i - 1])) {
+        multiplier = 1.75;
+      }
+      let delta = 0;
+      if (POSITIVE_WORDS.has(w)) {
+        delta = 1 * multiplier;
+      } else if (NEGATIVE_WORDS.has(w)) {
+        delta = -1 * multiplier;
+      }
+      if (delta !== 0) {
+        if (isNegated) delta = -delta * 0.75;
+        score += delta;
+        isNegated = false;
+      }
+    }
+    let sentiment = "neutral";
+    if (score > 0.5) sentiment = "positive";
+    else if (score < -0.5) sentiment = "negative";
+    return [sentiment, String(Math.round(score * 100) / 100)];
+  },
+  train_text_classifier: (docsVal, labelsVal) => {
+    if (!Array.isArray(docsVal)) return "";
+    let docs = [];
+    let labels = [];
+    if (Array.isArray(labelsVal)) {
+      docs = docsVal.map((d) => plainToString(d));
+      labels = labelsVal.map((l) => plainToString(l));
+    } else {
+      for (const row of docsVal) {
+        if (Array.isArray(row) && row.length >= 2) {
+          docs.push(plainToString(row[0]));
+          labels.push(plainToString(row[1]));
+        }
+      }
+    }
+    const classCounts = {};
+    const wordCounts = {};
+    const classTotalWords = {};
+    const vocab = /* @__PURE__ */ new Set();
+    for (let i = 0; i < docs.length; i++) {
+      const cls = labels[i] || "unknown";
+      classCounts[cls] = (classCounts[cls] || 0) + 1;
+      if (!wordCounts[cls]) wordCounts[cls] = {};
+      const words = docs[i].toLowerCase().match(/[a-z0-9]+/g) || [];
+      for (const w of words) {
+        vocab.add(w);
+        wordCounts[cls][w] = (wordCounts[cls][w] || 0) + 1;
+        classTotalWords[cls] = (classTotalWords[cls] || 0) + 1;
+      }
+    }
+    return JSON.stringify({
+      totalDocs: docs.length,
+      vocabSize: vocab.size,
+      classCounts,
+      wordCounts,
+      classTotalWords
+    });
+  },
+  classify_text: (modelVal, textVal) => {
+    const modelStr = plainToString(modelVal);
+    let model;
+    try {
+      model = JSON.parse(modelStr);
+    } catch {
+      return "unknown";
+    }
+    const text = plainToString(textVal).toLowerCase();
+    const words = text.match(/[a-z0-9]+/g) || [];
+    const classes = Object.keys(model.classCounts || {});
+    if (classes.length === 0) return "unknown";
+    let bestScore = -Infinity;
+    let bestClass = classes[0];
+    for (const cls of classes) {
+      let logProb = Math.log(model.classCounts[cls] / model.totalDocs);
+      const totalWords = model.classTotalWords[cls] || 0;
+      const vocabSize = model.vocabSize || 1;
+      for (const w of words) {
+        const count = model.wordCounts[cls] && model.wordCounts[cls][w] || 0;
+        logProb += Math.log((count + 1) / (totalWords + vocabSize));
+      }
+      if (logProb > bestScore) {
+        bestScore = logProb;
+        bestClass = cls;
+      }
+    }
+    return bestClass;
+  },
+  sigmoid: (xVal) => {
+    const x = mathBuiltins.to_number(xVal);
+    return Math.round(1 / (1 + Math.exp(-x)) * 1e6) / 1e6;
+  },
+  relu: (xVal) => {
+    const x = mathBuiltins.to_number(xVal);
+    return Math.max(0, x);
+  },
+  softmax: (listVal) => {
+    if (!Array.isArray(listVal) || listVal.length === 0) return [];
+    const nums = listVal.map((x) => mathBuiltins.to_number(x));
+    const maxVal = Math.max(...nums);
+    const exps = nums.map((x) => Math.exp(x - maxVal));
+    const sumExps = exps.reduce((a, b) => a + b, 0);
+    return exps.map((e) => Math.round(e / sumExps * 1e4) / 1e4);
+  },
+  neural_forward: (weightsVal, biasesVal, inputsVal, activationVal) => {
+    if (!Array.isArray(weightsVal) || !Array.isArray(biasesVal) || !Array.isArray(inputsVal)) {
+      throw new PlainError("neural_forward expects weights (2D list), biases (1D list), and inputs (1D list).", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    const activation = activationVal !== void 0 ? plainToString(activationVal).toLowerCase() : "relu";
+    const inputs = inputsVal.map((x) => Number(x) || 0);
+    const biases = biasesVal.map((x) => Number(x) || 0);
+    const outputs = [];
+    for (let i = 0; i < weightsVal.length; i++) {
+      const neuronWeights = weightsVal[i];
+      if (!Array.isArray(neuronWeights)) continue;
+      let sum = biases[i] || 0;
+      for (let j = 0; j < inputs.length; j++) {
+        sum += (Number(neuronWeights[j]) || 0) * inputs[j];
+      }
+      let activated = sum;
+      if (activation === "relu") {
+        activated = Math.max(0, sum);
+      } else if (activation === "sigmoid") {
+        activated = 1 / (1 + Math.exp(-sum));
+      }
+      outputs.push(Math.round(activated * 1e4) / 1e4);
+    }
+    if (activation === "softmax") {
+      return aiBuiltins.softmax(outputs);
+    }
+    return outputs;
+  },
+  predict_linear: (xListVal, yListVal, targetXVal) => {
+    if (!Array.isArray(xListVal) || !Array.isArray(yListVal)) {
+      throw new PlainError("predict_linear expects x values list and y values list.", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    const targetX = mathBuiltins.to_number(targetXVal);
+    const reg = statsBuiltins.linear_regression(xListVal, yListVal);
+    return Math.round((reg.slope * targetX + reg.intercept) * 1e4) / 1e4;
+  },
+  ai_prompt: (templateVal, varsVal) => {
+    let tpl = plainToString(templateVal);
+    if (Array.isArray(varsVal)) {
+      for (const item of varsVal) {
+        const s = plainToString(item);
+        const idx = s.indexOf(":");
+        if (idx !== -1) {
+          const key = s.slice(0, idx).trim();
+          const val = s.slice(idx + 1).trim();
+          tpl = tpl.replace(new RegExp(`{${key}}`, "g"), val);
+        }
+      }
+    }
+    return tpl;
+  },
+  ai_chat: async (promptVal, systemPromptVal, apiKeyVal, modelVal) => {
+    const prompt = plainToString(promptVal);
+    const systemPrompt = systemPromptVal !== void 0 ? plainToString(systemPromptVal) : "You are a helpful assistant.";
+    const apiKey = apiKeyVal !== void 0 && plainToString(apiKeyVal).trim() !== "" ? plainToString(apiKeyVal).trim() : process.env.OPENAI_API_KEY || process.env.GEMINI_API_KEY || "";
+    const model = modelVal !== void 0 ? plainToString(modelVal) : "gpt-3.5-turbo";
+    if (!apiKey) {
+      return `[AI Simulation Mode]: To connect to live LLMs, provide an API key or set OPENAI_API_KEY.
+Response to "${prompt}":
+Artificial Intelligence is transforming how we learn, analyze data, and build software!`;
+    }
+    try {
+      const res = await fetch("https://api.openai.com/v1/chat/completions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${apiKey}`
+        },
+        body: JSON.stringify({
+          model,
+          messages: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content: prompt }
+          ]
+        })
+      });
+      if (!res.ok) {
+        throw new Error(`HTTP ${res.status}: ${res.statusText}`);
+      }
+      const data = await res.json();
+      return data.choices?.[0]?.message?.content || "";
+    } catch (err) {
+      throw new PlainError(`AI Chat request failed: ${err.message}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+  }
+};
+
+// src/builtins/automation.ts
+var child_process = __toESM(require("child_process"));
+var fs3 = __toESM(require("fs"));
+var path3 = __toESM(require("path"));
+var crypto2 = __toESM(require("crypto"));
+var os2 = __toESM(require("os"));
+var automationBuiltins = {
+  run_command: (cmdVal) => {
+    const cmd = plainToString(cmdVal);
+    try {
+      const output = child_process.execSync(cmd, {
+        encoding: "utf-8",
+        stdio: ["ignore", "pipe", "pipe"],
+        maxBuffer: 10 * 1024 * 1024
+      });
+      return output.trim();
+    } catch (err) {
+      const out = err.stdout ? String(err.stdout) : "";
+      const errout = err.stderr ? String(err.stderr) : "";
+      return (out + "\n" + errout).trim() || err.message;
+    }
+  },
+  walk_directory: (dirVal) => {
+    const baseDir = path3.resolve(dirVal !== void 0 ? plainToString(dirVal) : ".");
+    if (!fs3.existsSync(baseDir)) return [];
+    const results = [];
+    const traverse = (current) => {
+      const entries = fs3.readdirSync(current, { withFileTypes: true });
+      for (const ent of entries) {
+        if (ent.name === "node_modules" || ent.name === ".git") continue;
+        const full = path3.join(current, ent.name);
+        if (ent.isDirectory()) {
+          traverse(full);
+        } else if (ent.isFile()) {
+          results.push(path3.relative(baseDir, full).replace(/\\/g, "/"));
+        }
+      }
+    };
+    traverse(baseDir);
+    return results;
+  },
+  find_files: (dirVal, patternVal) => {
+    const allFiles = automationBuiltins.walk_directory(dirVal);
+    const pattern = plainToString(patternVal).toLowerCase();
+    return allFiles.filter((f) => f.toLowerCase().includes(pattern));
+  },
+  copy_file: (srcVal, destVal) => {
+    const src = path3.resolve(plainToString(srcVal));
+    const dest = path3.resolve(plainToString(destVal));
+    if (!fs3.existsSync(src)) {
+      throw new PlainError(`Source file not found: "${src}"`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    fs3.mkdirSync(path3.dirname(dest), { recursive: true });
+    fs3.copyFileSync(src, dest);
+    return true;
+  },
+  move_file: (srcVal, destVal) => {
+    const src = path3.resolve(plainToString(srcVal));
+    const dest = path3.resolve(plainToString(destVal));
+    if (!fs3.existsSync(src)) {
+      throw new PlainError(`Source file not found: "${src}"`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    fs3.mkdirSync(path3.dirname(dest), { recursive: true });
+    fs3.renameSync(src, dest);
+    return true;
+  },
+  batch_rename: (dirVal, findVal, replaceVal) => {
+    const dir = path3.resolve(plainToString(dirVal));
+    if (!fs3.existsSync(dir)) return 0;
+    const findStr = plainToString(findVal);
+    const replaceStr = plainToString(replaceVal);
+    let count = 0;
+    const files = fs3.readdirSync(dir);
+    for (const f of files) {
+      if (f.includes(findStr)) {
+        const oldPath = path3.join(dir, f);
+        const newPath = path3.join(dir, f.replace(findStr, replaceStr));
+        fs3.renameSync(oldPath, newPath);
+        count++;
+      }
+    }
+    return count;
+  },
+  batch_delete: (dirVal, patternVal) => {
+    const dir = path3.resolve(plainToString(dirVal));
+    if (!fs3.existsSync(dir)) return 0;
+    const pattern = plainToString(patternVal).toLowerCase();
+    let count = 0;
+    const files = fs3.readdirSync(dir);
+    for (const f of files) {
+      if (f.toLowerCase().includes(pattern)) {
+        const p = path3.join(dir, f);
+        if (fs3.statSync(p).isFile()) {
+          fs3.unlinkSync(p);
+          count++;
+        }
+      }
+    }
+    return count;
+  },
+  log_info: (msgVal) => {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+    console.log(`[${timestamp}] [INFO]  ${plainToString(msgVal)}`);
+  },
+  log_warn: (msgVal) => {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+    console.warn(`[${timestamp}] [WARN]  ${plainToString(msgVal)}`);
+  },
+  log_error: (msgVal) => {
+    const timestamp = (/* @__PURE__ */ new Date()).toISOString().replace("T", " ").slice(0, 19);
+    console.error(`[${timestamp}] [ERROR] ${plainToString(msgVal)}`);
+  },
+  parse_env_file: (filePathVal) => {
+    const fp = path3.resolve(plainToString(filePathVal));
+    if (!fs3.existsSync(fp)) return [];
+    const content = fs3.readFileSync(fp, "utf-8");
+    const lines = content.split(/\r?\n/);
+    const result = [];
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed || trimmed.startsWith("#")) continue;
+      const idx = trimmed.indexOf("=");
+      if (idx !== -1) {
+        const key = trimmed.slice(0, idx).trim();
+        const val = trimmed.slice(idx + 1).trim().replace(/^["']|["']$/g, "");
+        process.env[key] = val;
+        result.push(`${key}: ${val}`);
+      }
+    }
+    return result;
+  },
+  checksum_file: (filePathVal, algoVal) => {
+    const fp = path3.resolve(plainToString(filePathVal));
+    if (!fs3.existsSync(fp)) {
+      throw new PlainError(`File not found: "${fp}"`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    const algo = algoVal !== void 0 ? plainToString(algoVal).toLowerCase() : "sha256";
+    const buffer = fs3.readFileSync(fp);
+    return crypto2.createHash(algo).update(buffer).digest("hex");
+  },
+  get_clipboard: () => {
+    try {
+      if (os2.platform() === "win32") {
+        return child_process.execSync("powershell -NoProfile -Command Get-Clipboard", { encoding: "utf-8" }).trim();
+      } else if (os2.platform() === "darwin") {
+        return child_process.execSync("pbpaste", { encoding: "utf-8" }).trim();
+      } else {
+        return child_process.execSync("xclip -selection clipboard -o", { encoding: "utf-8" }).trim();
+      }
+    } catch {
+      return "";
+    }
+  },
+  set_clipboard: (textVal) => {
+    const text = plainToString(textVal);
+    try {
+      if (os2.platform() === "win32") {
+        const escaped = text.replace(/"/g, '""');
+        child_process.execSync(`powershell -NoProfile -Command "Set-Clipboard -Value \\"${escaped}\\""`);
+        return true;
+      } else if (os2.platform() === "darwin") {
+        const proc = child_process.spawn("pbcopy");
+        proc.stdin.write(text);
+        proc.stdin.end();
+        return true;
+      } else {
+        const proc = child_process.spawn("xclip", ["-selection", "clipboard"]);
+        proc.stdin.write(text);
+        proc.stdin.end();
+        return true;
+      }
+    } catch {
+      return false;
+    }
+  },
+  delay: async (secondsVal) => {
+    const sec = mathBuiltins.to_number(secondsVal);
+    const ms = Math.max(0, sec * 1e3);
+    return new Promise((resolve6) => setTimeout(resolve6, ms));
+  }
+};
+
+// src/builtins/file.ts
+var fs4 = __toESM(require("fs"));
+var path4 = __toESM(require("path"));
 var FileSystemSandbox = class {
   baseDir;
   constructor(baseDir) {
-    this.baseDir = path.resolve(baseDir || process.cwd());
+    this.baseDir = path4.resolve(baseDir || process.cwd());
   }
   resolveSafePath(filePath) {
-    const resolved = path.resolve(this.baseDir, filePath);
-    const relative2 = path.relative(this.baseDir, resolved);
-    if (relative2.startsWith("..") && !path.isAbsolute(relative2)) {
+    const resolved = path4.resolve(this.baseDir, filePath);
+    const relative3 = path4.relative(this.baseDir, resolved);
+    if (relative3.startsWith("..") && !path4.isAbsolute(relative3)) {
       throw new PlainError(
         `Access to file outside the project folder is not allowed: "${filePath}".`,
         { line: 1, column: 1 },
@@ -3220,7 +4371,7 @@ var FileSystemSandbox = class {
   readFile(filePathVal) {
     const rawPath = plainToString(filePathVal);
     const safePath = this.resolveSafePath(rawPath);
-    if (!fs.existsSync(safePath)) {
+    if (!fs4.existsSync(safePath)) {
       throw new PlainError(
         `File not found: "${rawPath}".`,
         { line: 1, column: 1 },
@@ -3231,7 +4382,7 @@ var FileSystemSandbox = class {
       );
     }
     try {
-      return fs.readFileSync(safePath, "utf-8");
+      return fs4.readFileSync(safePath, "utf-8");
     } catch (err) {
       throw new PlainError(
         `Could not read file "${rawPath}": ${err.message}`,
@@ -3245,11 +4396,11 @@ var FileSystemSandbox = class {
     const safePath = this.resolveSafePath(rawPath);
     const content = plainToString(contentVal);
     try {
-      const dir = path.dirname(safePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      const dir = path4.dirname(safePath);
+      if (!fs4.existsSync(dir)) {
+        fs4.mkdirSync(dir, { recursive: true });
       }
-      fs.writeFileSync(safePath, content, "utf-8");
+      fs4.writeFileSync(safePath, content, "utf-8");
     } catch (err) {
       throw new PlainError(
         `Could not write to file "${rawPath}": ${err.message}`,
@@ -3262,7 +4413,7 @@ var FileSystemSandbox = class {
     const rawPath = plainToString(filePathVal);
     try {
       const safePath = this.resolveSafePath(rawPath);
-      return fs.existsSync(safePath) && fs.statSync(safePath).isFile();
+      return fs4.existsSync(safePath) && fs4.statSync(safePath).isFile();
     } catch {
       return false;
     }
@@ -3272,11 +4423,11 @@ var FileSystemSandbox = class {
     const safePath = this.resolveSafePath(rawPath);
     const content = plainToString(contentVal);
     try {
-      const dir = path.dirname(safePath);
-      if (!fs.existsSync(dir)) {
-        fs.mkdirSync(dir, { recursive: true });
+      const dir = path4.dirname(safePath);
+      if (!fs4.existsSync(dir)) {
+        fs4.mkdirSync(dir, { recursive: true });
       }
-      fs.appendFileSync(safePath, content, "utf-8");
+      fs4.appendFileSync(safePath, content, "utf-8");
     } catch (err) {
       throw new PlainError(
         `Could not append to file "${rawPath}": ${err.message}`,
@@ -3288,11 +4439,11 @@ var FileSystemSandbox = class {
   deleteFile(filePathVal) {
     const rawPath = plainToString(filePathVal);
     const safePath = this.resolveSafePath(rawPath);
-    if (!fs.existsSync(safePath)) {
+    if (!fs4.existsSync(safePath)) {
       return false;
     }
     try {
-      fs.unlinkSync(safePath);
+      fs4.unlinkSync(safePath);
       return true;
     } catch (err) {
       throw new PlainError(
@@ -3305,7 +4456,7 @@ var FileSystemSandbox = class {
   listFiles(dirPathVal) {
     const rawDir = dirPathVal !== void 0 ? plainToString(dirPathVal) : ".";
     const safeDir = this.resolveSafePath(rawDir);
-    if (!fs.existsSync(safeDir)) {
+    if (!fs4.existsSync(safeDir)) {
       throw new PlainError(
         `Folder not found: "${rawDir}".`,
         { line: 1, column: 1 },
@@ -3313,7 +4464,7 @@ var FileSystemSandbox = class {
       );
     }
     try {
-      return fs.readdirSync(safeDir);
+      return fs4.readdirSync(safeDir);
     } catch (err) {
       throw new PlainError(
         `Could not list folder "${rawDir}": ${err.message}`,
@@ -3325,21 +4476,21 @@ var FileSystemSandbox = class {
   fileSize(filePathVal) {
     const rawPath = plainToString(filePathVal);
     const safePath = this.resolveSafePath(rawPath);
-    if (!fs.existsSync(safePath)) {
+    if (!fs4.existsSync(safePath)) {
       throw new PlainError(
         `File not found: "${rawPath}".`,
         { line: 1, column: 1 },
         { kind: "RuntimeError" }
       );
     }
-    return fs.statSync(safePath).size;
+    return fs4.statSync(safePath).size;
   }
   createFolder(dirPathVal) {
     const rawDir = plainToString(dirPathVal);
     const safeDir = this.resolveSafePath(rawDir);
     try {
-      if (!fs.existsSync(safeDir)) {
-        fs.mkdirSync(safeDir, { recursive: true });
+      if (!fs4.existsSync(safeDir)) {
+        fs4.mkdirSync(safeDir, { recursive: true });
       }
     } catch (err) {
       throw new PlainError(
@@ -3353,7 +4504,7 @@ var FileSystemSandbox = class {
     const rawDir = plainToString(dirPathVal);
     try {
       const safeDir = this.resolveSafePath(rawDir);
-      return fs.existsSync(safeDir) && fs.statSync(safeDir).isDirectory();
+      return fs4.existsSync(safeDir) && fs4.statSync(safeDir).isDirectory();
     } catch {
       return false;
     }
@@ -3403,13 +4554,26 @@ function createStandardEnvironment(options) {
   for (const [name, fn] of Object.entries(networkBuiltins)) {
     register(name, fn);
   }
-  register("read_file", (path3) => fileSandbox.readFile(path3));
-  register("write_file", (path3, content) => fileSandbox.writeFile(path3, content));
-  register("append_file", (path3, content) => fileSandbox.appendFile(path3, content));
-  register("file_exists", (path3) => fileSandbox.fileExists(path3));
-  register("delete_file", (path3) => fileSandbox.deleteFile(path3));
+  const webBuiltins = createWebBuiltins({ invokeFunction: options?.invokeFunction });
+  for (const [name, fn] of Object.entries(webBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(datascienceBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(aiBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(automationBuiltins)) {
+    register(name, fn);
+  }
+  register("read_file", (path6) => fileSandbox.readFile(path6));
+  register("write_file", (path6, content) => fileSandbox.writeFile(path6, content));
+  register("append_file", (path6, content) => fileSandbox.appendFile(path6, content));
+  register("file_exists", (path6) => fileSandbox.fileExists(path6));
+  register("delete_file", (path6) => fileSandbox.deleteFile(path6));
   register("list_files", (dir) => fileSandbox.listFiles(dir));
-  register("file_size", (path3) => fileSandbox.fileSize(path3));
+  register("file_size", (path6) => fileSandbox.fileSize(path6));
   register("create_folder", (dir) => fileSandbox.createFolder(dir));
   register("folder_exists", (dir) => fileSandbox.folderExists(dir));
   register("print", (val) => options?.onSay ? options.onSay(plainToString(val)) : console.log(plainToString(val)));
@@ -3429,6 +4593,12 @@ function createStandardEnvironment(options) {
   register("capitalize", textBuiltins.title_case);
   register("stdev", statsBuiltins.standard_deviation);
   register("now", timeBuiltins.current_time);
+  register("bar_chart", datascienceBuiltins.ascii_bar_chart);
+  register("histogram", datascienceBuiltins.ascii_histogram);
+  register("exec_shell", automationBuiltins.run_command);
+  register("shell", automationBuiltins.run_command);
+  register("knn", aiBuiltins.knn_classify);
+  register("kmeans", aiBuiltins.kmeans_cluster);
   register("square root", mathBuiltins.square_root);
   register("cube root", mathBuiltins.cube_root);
   register("starts with", textBuiltins.starts_with);
@@ -3436,19 +4606,35 @@ function createStandardEnvironment(options) {
   register("random between", mathBuiltins.random_between);
   register("days between", (d1, d2) => timeBuiltins.days_between(d1, d2));
   register("current time", () => timeBuiltins.current_time());
-  register("read file", (path3) => fileSandbox.readFile(path3));
-  register("write file", (path3, content) => fileSandbox.writeFile(path3, content));
-  register("append file", (path3, content) => fileSandbox.appendFile(path3, content));
-  register("file exists", (path3) => fileSandbox.fileExists(path3));
-  register("delete file", (path3) => fileSandbox.deleteFile(path3));
+  register("read file", (path6) => fileSandbox.readFile(path6));
+  register("write file", (path6, content) => fileSandbox.writeFile(path6, content));
+  register("append file", (path6, content) => fileSandbox.appendFile(path6, content));
+  register("file exists", (path6) => fileSandbox.fileExists(path6));
+  register("delete file", (path6) => fileSandbox.deleteFile(path6));
   register("list files", (dir) => fileSandbox.listFiles(dir));
-  register("file size", (path3) => fileSandbox.fileSize(path3));
+  register("file size", (path6) => fileSandbox.fileSize(path6));
+  register("create folder", (dir) => fileSandbox.createFolder(dir));
   register("roll dice", (sides, count) => systemBuiltins.roll_dice(sides, count));
   register("flip coin", () => systemBuiltins.flip_coin());
   register("pick card", () => systemBuiltins.pick_card());
   register("letter grade", (pct) => studentBuiltins.letter_grade(pct));
   register("atomic mass", (elem) => scienceBuiltins.atomic_mass(elem));
   register("element name", (elem) => scienceBuiltins.element_name(elem));
+  register("read csv", (p) => datascienceBuiltins.read_csv(p));
+  register("write csv", (p, t) => datascienceBuiltins.write_csv(p, t));
+  register("filter table", (t, c, op, v) => datascienceBuiltins.filter_table(t, c, op, v));
+  register("sort table", (t, c, a) => datascienceBuiltins.sort_table(t, c, a));
+  register("start server", (p, h) => webBuiltins.start_server(p, h));
+  register("stop server", () => webBuiltins.stop_server());
+  register("serve static", (p, f) => webBuiltins.serve_static_files(p, f));
+  register("run command", (cmd) => automationBuiltins.run_command(cmd));
+  register("find files", (d, p) => automationBuiltins.find_files(d, p));
+  register("copy file", (s, d) => automationBuiltins.copy_file(s, d));
+  register("move file", (s, d) => automationBuiltins.move_file(s, d));
+  register("batch rename", (d, f, r) => automationBuiltins.batch_rename(d, f, r));
+  register("log info", (m) => automationBuiltins.log_info(m));
+  register("log error", (m) => automationBuiltins.log_error(m));
+  register("log warn", (m) => automationBuiltins.log_warn(m));
   return env;
 }
 
@@ -3474,14 +4660,14 @@ var Interpreter = class {
     this.onSay = options?.onSay || ((s) => console.log(s));
     this.onShow = options?.onShow || ((s) => console.log(s));
     this.onAsk = options?.onAsk || ((p) => {
-      return new Promise((resolve3) => {
+      return new Promise((resolve6) => {
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stdout
         });
         rl.question(p ? `${p} ` : "", (ans) => {
           rl.close();
-          resolve3(ans);
+          resolve6(ans);
         });
       });
     });
@@ -3491,7 +4677,8 @@ var Interpreter = class {
       onSay: this.onSay,
       onShow: this.onShow,
       onAsk: this.onAsk,
-      onClear: this.onClear
+      onClear: this.onClear,
+      invokeFunction: (fn, args) => this.callFunction(fn, args)
     });
     this.currentEnv = this.globalEnv;
   }
@@ -3840,6 +5027,9 @@ var Interpreter = class {
     for (const arg of expr.arguments) {
       evaluatedArgs.push(await this.evaluate(arg));
     }
+    return this.callFunction(calleeVal, evaluatedArgs, expr.location);
+  }
+  async callFunction(calleeVal, evaluatedArgs, location) {
     if (calleeVal.nativeFn) {
       try {
         const result = calleeVal.nativeFn(...evaluatedArgs);
@@ -3848,7 +5038,7 @@ var Interpreter = class {
         if (err instanceof PlainError) throw err;
         throw new PlainError(
           `Error running function '${calleeVal.name}': ${err.message}`,
-          expr.location,
+          location || { line: 1, column: 1 },
           { kind: "RuntimeError", sourceCode: this.sourceCode }
         );
       }
@@ -4177,7 +5367,7 @@ function startRepl() {
 }
 
 // src/playground/server.ts
-var http = __toESM(require("http"));
+var http2 = __toESM(require("http"));
 var HTML_PAGE = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -4303,7 +5493,7 @@ var HTML_PAGE = `<!DOCTYPE html>
 </body>
 </html>`;
 function startPlayground(port = 3e3) {
-  const server = http.createServer(async (req, res) => {
+  const server = http2.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/") {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(HTML_PAGE);
@@ -4366,17 +5556,17 @@ async function main() {
   }
   if (command === "examples" || command === "example") {
     const candidates = [
-      path2.resolve(__dirname, "..", "examples"),
-      path2.resolve(__dirname, "..", "..", "examples"),
-      path2.resolve(process.cwd(), "examples")
+      path5.resolve(__dirname, "..", "examples"),
+      path5.resolve(__dirname, "..", "..", "examples"),
+      path5.resolve(process.cwd(), "examples")
     ];
-    const examplesDir = candidates.find((d) => fs2.existsSync(d)) || candidates[0];
+    const examplesDir = candidates.find((d) => fs5.existsSync(d)) || candidates[0];
     const target = args[1] === "run" ? args[2] : args[1];
     if (!target) {
       console.log("\n=== PLAIN Example Programs ===");
       console.log("Run any example with: plain examples <number_or_name>\n");
-      if (fs2.existsSync(examplesDir)) {
-        const files = fs2.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+      if (fs5.existsSync(examplesDir)) {
+        const files = fs5.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
         for (const file of files) {
           console.log(`  - ${file.replace(".plain", "")}  (plain examples ${file.split("_")[0]})`);
         }
@@ -4384,14 +5574,14 @@ async function main() {
       console.log("\nExample: plain examples 01_hello\n");
       return;
     }
-    if (fs2.existsSync(examplesDir)) {
-      const files = fs2.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+    if (fs5.existsSync(examplesDir)) {
+      const files = fs5.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
       const match = files.find(
         (f) => f.toLowerCase() === target.toLowerCase() || f.toLowerCase().startsWith(target.toLowerCase()) || f.toLowerCase().includes(target.toLowerCase())
       );
       if (match) {
-        const fullPath = path2.join(examplesDir, match);
-        const source2 = fs2.readFileSync(fullPath, "utf-8");
+        const fullPath = path5.join(examplesDir, match);
+        const source2 = fs5.readFileSync(fullPath, "utf-8");
         console.log(`--- Running: ${match} ---
 `);
         try {
@@ -4416,12 +5606,12 @@ async function main() {
       console.error("Error: Please provide a .plain file to check.");
       process.exit(1);
     }
-    const filePath2 = path2.resolve(process.cwd(), filename2);
-    if (!fs2.existsSync(filePath2)) {
+    const filePath2 = path5.resolve(process.cwd(), filename2);
+    if (!fs5.existsSync(filePath2)) {
       console.error(`Error: File not found: "${filename2}"`);
       process.exit(1);
     }
-    const source2 = fs2.readFileSync(filePath2, "utf-8");
+    const source2 = fs5.readFileSync(filePath2, "utf-8");
     try {
       const lexer = new Lexer(source2, filename2);
       const tokens = lexer.tokenize();
@@ -4442,8 +5632,8 @@ async function main() {
     }
     filename = args[1];
   }
-  const filePath = path2.resolve(process.cwd(), filename);
-  if (!fs2.existsSync(filePath)) {
+  const filePath = path5.resolve(process.cwd(), filename);
+  if (!fs5.existsSync(filePath)) {
     console.error(`Error: File not found: "${filename}"`);
     process.exit(1);
   }
@@ -4451,11 +5641,11 @@ async function main() {
     console.warn(`[Note] PLAIN programs usually end with '.plain', but running "${filename}" anyway.
 `);
   }
-  const source = fs2.readFileSync(filePath, "utf-8");
+  const source = fs5.readFileSync(filePath, "utf-8");
   try {
     await runPlain(source, {
       filename,
-      baseDir: path2.dirname(filePath)
+      baseDir: path5.dirname(filePath)
     });
   } catch (err) {
     console.error(formatError(err, source));

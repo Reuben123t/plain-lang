@@ -160,3 +160,4 @@ export const statsBuiltins = {
     return arr.reduce((acc, v) => acc * v, 1);
   }
 };
+

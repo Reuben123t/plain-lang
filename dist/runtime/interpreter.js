@@ -82,7 +82,8 @@ class Interpreter {
             onSay: this.onSay,
             onShow: this.onShow,
             onAsk: this.onAsk,
-            onClear: this.onClear
+            onClear: this.onClear,
+            invokeFunction: (fn, args) => this.callFunction(fn, args)
         });
         this.currentEnv = this.globalEnv;
     }
@@ -407,6 +408,9 @@ class Interpreter {
         for (const arg of expr.arguments) {
             evaluatedArgs.push(await this.evaluate(arg));
         }
+        return this.callFunction(calleeVal, evaluatedArgs, expr.location);
+    }
+    async callFunction(calleeVal, evaluatedArgs, location) {
         // Native Builtin Function
         if (calleeVal.nativeFn) {
             try {
@@ -416,7 +420,7 @@ class Interpreter {
             catch (err) {
                 if (err instanceof plain_error_1.PlainError)
                     throw err;
-                throw new plain_error_1.PlainError(`Error running function '${calleeVal.name}': ${err.message}`, expr.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+                throw new plain_error_1.PlainError(`Error running function '${calleeVal.name}': ${err.message}`, location || { line: 1, column: 1 }, { kind: "RuntimeError", sourceCode: this.sourceCode });
             }
         }
         // User-Defined Function

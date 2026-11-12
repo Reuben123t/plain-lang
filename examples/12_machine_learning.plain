@@ -1,0 +1,53 @@
+# Artificial Intelligence & Machine Learning in PLAIN
+# Demonstrates KNN, Sentiment Analysis, Vector Embeddings, and Naive Bayes text classification.
+
+say "=== PLAIN Artificial Intelligence & ML Suite ==="
+
+# 1. Vector Cosine Similarity (Semantic Embeddings)
+set vec1 to [1, 2, 3]
+set vec2 to [1, 2, 3]
+set sim to cosine_similarity(vec1, vec2)
+say "1. Cosine Similarity between identical vectors: " + to_text(sim)
+
+# 2. K-Nearest Neighbors Classification
+set training_features to [
+    [1, 1],
+    [2, 2],
+    [8, 8],
+    [9, 9]
+]
+set training_labels to ["beginner", "beginner", "advanced", "advanced"]
+set student_scores to [1.8, 1.9]
+set predicted_tier to knn_classify(training_features, training_labels, student_scores, 3)
+say "2. KNN Prediction for student scores [1.8, 1.9]: " + predicted_tier
+
+# 3. Sentiment Analysis
+set positive_review to "PLAIN programming language is incredibly fast, intuitive, and clean!"
+set negative_review to "The old compiler was horrible, slow, and completely broken."
+
+set pos_res to sentiment_analyze(positive_review)
+set neg_res to sentiment_analyze(negative_review)
+
+say "3. Positive Review Sentiment: " + item 1 of pos_res + " (Score: " + item 2 of pos_res + ")"
+say "   Negative Review Sentiment: " + item 1 of neg_res + " (Score: " + item 2 of neg_res + ")"
+
+# 4. Naive Bayes Text Classification
+set training_texts to [
+    ["win lottery prize claim money urgent", "spam"],
+    ["free credit card cash jackpot winner", "spam"],
+    ["meeting at library for group study session", "academic"],
+    ["submit lab report and assignment by friday", "academic"]
+]
+set text_model to train_text_classifier(training_texts)
+set sample_test to "urgent prize winner claim money"
+set classified_as to classify_text(text_model, sample_test)
+say "4. Naive Bayes classification for '" + sample_test + "':"
+say "   Result: " + classified_as
+
+# 5. Neural Network Activation Functions
+set raw_score to 2.5
+say "5. Neural Activations for input 2.5:"
+say "   ReLU(2.5): " + to_text(relu(raw_score))
+say "   Sigmoid(2.5): " + to_text(sigmoid(raw_score))
+
+say "=== AI & Machine Learning Suite Completed Successfully! ==="
