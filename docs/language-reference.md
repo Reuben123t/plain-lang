@@ -117,8 +117,146 @@ PLAIN features five intuitive data types:
 - `days_between(DATE1, DATE2)`: Number of days between two dates.
 - `wait(SECONDS)`: Pauses execution for given seconds.
 
-### F. File Functions (Safe & Sandboxed)
+### F. Mathematics & Algebra Built-Ins
+- `square(x)`: $x^2$
+- `cube(x)`: $x^3$
+- `square_root(x)` / `sqrt(x)`: $\sqrt{x}$
+- `cube_root(x)` / `cbrt(x)`: $\sqrt[3]{x}$
+- `power(base, exp)` / `pow(base, exp)`: $base^{exp}$
+- `factorial(n)` / `fact(n)`: $n!$
+- `gcd(a, b)`: Greatest common divisor.
+- `lcm(a, b)`: Least common multiple.
+- `is_prime(n)`: Checks if $n$ is prime.
+- `next_prime(n)`: Returns the smallest prime greater than $n$.
+- `primes_up_to(n)`: Returns list of primes up to $n$ via sieve.
+- `factors(n)`: Returns list of integer factors of $n$.
+- `is_even(n)` / `is_odd(n)`: Parity check.
+- `percentage(part, total)`: Returns $(part / total) \times 100$.
+- `percent_change(old, new)`: Calculates percentage increase/decrease.
+- `simple_interest(p, r, t)`: $P \times R \times T / 100$.
+- `compound_interest(p, r, t, n)`: Compound interest total.
+- `permutations(n, r)`: $P(n, r) = \frac{n!}{(n-r)!}$.
+- `combinations(n, r)`: $C(n, r) = \frac{n!}{r!(n-r)!}$.
+- `quadratic_roots(a, b, c)`: Solves $ax^2 + bx + c = 0$, returns list of real roots.
+- `sine(x)`, `cosine(x)`, `tangent(x)`: Standard trigonometric functions.
+- `arcsine(x)`, `arccosine(x)`, `arctangent(x)`: Inverse trigonometric functions.
+- `to_degrees(rad)`, `to_radians(deg)`: Angle conversions.
+- `log(x)`, `log10(x)`, `log2(x)`, `exp(x)`: Logarithms and exponentials.
+- `pi()`, `euler_e()`: Mathematical constants $\pi$ and $e$.
+
+### G. Geometry & 3D Shapes
+- `hypotenuse(a, b)`: Calculates $\sqrt{a^2 + b^2}$.
+- `distance_2d(x1, y1, x2, y2)`: Euclidean distance in 2D plane.
+- `distance_3d(x1, y1, z1, x2, y2, z2)`: Distance in 3D space.
+- `area_circle(r)`, `circumference_circle(r)`: Circle formulas.
+- `area_triangle(b, h)`: $0.5 \times b \times h$.
+- `area_rectangle(w, h)`, `perimeter_rectangle(w, h)`: Rectangle formulas.
+- `area_trapezoid(a, b, h)`: Trapezoid area.
+- `volume_cube(s)`: $s^3$.
+- `volume_sphere(r)`, `surface_area_sphere(r)`: Sphere formulas.
+- `volume_cylinder(r, h)`, `surface_area_cylinder(r, h)`: Cylinder formulas.
+- `volume_cone(r, h)`: Cone volume $\frac{1}{3}\pi r^2 h$.
+
+### H. Statistics & Data Analysis
+- `mean(list)` / `average(list)`: Arithmetic mean.
+- `median(list)`: Middle value.
+- `mode(list)`: Most common value.
+- `range_of(list)`: Difference between max and min.
+- `variance(list)`: Sample variance.
+- `standard_deviation(list)` / `stdev(list)`: Sample standard deviation.
+- `z_score(val, mean, stdev)`: Standard score.
+- `percentile(list, p)`: $p$-th percentile value.
+- `quartiles(list)`: Returns `[Q1, Q2, Q3]`.
+- `iqr(list)`: Interquartile range ($Q3 - Q1$).
+- `frequency_table(list)`: Count of each unique value.
+- `covariance(x, y)`: Sample covariance.
+- `correlation(x, y)`: Pearson correlation coefficient $r$.
+- `linear_regression(x, y)`: Computes best-fit line `[slope, intercept]`.
+- `cumulative_sum(list)`: Running totals.
+- `product_of(list)`: Multiplies all numbers.
+
+### I. Science & Physics
+- `atomic_mass(element)`: Standard atomic weight (e.g. "Au" -> 196.97).
+- `atomic_number(element)`: Atomic number (e.g. "Fe" -> 26).
+- `element_name(element)`: Full chemical name (e.g. "O" -> "Oxygen").
+- `density(mass, volume)`: Density $\rho = m / V$.
+- `speed(distance, time)`: $v = d / t$.
+- `acceleration(v1, v2, time)`: $a = \Delta v / t$.
+- `force(mass, acceleration)`: $F = m \times a$.
+- `momentum(mass, velocity)`: $p = m \times v$.
+- `kinetic_energy(mass, velocity)`: $KE = \frac{1}{2} m v^2$.
+- `potential_energy(mass, height, g)`: $PE = m g h$.
+- `work_done(force, distance)`: $W = F \times d$.
+- `power_watts(work, time)`: $P = W / t$.
+- `ohms_voltage(i, r)`: $V = I \times R$.
+- `ohms_current(v, r)`: $I = V / R$.
+- `ohms_resistance(v, i)`: $R = V / I$.
+- `electrical_power(v, i)`: $P = V \times I$.
+- `free_fall_time(height, g)`: $t = \sqrt{2h/g}$.
+- `projectile_range(v, angle_deg, g)`: Horizontal projectile range.
+
+### J. Student Grades & Unit Conversions
+- `letter_grade(percentage)`: Converts 0-100 to letter grade ("A+", "A", "B", ...).
+- `gpa_from_percentage(percentage)`: 4.0 scale GPA conversion.
+- `gpa_from_grades(grades_list)`: Calculates GPA from list of letter grades.
+- `weighted_score(scores, weights)`: Computes weighted average.
+- `celsius_to_fahrenheit(c)` / `fahrenheit_to_celsius(f)`: Temperature conversions.
+- `celsius_to_kelvin(c)` / `kelvin_to_celsius(k)`: Kelvin conversions.
+- `km_to_miles(km)` / `miles_to_km(mi)`: Distance conversions.
+- `meters_to_feet(m)` / `feet_to_meters(ft)`: Height conversions.
+- `cm_to_inches(cm)` / `inches_to_cm(in)`: Small length conversions.
+- `kg_to_pounds(kg)` / `pounds_to_kg(lbs)`: Weight conversions.
+- `grams_to_ounces(g)` / `ounces_to_grams(oz)`: Mass conversions.
+- `liters_to_gallons(l)` / `gallons_to_liters(gal)`: Volume conversions.
+- `hours_to_minutes(h)` / `minutes_to_seconds(m)`: Time unit conversions.
+
+### K. Text & Cryptography
+- `title_case(s)`, `camel_case(s)`, `snake_case(s)`, `kebab_case(s)`: Formats.
+- `word_count(s)`, `line_count(s)`, `char_count(s)`: Counts.
+- `count_vowels(s)`, `count_consonants(s)`: Phonetic counts.
+- `is_palindrome(s)`: Checks for forward/backward identity.
+- `caesar_cipher(s, shift)`: Classical substitution cipher.
+- `base64_encode(s)`, `base64_decode(s)`: Base64 encoding.
+- `slugify(s)`: Converts text to URL-friendly slug.
+
+### L. Advanced List Algorithms
+- `unique(list)`: Removes duplicate entries.
+- `shuffle(list)`: Fisher-Yates random shuffle.
+- `sample(list, n)`: Random subset selection without replacement.
+- `chunk(list, size)`: Splits list into batches of given size.
+- `intersection(a, b)`: Elements present in both lists.
+- `union(a, b)`: Combined elements without duplicates.
+- `difference(a, b)`: Elements in list `a` not in `b`.
+- `zip(a, b)`: Pairs elements from two lists.
+- `find_index(list, item)`: 1-based index of item.
+- `is_sorted(list)`: Checks if list is sorted in ascending order.
+- `range_list(start, end, step)`: Generates range list.
+
+### M. System, Utilities & Offline Dictionary
+- `define_word(word)`: Offline student dictionary definition.
+- `roll_dice(sides, count)`: Simulates dice rolls.
+- `flip_coin()`: Returns "heads" or "tails".
+- `pick_card()`: Picks random card from a standard 52-card deck.
+- `flashcard()`: Returns student study questions and answers.
+- `hash_text(text, algo)`: Computes SHA256 or MD5 hash.
+- `to_json(val)` / `from_json(str)`: JSON serialization.
+- `os_platform()`, `os_arch()`, `cpu_count()`, `memory_usage()`.
+
+### N. File Functions (Safe & Sandboxed)
 - `read_file(PATH)`: Reads UTF-8 file inside the project workspace.
 - `write_file(PATH, TEXT)`: Writes text to file inside project workspace.
+- `append_file(PATH, TEXT)`: Appends text to existing file.
 - `file_exists(PATH)`: Returns true if file exists, false otherwise.
+- `delete_file(PATH)`: Safely deletes file within project workspace.
+- `list_files(DIR)`: Returns list of filenames in directory.
+- `file_size(PATH)`: Size of file in bytes.
+- `create_folder(DIR)`: Creates a new directory.
+- `folder_exists(DIR)`: Checks if directory exists.
+
+### O. Network & Web
+- `fetch_text(url)`: Fetches raw text content from HTTP/HTTPS URL.
+- `fetch_json(url)`: Fetches and parses JSON from web API.
+- `url_encode(text)`, `url_decode(text)`: URL percent encoding.
+- `is_valid_url(text)`: Validates web URLs.
+
 

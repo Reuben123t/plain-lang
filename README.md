@@ -232,11 +232,66 @@ set result to add 4 and 6
 say result
 ```
 
-### 8. Text & Math Built-Ins
-- **Text**: `uppercase("hello")`, `lowercase("WORLD")`, `length("text")`, `contains("hello", "ell")`, `replace("cat", "c", "b")`, `trim("  hi  ")`, `starts with("plain", "pl")`, `ends with("plain", "in")`
-- **Math**: `round(4.6)`, `floor(4.9)`, `ceiling(4.1)`, `absolute(-8)`, `minimum(3, 8, 2)`, `maximum(3, 8, 2)`, `random between(1, 10)`, `to number("42")`, `to text(42)`
-- **Date & Time**: `today()`, `current time()`, `days between("2026-01-01", "2026-01-10")`, `wait 2`
-- **Safe File I/O**: `read file("notes.txt")`, `write file("output.txt", "hello")`, `file exists("notes.txt")`
+### 8. 🎓 150+ Student & Academic Built-In Functions (10/10 for Students)
+
+PLAIN comes out-of-the-box with **over 150+ specialized functions** (260+ with aliases) across every subject a student encounters:
+
+#### 📐 Mathematics & Algebra (46 Functions)
+- **Powers & Roots**: `square(x)`, `cube(x)`, `square_root(x)` (or `sqrt`), `cube_root(x)`, `power(base, exp)`
+- **Number Theory**: `factorial(n)`, `gcd(a, b)`, `lcm(a, b)`, `is_prime(n)`, `next_prime(n)`, `primes_up_to(n)`, `factors(n)`, `is_even(n)`, `is_odd(n)`
+- **Algebra & Finance**: `percentage(part, total)`, `percent_change(old, new)`, `simple_interest(p, r, t)`, `compound_interest(p, r, t, n)`, `permutations(n, r)`, `combinations(n, r)`, `quadratic_roots(a, b, c)`
+- **Trigonometry & Calculus**: `sine(rad)`, `cosine(rad)`, `tangent(rad)`, `arcsine(x)`, `arccosine(x)`, `arctangent(x)`, `to_degrees(rad)`, `to_radians(deg)`, `log(x)`, `log10(x)`, `log2(x)`, `exp(x)`, `pi()`, `euler_e()`
+- **Basic & Clamping**: `round(x, dec)`, `floor(x)`, `ceiling(x)`, `absolute(x)`, `minimum(...)`, `maximum(...)`, `sign(x)`, `clamp(val, min, max)`, `random_between(min, max)`
+
+#### 📏 Geometry & 3D Shapes (15 Functions)
+- **Distance & 2D**: `hypotenuse(a, b)`, `distance_2d(x1, y1, x2, y2)`, `distance_3d(...)`
+- **Areas & Perimeters**: `area_circle(r)`, `circumference_circle(r)`, `area_triangle(b, h)`, `area_rectangle(w, h)`, `perimeter_rectangle(w, h)`, `area_trapezoid(a, b, h)`
+- **3D Volumes & Surface Areas**: `volume_cube(s)`, `volume_sphere(r)`, `surface_area_sphere(r)`, `volume_cylinder(r, h)`, `surface_area_cylinder(r, h)`, `volume_cone(r, h)`
+
+#### 📊 Statistics & Data Analysis (16 Functions)
+- **Averages & Center**: `mean(list)`, `median(list)`, `mode(list)`
+- **Spread & Dispersion**: `range_of(list)`, `variance(list)`, `standard_deviation(list)` (or `stdev`), `z_score(val, mean, stdev)`
+- **Distributions & Quantiles**: `percentile(list, p)`, `quartiles(list)`, `iqr(list)`, `frequency_table(list)`
+- **Bivariate & Regression**: `covariance(x, y)`, `correlation(x, y)`, `linear_regression(x, y)` (returns `[slope, intercept]`), `cumulative_sum(list)`, `product_of(list)`
+
+#### ⚛️ Science, Physics & Chemistry (18 Functions)
+- **Chemistry & Elements**: `atomic_mass("Au")`, `atomic_number("C")`, `element_name("Fe")`, `density(mass, vol)`
+- **Motion & Mechanics**: `speed(dist, time)`, `acceleration(v1, v2, time)`, `force(m, a)`, `momentum(m, v)`, `kinetic_energy(m, v)`, `potential_energy(m, h, g)`, `work_done(f, d)`, `power_watts(work, time)`
+- **Electricity (Ohm's Law)**: `ohms_voltage(i, r)`, `ohms_current(v, r)`, `ohms_resistance(v, i)`, `electrical_power(v, i)`
+- **Gravity & Projectiles**: `free_fall_time(height, g)`, `projectile_range(v, angle_deg, g)`
+
+#### 🎒 Letter Grades, GPA & Unit Conversions (22 Functions)
+- **Academics**: `letter_grade(pct)` (e.g. 95 -> "A"), `gpa_from_percentage(pct)` (e.g. 95 -> 4.0), `gpa_from_grades(list_of_letter_grades)`, `weighted_score(scores, weights)`
+- **Temperature**: `celsius_to_fahrenheit(c)`, `fahrenheit_to_celsius(f)`, `celsius_to_kelvin(c)`, `kelvin_to_celsius(k)`
+- **Length**: `km_to_miles(km)`, `miles_to_km(mi)`, `meters_to_feet(m)`, `feet_to_meters(ft)`, `cm_to_inches(cm)`, `inches_to_cm(in)`
+- **Mass & Volume**: `kg_to_pounds(kg)`, `pounds_to_kg(lbs)`, `grams_to_ounces(g)`, `ounces_to_grams(oz)`, `liters_to_gallons(l)`, `gallons_to_liters(gal)`
+- **Time Conversions**: `hours_to_minutes(h)`, `minutes_to_seconds(m)`
+
+#### 📝 Text & String Processing (36 Functions)
+- **Case Conversion**: `uppercase(s)`, `lowercase(s)`, `title_case(s)`, `camel_case(s)`, `snake_case(s)`, `kebab_case(s)`
+- **Inspection & Counting**: `length(s)`, `word_count(s)`, `line_count(s)`, `char_count(s)`, `count_vowels(s)`, `count_consonants(s)`
+- **Validation**: `is_digit(s)`, `is_alpha(s)`, `is_alphanumeric(s)`, `is_uppercase(s)`, `is_lowercase(s)`, `is_palindrome(s)`
+- **Transformation & Cryptography**: `reverse_text(s)`, `trim(s)`, `pad_start(s, len, ch)`, `pad_end(s, len, ch)`, `repeat_text(s, n)`, `caesar_cipher(s, shift)`, `base64_encode(s)`, `base64_decode(s)`, `slugify(s)`
+- **Splitting & Slicing**: `split_text(s, sep)`, `words(s)`, `lines(s)`, `slice_text(s, start, end)`
+
+#### 📋 List & Array Algorithms (28 Functions)
+- **Querying & Slicing**: `count(l)`, `first(l)`, `last(l)`, `item_of(l, idx)`, `find_index(l, item)`, `slice_list(l, start, end)`, `take(l, n)`, `drop(l, n)`, `is_empty(l)`, `is_sorted(l)`
+- **Set & Multi-List Ops**: `unique(l)`, `intersection(a, b)`, `union(a, b)`, `difference(a, b)`, `zip(a, b)`, `chunk(l, size)`, `flatten(l)`
+- **Ordering & Mutation**: `sort(l)`, `reverse(l)`, `shuffle(l)`, `sample(l, n)`, `insert_at(l, idx, item)`, `fill_list(val, n)`, `range_list(start, end, step)`
+
+#### 📅 Date, Time & Calendars (17 Functions)
+- `today()`, `current_time()`, `current_year()`, `current_month()`, `current_month_name()`, `current_day()`, `current_hour()`, `current_minute()`, `current_second()`, `timestamp()`, `day_of_week()`, `is_leap_year(y)`, `days_in_month(y, m)`, `days_between(d1, d2)`, `add_days(d, n)`, `format_date(d, fmt)`, `sleep(sec)`
+
+#### 🎲 System, Games & Student Dictionary (18 Functions)
+- **Student Dictionary**: `define_word("photosynthesis")` — built-in definitions for key academic concepts!
+- **Interactive & Games**: `roll_dice(sides, count)`, `flip_coin()`, `pick_card()`, `deck_of_cards()`, `flashcard()`, `banner("trophy")`, `beep()`
+- **System & Security**: `os_platform()`, `os_arch()`, `cpu_count()`, `memory_usage()`, `get_env(key)`, `random_id(len)`, `generate_password(len)`, `hash_text(s)`, `uuid()`, `to_json(v)`, `from_json(s)`
+
+#### 📁 Sandboxed Safe File I/O (9 Functions)
+- `read_file(path)`, `write_file(path, text)`, `append_file(path, text)`, `file_exists(path)`, `delete_file(path)`, `list_files(dir)`, `file_size(path)`, `create_folder(dir)`, `folder_exists(dir)`
+
+#### 🌐 Network & Web (5 Functions)
+- `fetch_text(url)`, `fetch_json(url)`, `url_encode(text)`, `url_decode(text)`, `is_valid_url(text)`
 
 ---
 

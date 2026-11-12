@@ -1,0 +1,35 @@
+# Student Science & Math Showcase in PLAIN
+# Demonstrates 150+ student built-in functions:
+# Physics, Geometry, Statistics, Unit Conversions, and Chemistry!
+
+say "=== PLAIN Student Science & Math Suite ==="
+
+# 1. Physics: Kinetic Energy & Force
+set m to 5
+set v to 12
+set ke to kinetic_energy(m, v)
+say "1. Kinetic Energy of 5kg at 12 m/s: " + to_text(ke) + " Joules"
+
+# 2. Geometry: Cylinder Volume
+set r to 4
+set h to 10
+set vol to volume_cylinder(r, h)
+say "2. Cylinder Volume (r=4, h=10): " + to_text(round(vol, 2))
+
+# 3. Chemistry: Periodic Table Lookup
+say "3. Gold (Au): " + element_name("Au") + ", Atomic Mass: " + to_text(atomic_mass("Au"))
+
+# 4. Statistics: Quartiles & Standard Deviation
+set test_scores to [65, 70, 75, 80, 85, 90, 95, 100]
+say "4. Mean: " + to_text(mean(test_scores)) + ", Median: " + to_text(median(test_scores))
+say "   Standard Deviation: " + to_text(round(stdev(test_scores), 2))
+
+# 5. Unit Conversion: Celsius to Fahrenheit & Km to Miles
+say "5. 37 C in Fahrenheit: " + to_text(celsius_to_fahrenheit(37)) + " F"
+say "   100 km in Miles: " + to_text(round(km_to_miles(100), 2)) + " miles"
+
+# 6. Student Dictionary
+say "6. Vocabulary Word 'photosynthesis':"
+say "   " + define_word("photosynthesis")
+
+say "=== All Calculations Completed Successfully! ==="

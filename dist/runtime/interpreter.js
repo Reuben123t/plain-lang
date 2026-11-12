@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Interpreter = void 0;
+const readline = __importStar(require("readline"));
 const environment_1 = require("./environment");
 const values_1 = require("./values");
 const plain_error_1 = require("../errors/plain-error");
@@ -63,16 +64,17 @@ class Interpreter {
         this.onShow = options?.onShow || ((s) => console.log(s));
         this.onAsk =
             options?.onAsk ||
-                (async (p) => {
-                    // Fallback readline prompt
-                    const readline = await Promise.resolve().then(() => __importStar(require("readline/promises")));
-                    const rl = readline.createInterface({
-                        input: process.stdin,
-                        output: process.stdout
+                ((p) => {
+                    return new Promise((resolve) => {
+                        const rl = readline.createInterface({
+                            input: process.stdin,
+                            output: process.stdout
+                        });
+                        rl.question(p ? `${p} ` : "", (ans) => {
+                            rl.close();
+                            resolve(ans);
+                        });
                     });
-                    const ans = await rl.question(p ? `${p} ` : "");
-                    rl.close();
-                    return ans;
                 });
         this.onClear = options?.onClear || (() => console.clear());
         this.globalEnv = (0, builtins_1.createStandardEnvironment)({

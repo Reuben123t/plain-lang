@@ -90,7 +90,79 @@ class FileSystemSandbox {
         const rawPath = (0, values_1.plainToString)(filePathVal);
         try {
             const safePath = this.resolveSafePath(rawPath);
-            return fs.existsSync(safePath);
+            return fs.existsSync(safePath) && fs.statSync(safePath).isFile();
+        }
+        catch {
+            return false;
+        }
+    }
+    appendFile(filePathVal, contentVal) {
+        const rawPath = (0, values_1.plainToString)(filePathVal);
+        const safePath = this.resolveSafePath(rawPath);
+        const content = (0, values_1.plainToString)(contentVal);
+        try {
+            const dir = path.dirname(safePath);
+            if (!fs.existsSync(dir)) {
+                fs.mkdirSync(dir, { recursive: true });
+            }
+            fs.appendFileSync(safePath, content, "utf-8");
+        }
+        catch (err) {
+            throw new plain_error_1.PlainError(`Could not append to file "${rawPath}": ${err.message}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
+    }
+    deleteFile(filePathVal) {
+        const rawPath = (0, values_1.plainToString)(filePathVal);
+        const safePath = this.resolveSafePath(rawPath);
+        if (!fs.existsSync(safePath)) {
+            return false;
+        }
+        try {
+            fs.unlinkSync(safePath);
+            return true;
+        }
+        catch (err) {
+            throw new plain_error_1.PlainError(`Could not delete file "${rawPath}": ${err.message}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
+    }
+    listFiles(dirPathVal) {
+        const rawDir = dirPathVal !== undefined ? (0, values_1.plainToString)(dirPathVal) : ".";
+        const safeDir = this.resolveSafePath(rawDir);
+        if (!fs.existsSync(safeDir)) {
+            throw new plain_error_1.PlainError(`Folder not found: "${rawDir}".`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
+        try {
+            return fs.readdirSync(safeDir);
+        }
+        catch (err) {
+            throw new plain_error_1.PlainError(`Could not list folder "${rawDir}": ${err.message}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
+    }
+    fileSize(filePathVal) {
+        const rawPath = (0, values_1.plainToString)(filePathVal);
+        const safePath = this.resolveSafePath(rawPath);
+        if (!fs.existsSync(safePath)) {
+            throw new plain_error_1.PlainError(`File not found: "${rawPath}".`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
+        return fs.statSync(safePath).size;
+    }
+    createFolder(dirPathVal) {
+        const rawDir = (0, values_1.plainToString)(dirPathVal);
+        const safeDir = this.resolveSafePath(rawDir);
+        try {
+            if (!fs.existsSync(safeDir)) {
+                fs.mkdirSync(safeDir, { recursive: true });
+            }
+        }
+        catch (err) {
+            throw new plain_error_1.PlainError(`Could not create folder "${rawDir}": ${err.message}`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
+    }
+    folderExists(dirPathVal) {
+        const rawDir = (0, values_1.plainToString)(dirPathVal);
+        try {
+            const safeDir = this.resolveSafePath(rawDir);
+            return fs.existsSync(safeDir) && fs.statSync(safeDir).isDirectory();
         }
         catch {
             return false;

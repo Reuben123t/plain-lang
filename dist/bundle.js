@@ -1704,39 +1704,27 @@ var mathBuiltins = {
     return plainToString(val);
   },
   round: (num) => {
-    const n = mathBuiltins.to_number(num);
-    return Math.round(n);
+    return Math.round(mathBuiltins.to_number(num));
   },
   floor: (num) => {
-    const n = mathBuiltins.to_number(num);
-    return Math.floor(n);
+    return Math.floor(mathBuiltins.to_number(num));
   },
   ceiling: (num) => {
-    const n = mathBuiltins.to_number(num);
-    return Math.ceil(n);
+    return Math.ceil(mathBuiltins.to_number(num));
   },
   absolute: (num) => {
-    const n = mathBuiltins.to_number(num);
-    return Math.abs(n);
+    return Math.abs(mathBuiltins.to_number(num));
   },
   minimum: (...args) => {
     if (args.length === 0) {
-      throw new PlainError(
-        "minimum(...) requires at least one number.",
-        { line: 1, column: 1 },
-        { kind: "TypeError" }
-      );
+      throw new PlainError("minimum(...) requires at least one number.", { line: 1, column: 1 }, { kind: "TypeError" });
     }
     const numbers = args.map((a) => mathBuiltins.to_number(a));
     return Math.min(...numbers);
   },
   maximum: (...args) => {
     if (args.length === 0) {
-      throw new PlainError(
-        "maximum(...) requires at least one number.",
-        { line: 1, column: 1 },
-        { kind: "TypeError" }
-      );
+      throw new PlainError("maximum(...) requires at least one number.", { line: 1, column: 1 }, { kind: "TypeError" });
     }
     const numbers = args.map((a) => mathBuiltins.to_number(a));
     return Math.max(...numbers);
@@ -1748,6 +1736,204 @@ var mathBuiltins = {
       return Math.floor(Math.random() * (min - max + 1)) + max;
     }
     return Math.floor(Math.random() * (max - min + 1)) + min;
+  },
+  // Powers and Roots
+  square: (n) => {
+    const num = mathBuiltins.to_number(n);
+    return num * num;
+  },
+  cube: (n) => {
+    const num = mathBuiltins.to_number(n);
+    return num * num * num;
+  },
+  square_root: (n) => {
+    const num = mathBuiltins.to_number(n);
+    if (num < 0) {
+      throw new PlainError("Cannot take the square root of a negative number.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    return Math.sqrt(num);
+  },
+  cube_root: (n) => {
+    return Math.cbrt(mathBuiltins.to_number(n));
+  },
+  power: (baseVal, expVal) => {
+    return Math.pow(mathBuiltins.to_number(baseVal), mathBuiltins.to_number(expVal));
+  },
+  // Arithmetic Utilities
+  factorial: (n) => {
+    const num = Math.round(mathBuiltins.to_number(n));
+    if (num < 0) throw new PlainError("Factorial is not defined for negative numbers.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    if (num > 170) throw new PlainError("Number is too large for factorial calculation.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    let res = 1;
+    for (let i = 2; i <= num; i++) res *= i;
+    return res;
+  },
+  gcd: (aVal, bVal) => {
+    let a = Math.abs(Math.round(mathBuiltins.to_number(aVal)));
+    let b = Math.abs(Math.round(mathBuiltins.to_number(bVal)));
+    while (b) {
+      const t = b;
+      b = a % b;
+      a = t;
+    }
+    return a;
+  },
+  lcm: (aVal, bVal) => {
+    const a = Math.abs(Math.round(mathBuiltins.to_number(aVal)));
+    const b = Math.abs(Math.round(mathBuiltins.to_number(bVal)));
+    if (a === 0 || b === 0) return 0;
+    return Math.abs(a * b) / mathBuiltins.gcd(a, b);
+  },
+  is_prime: (nVal) => {
+    const n = Math.round(mathBuiltins.to_number(nVal));
+    if (n <= 1) return false;
+    if (n <= 3) return true;
+    if (n % 2 === 0 || n % 3 === 0) return false;
+    for (let i = 5; i * i <= n; i += 6) {
+      if (n % i === 0 || n % (i + 2) === 0) return false;
+    }
+    return true;
+  },
+  next_prime: (nVal) => {
+    let n = Math.round(mathBuiltins.to_number(nVal)) + 1;
+    while (!mathBuiltins.is_prime(n)) {
+      n++;
+    }
+    return n;
+  },
+  primes_up_to: (limitVal) => {
+    const limit = Math.round(mathBuiltins.to_number(limitVal));
+    const primes = [];
+    for (let i = 2; i <= limit; i++) {
+      if (mathBuiltins.is_prime(i)) primes.push(i);
+    }
+    return primes;
+  },
+  factors: (nVal) => {
+    const n = Math.abs(Math.round(mathBuiltins.to_number(nVal)));
+    const res = [];
+    for (let i = 1; i <= n; i++) {
+      if (n % i === 0) res.push(i);
+    }
+    return res;
+  },
+  is_even: (nVal) => {
+    const n = Math.round(mathBuiltins.to_number(nVal));
+    return n % 2 === 0;
+  },
+  is_odd: (nVal) => {
+    const n = Math.round(mathBuiltins.to_number(nVal));
+    return n % 2 !== 0;
+  },
+  sign: (nVal) => {
+    const n = mathBuiltins.to_number(nVal);
+    return Math.sign(n);
+  },
+  clamp: (val, minVal, maxVal) => {
+    const v = mathBuiltins.to_number(val);
+    const min = mathBuiltins.to_number(minVal);
+    const max = mathBuiltins.to_number(maxVal);
+    return Math.min(Math.max(v, min), max);
+  },
+  percentage: (partVal, totalVal) => {
+    const total = mathBuiltins.to_number(totalVal);
+    if (total === 0) throw new PlainError("Cannot calculate percentage of a total of zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return mathBuiltins.to_number(partVal) / total * 100;
+  },
+  percent_change: (oldVal, newVal) => {
+    const oldV = mathBuiltins.to_number(oldVal);
+    if (oldV === 0) throw new PlainError("Initial value cannot be zero for percent change.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return (mathBuiltins.to_number(newVal) - oldV) / oldV * 100;
+  },
+  // Trigonometry (takes degrees for student simplicity, or standard rad)
+  sine: (degVal) => {
+    const rad = mathBuiltins.to_number(degVal) * Math.PI / 180;
+    return Math.sin(rad);
+  },
+  cosine: (degVal) => {
+    const rad = mathBuiltins.to_number(degVal) * Math.PI / 180;
+    return Math.cos(rad);
+  },
+  tangent: (degVal) => {
+    const rad = mathBuiltins.to_number(degVal) * Math.PI / 180;
+    return Math.tan(rad);
+  },
+  arcsine: (val) => {
+    const n = mathBuiltins.to_number(val);
+    return Math.asin(n) * 180 / Math.PI;
+  },
+  arccosine: (val) => {
+    const n = mathBuiltins.to_number(val);
+    return Math.acos(n) * 180 / Math.PI;
+  },
+  arctangent: (val) => {
+    const n = mathBuiltins.to_number(val);
+    return Math.atan(n) * 180 / Math.PI;
+  },
+  to_degrees: (radVal) => {
+    return mathBuiltins.to_number(radVal) * 180 / Math.PI;
+  },
+  to_radians: (degVal) => {
+    return mathBuiltins.to_number(degVal) * Math.PI / 180;
+  },
+  // Logarithms & Exponentials
+  log: (nVal) => {
+    const n = mathBuiltins.to_number(nVal);
+    if (n <= 0) throw new PlainError("Logarithm is only defined for numbers greater than 0.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return Math.log(n);
+  },
+  log10: (nVal) => {
+    const n = mathBuiltins.to_number(nVal);
+    if (n <= 0) throw new PlainError("Logarithm base 10 is only defined for numbers greater than 0.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return Math.log10(n);
+  },
+  log2: (nVal) => {
+    const n = mathBuiltins.to_number(nVal);
+    if (n <= 0) throw new PlainError("Logarithm base 2 is only defined for numbers greater than 0.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return Math.log2(n);
+  },
+  exp: (nVal) => {
+    return Math.exp(mathBuiltins.to_number(nVal));
+  },
+  pi: () => Math.PI,
+  euler_e: () => Math.E,
+  // Financial / Student Math
+  simple_interest: (principalVal, ratePercentVal, timeYearsVal) => {
+    const p = mathBuiltins.to_number(principalVal);
+    const r = mathBuiltins.to_number(ratePercentVal) / 100;
+    const t = mathBuiltins.to_number(timeYearsVal);
+    return p * r * t;
+  },
+  compound_interest: (pVal, rVal, tVal, nVal) => {
+    const p = mathBuiltins.to_number(pVal);
+    const r = mathBuiltins.to_number(rVal) / 100;
+    const t = mathBuiltins.to_number(tVal);
+    const n = nVal ? mathBuiltins.to_number(nVal) : 1;
+    return p * Math.pow(1 + r / n, n * t) - p;
+  },
+  permutations: (nVal, rVal) => {
+    const n = Math.round(mathBuiltins.to_number(nVal));
+    const r = Math.round(mathBuiltins.to_number(rVal));
+    if (r < 0 || r > n) return 0;
+    return mathBuiltins.factorial(n) / mathBuiltins.factorial(n - r);
+  },
+  combinations: (nVal, rVal) => {
+    const n = Math.round(mathBuiltins.to_number(nVal));
+    const r = Math.round(mathBuiltins.to_number(rVal));
+    if (r < 0 || r > n) return 0;
+    return mathBuiltins.factorial(n) / (mathBuiltins.factorial(r) * mathBuiltins.factorial(n - r));
+  },
+  quadratic_roots: (aVal, bVal, cVal) => {
+    const a = mathBuiltins.to_number(aVal);
+    const b = mathBuiltins.to_number(bVal);
+    const c = mathBuiltins.to_number(cVal);
+    if (a === 0) throw new PlainError("In ax^2 + bx + c = 0, 'a' cannot be 0.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    const disc = b * b - 4 * a * c;
+    if (disc < 0) return [];
+    if (disc === 0) return [-b / (2 * a)];
+    const r1 = (-b + Math.sqrt(disc)) / (2 * a);
+    const r2 = (-b - Math.sqrt(disc)) / (2 * a);
+    return [r1, r2];
   }
 };
 
@@ -1774,28 +1960,14 @@ var listBuiltins = {
   first: (val) => {
     const list = ensureList(val, "first");
     if (list.length === 0) {
-      throw new PlainError(
-        "I cannot get the first item because the list is empty.",
-        { line: 1, column: 1 },
-        {
-          kind: "RuntimeError",
-          suggestion: "Add items to the list before calling first(list)."
-        }
-      );
+      throw new PlainError("I cannot get the first item because the list is empty.", { line: 1, column: 1 }, { kind: "RuntimeError" });
     }
     return list[0];
   },
   last: (val) => {
     const list = ensureList(val, "last");
     if (list.length === 0) {
-      throw new PlainError(
-        "I cannot get the last item because the list is empty.",
-        { line: 1, column: 1 },
-        {
-          kind: "RuntimeError",
-          suggestion: "Add items to the list before calling last(list)."
-        }
-      );
+      throw new PlainError("I cannot get the last item because the list is empty.", { line: 1, column: 1 }, { kind: "RuntimeError" });
     }
     return list[list.length - 1];
   },
@@ -1806,10 +1978,7 @@ var listBuiltins = {
       throw new PlainError(
         `List item ${index} is out of range. The list contains ${list.length} item${list.length === 1 ? "" : "s"}.`,
         { line: 1, column: 1 },
-        {
-          kind: "RuntimeError",
-          suggestion: "Remember that PLAIN uses 1-based indexing: item 1 is the first item."
-        }
+        { kind: "RuntimeError", suggestion: "Remember that PLAIN uses 1-based indexing: item 1 is the first item." }
       );
     }
     return list[index - 1];
@@ -1836,28 +2005,14 @@ var listBuiltins = {
   average: (val) => {
     const list = ensureList(val, "average");
     if (list.length === 0) {
-      throw new PlainError(
-        "I cannot calculate the average of an empty list.",
-        { line: 1, column: 1 },
-        {
-          kind: "RuntimeError",
-          suggestion: "Make sure the list has at least one number before finding the average."
-        }
-      );
+      throw new PlainError("I cannot calculate the average of an empty list.", { line: 1, column: 1 }, { kind: "RuntimeError" });
     }
     return listBuiltins.sum(list) / list.length;
   },
   highest: (val) => {
     const list = ensureList(val, "highest");
     if (list.length === 0) {
-      throw new PlainError(
-        "I cannot find the highest item because the list is empty.",
-        { line: 1, column: 1 },
-        {
-          kind: "RuntimeError",
-          suggestion: "Make sure the list has at least one number."
-        }
-      );
+      throw new PlainError("I cannot find the highest item because the list is empty.", { line: 1, column: 1 }, { kind: "RuntimeError" });
     }
     const numbers = list.map((item) => mathBuiltins.to_number(item));
     return Math.max(...numbers);
@@ -1865,28 +2020,198 @@ var listBuiltins = {
   lowest: (val) => {
     const list = ensureList(val, "lowest");
     if (list.length === 0) {
-      throw new PlainError(
-        "I cannot find the lowest item because the list is empty.",
-        { line: 1, column: 1 },
-        {
-          kind: "RuntimeError",
-          suggestion: "Make sure the list has at least one number."
-        }
-      );
+      throw new PlainError("I cannot find the lowest item because the list is empty.", { line: 1, column: 1 }, { kind: "RuntimeError" });
     }
     const numbers = list.map((item) => mathBuiltins.to_number(item));
     return Math.min(...numbers);
+  },
+  unique: (val) => {
+    const list = ensureList(val, "unique");
+    const seen = /* @__PURE__ */ new Set();
+    const res = [];
+    for (const item of list) {
+      const k = typeof item + ":" + plainToString(item);
+      if (!seen.has(k)) {
+        seen.add(k);
+        res.push(item);
+      }
+    }
+    return res;
+  },
+  shuffle: (val) => {
+    const list = [...ensureList(val, "shuffle")];
+    for (let i = list.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [list[i], list[j]] = [list[j], list[i]];
+    }
+    return list;
+  },
+  sample: (val) => {
+    const list = ensureList(val, "sample");
+    if (list.length === 0) return null;
+    const idx = Math.floor(Math.random() * list.length);
+    return list[idx];
+  },
+  take: (val, countVal) => {
+    const list = ensureList(val, "take");
+    const count = Math.max(0, Math.round(mathBuiltins.to_number(countVal)));
+    return list.slice(0, count);
+  },
+  drop: (val, countVal) => {
+    const list = ensureList(val, "drop");
+    const count = Math.max(0, Math.round(mathBuiltins.to_number(countVal)));
+    return list.slice(count);
+  },
+  flatten: (val) => {
+    const list = ensureList(val, "flatten");
+    const res = [];
+    for (const item of list) {
+      if (Array.isArray(item)) {
+        res.push(...item);
+      } else {
+        res.push(item);
+      }
+    }
+    return res;
+  },
+  chunk: (val, sizeVal) => {
+    const list = ensureList(val, "chunk");
+    const size = Math.max(1, Math.round(mathBuiltins.to_number(sizeVal)));
+    const res = [];
+    for (let i = 0; i < list.length; i += size) {
+      res.push(list.slice(i, i + size));
+    }
+    return res;
+  },
+  intersection: (listAVal, listBVal) => {
+    const a = ensureList(listAVal, "intersection");
+    const b = ensureList(listBVal, "intersection");
+    return a.filter((itemA) => b.some((itemB) => plainToString(itemA) === plainToString(itemB)));
+  },
+  union: (listAVal, listBVal) => {
+    const a = ensureList(listAVal, "union");
+    const b = ensureList(listBVal, "union");
+    return listBuiltins.unique([...a, ...b]);
+  },
+  difference: (listAVal, listBVal) => {
+    const a = ensureList(listAVal, "difference");
+    const b = ensureList(listBVal, "difference");
+    return a.filter((itemA) => !b.some((itemB) => plainToString(itemA) === plainToString(itemB)));
+  },
+  zip: (listAVal, listBVal) => {
+    const a = ensureList(listAVal, "zip");
+    const b = ensureList(listBVal, "zip");
+    const minLen = Math.min(a.length, b.length);
+    const res = [];
+    for (let i = 0; i < minLen; i++) {
+      res.push([a[i], b[i]]);
+    }
+    return res;
+  },
+  find_index: (listVal, itemVal) => {
+    const list = ensureList(listVal, "find_index");
+    for (let i = 0; i < list.length; i++) {
+      if (list[i] === itemVal || plainToString(list[i]) === plainToString(itemVal)) {
+        return i + 1;
+      }
+    }
+    return 0;
+  },
+  slice_list: (listVal, startVal, endVal) => {
+    const list = ensureList(listVal, "slice_list");
+    const start = Math.max(0, mathBuiltins.to_number(startVal) - 1);
+    if (endVal !== void 0) {
+      const end = mathBuiltins.to_number(endVal);
+      return list.slice(start, end);
+    }
+    return list.slice(start);
+  },
+  insert_at: (listVal, indexVal, itemVal) => {
+    const list = [...ensureList(listVal, "insert_at")];
+    const idx = Math.max(0, Math.min(list.length, mathBuiltins.to_number(indexVal) - 1));
+    list.splice(idx, 0, itemVal);
+    return list;
+  },
+  is_empty: (val) => {
+    if (Array.isArray(val)) return val.length === 0;
+    if (typeof val === "string") return val.length === 0;
+    return val === null || val === void 0;
+  },
+  is_sorted: (val) => {
+    const list = ensureList(val, "is_sorted");
+    for (let i = 0; i < list.length - 1; i++) {
+      if (typeof list[i] === "number" && typeof list[i + 1] === "number") {
+        if (list[i] > list[i + 1]) return false;
+      } else {
+        if (plainToString(list[i]).localeCompare(plainToString(list[i + 1])) > 0) return false;
+      }
+    }
+    return true;
+  },
+  fill_list: (val, countVal) => {
+    const count = Math.max(0, Math.round(mathBuiltins.to_number(countVal)));
+    return new Array(count).fill(val);
+  },
+  range_list: (startVal, endVal, stepVal) => {
+    const start = mathBuiltins.to_number(startVal);
+    const end = mathBuiltins.to_number(endVal);
+    const step = stepVal ? mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
+    if (step === 0) throw new PlainError("Step cannot be zero in range.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    const res = [];
+    if (step > 0) {
+      for (let i = start; i <= end; i += step) res.push(i);
+    } else {
+      for (let i = start; i >= end; i += step) res.push(i);
+    }
+    return res;
   }
 };
 
 // src/builtins/time.ts
+var MONTH_NAMES = [
+  "January",
+  "February",
+  "March",
+  "April",
+  "May",
+  "June",
+  "July",
+  "August",
+  "September",
+  "October",
+  "November",
+  "December"
+];
+var DAY_NAMES = [
+  "Sunday",
+  "Monday",
+  "Tuesday",
+  "Wednesday",
+  "Thursday",
+  "Friday",
+  "Saturday"
+];
+function parseDateOrThrow(val) {
+  const str = plainToString(val);
+  const d = new Date(str);
+  if (isNaN(d.getTime())) {
+    throw new PlainError(
+      `Invalid date format '${str}'. Use 'YYYY-MM-DD' (e.g. '2026-05-15').`,
+      { line: 1, column: 1 },
+      { kind: "TypeError", suggestion: "Provide a date like '2026-11-12' or '2026-01-01'." }
+    );
+  }
+  return d;
+}
+function formatDateString(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
 var timeBuiltins = {
   today: () => {
-    const now = /* @__PURE__ */ new Date();
-    const y = now.getFullYear();
-    const m = String(now.getMonth() + 1).padStart(2, "0");
-    const d = String(now.getDate()).padStart(2, "0");
-    return `${y}-${m}-${d}`;
+    return formatDateString(/* @__PURE__ */ new Date());
   },
   current_time: () => {
     const now = /* @__PURE__ */ new Date();
@@ -1895,20 +2220,68 @@ var timeBuiltins = {
     const s = String(now.getSeconds()).padStart(2, "0");
     return `${h}:${m}:${s}`;
   },
-  days_between: (d1Val, d2Val) => {
-    const s1 = plainToString(d1Val);
-    const s2 = plainToString(d2Val);
-    const date1 = new Date(s1);
-    const date2 = new Date(s2);
-    if (isNaN(date1.getTime()) || isNaN(date2.getTime())) {
-      throw new PlainError(
-        `Invalid date format. Expected dates like '2026-01-01'.`,
-        { line: 1, column: 1 },
-        { kind: "TypeError" }
-      );
+  current_year: () => {
+    return (/* @__PURE__ */ new Date()).getFullYear();
+  },
+  current_month: () => {
+    return (/* @__PURE__ */ new Date()).getMonth() + 1;
+  },
+  current_month_name: () => {
+    return MONTH_NAMES[(/* @__PURE__ */ new Date()).getMonth()];
+  },
+  current_day: () => {
+    return (/* @__PURE__ */ new Date()).getDate();
+  },
+  current_hour: () => {
+    return (/* @__PURE__ */ new Date()).getHours();
+  },
+  current_minute: () => {
+    return (/* @__PURE__ */ new Date()).getMinutes();
+  },
+  current_second: () => {
+    return (/* @__PURE__ */ new Date()).getSeconds();
+  },
+  timestamp: () => {
+    return Date.now();
+  },
+  day_of_week: (dateVal) => {
+    const d = dateVal !== void 0 ? parseDateOrThrow(dateVal) : /* @__PURE__ */ new Date();
+    return DAY_NAMES[d.getDay()];
+  },
+  is_leap_year: (yearVal) => {
+    const y = yearVal !== void 0 ? mathBuiltins.to_number(yearVal) : (/* @__PURE__ */ new Date()).getFullYear();
+    return y % 4 === 0 && y % 100 !== 0 || y % 400 === 0;
+  },
+  days_in_month: (yearVal, monthVal) => {
+    const y = mathBuiltins.to_number(yearVal);
+    const m = mathBuiltins.to_number(monthVal);
+    if (m < 1 || m > 12) {
+      throw new PlainError(`Month must be between 1 and 12, got ${m}.`, { line: 1, column: 1 }, { kind: "RuntimeError" });
     }
+    return new Date(y, m, 0).getDate();
+  },
+  days_between: (d1Val, d2Val) => {
+    const date1 = parseDateOrThrow(d1Val);
+    const date2 = parseDateOrThrow(d2Val);
     const diffMs = Math.abs(date2.getTime() - date1.getTime());
     return Math.round(diffMs / (1e3 * 60 * 60 * 24));
+  },
+  add_days: (dateVal, daysVal) => {
+    const d = parseDateOrThrow(dateVal);
+    const days = mathBuiltins.to_number(daysVal);
+    d.setDate(d.getDate() + days);
+    return formatDateString(d);
+  },
+  format_date: (dateVal, formatVal) => {
+    const d = parseDateOrThrow(dateVal);
+    const fmt = plainToString(formatVal);
+    const y = String(d.getFullYear());
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    const h = String(d.getHours()).padStart(2, "0");
+    const min = String(d.getMinutes()).padStart(2, "0");
+    const s = String(d.getSeconds()).padStart(2, "0");
+    return fmt.replace(/YYYY/g, y).replace(/MM/g, m).replace(/DD/g, day).replace(/hh/g, h).replace(/mm/g, min).replace(/ss/g, s);
   },
   sleep: async (secondsVal) => {
     const sec = mathBuiltins.to_number(secondsVal);
@@ -1956,6 +2329,868 @@ var textBuiltins = {
   },
   ends_with: (target, part) => {
     return plainToString(target).endsWith(plainToString(part));
+  },
+  reverse_text: (target) => {
+    return plainToString(target).split("").reverse().join("");
+  },
+  title_case: (target) => {
+    return plainToString(target).replace(/\b\w/g, (c) => c.toUpperCase());
+  },
+  camel_case: (target) => {
+    const str = plainToString(target);
+    return str.replace(/[-_\s]+(.)?/g, (_, c) => c ? c.toUpperCase() : "").replace(/^(.)/, (c) => c.toLowerCase());
+  },
+  snake_case: (target) => {
+    return plainToString(target).replace(/\W+/g, " ").split(/ |\B(?=[A-Z])/).map((w) => w.toLowerCase()).join("_");
+  },
+  kebab_case: (target) => {
+    return plainToString(target).replace(/\W+/g, " ").split(/ |\B(?=[A-Z])/).map((w) => w.toLowerCase()).join("-");
+  },
+  word_count: (target) => {
+    const str = plainToString(target).trim();
+    if (str === "") return 0;
+    return str.split(/\s+/).length;
+  },
+  line_count: (target) => {
+    const str = plainToString(target);
+    if (str === "") return 0;
+    return str.split(/\r?\n/).length;
+  },
+  char_count: (target, charVal) => {
+    const str = plainToString(target);
+    const ch = plainToString(charVal);
+    let count = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (str[i] === ch) count++;
+    }
+    return count;
+  },
+  pad_start: (target, lenVal, padVal) => {
+    const str = plainToString(target);
+    const targetLen = mathBuiltins.to_number(lenVal);
+    const pad = padVal ? plainToString(padVal) : " ";
+    return str.padStart(targetLen, pad);
+  },
+  pad_end: (target, lenVal, padVal) => {
+    const str = plainToString(target);
+    const targetLen = mathBuiltins.to_number(lenVal);
+    const pad = padVal ? plainToString(padVal) : " ";
+    return str.padEnd(targetLen, pad);
+  },
+  repeat_text: (target, timesVal) => {
+    const count = Math.max(0, Math.round(mathBuiltins.to_number(timesVal)));
+    return plainToString(target).repeat(count);
+  },
+  is_digit: (target) => {
+    const str = plainToString(target).trim();
+    return str.length > 0 && /^\d+$/.test(str);
+  },
+  is_alpha: (target) => {
+    const str = plainToString(target);
+    return str.length > 0 && /^[a-zA-Z]+$/.test(str);
+  },
+  is_alphanumeric: (target) => {
+    const str = plainToString(target);
+    return str.length > 0 && /^[a-zA-Z0-9]+$/.test(str);
+  },
+  is_uppercase: (target) => {
+    const str = plainToString(target);
+    return str === str.toUpperCase() && str !== str.toLowerCase();
+  },
+  is_lowercase: (target) => {
+    const str = plainToString(target);
+    return str === str.toLowerCase() && str !== str.toUpperCase();
+  },
+  is_palindrome: (target) => {
+    const clean = plainToString(target).toLowerCase().replace(/[^a-z0-9]/g, "");
+    const rev = clean.split("").reverse().join("");
+    return clean.length > 0 && clean === rev;
+  },
+  count_vowels: (target) => {
+    const str = plainToString(target).toLowerCase();
+    let count = 0;
+    const vowels = /* @__PURE__ */ new Set(["a", "e", "i", "o", "u"]);
+    for (const c of str) {
+      if (vowels.has(c)) count++;
+    }
+    return count;
+  },
+  count_consonants: (target) => {
+    const str = plainToString(target).toLowerCase();
+    let count = 0;
+    for (const c of str) {
+      if (c >= "a" && c <= "z" && !"aeiou".includes(c)) count++;
+    }
+    return count;
+  },
+  words: (target) => {
+    const str = plainToString(target).trim();
+    if (str === "") return [];
+    return str.split(/\s+/);
+  },
+  lines: (target) => {
+    const str = plainToString(target);
+    return str.split(/\r?\n/);
+  },
+  split_text: (target, delimiterVal) => {
+    return plainToString(target).split(plainToString(delimiterVal));
+  },
+  slice_text: (target, startVal, endVal) => {
+    const str = plainToString(target);
+    const start = Math.max(0, mathBuiltins.to_number(startVal) - 1);
+    if (endVal !== void 0) {
+      const end = mathBuiltins.to_number(endVal);
+      return str.slice(start, end);
+    }
+    return str.slice(start);
+  },
+  caesar_cipher: (target, shiftVal) => {
+    const str = plainToString(target);
+    let shift = Math.round(mathBuiltins.to_number(shiftVal)) % 26;
+    if (shift < 0) shift += 26;
+    let res = "";
+    for (const c of str) {
+      if (c >= "a" && c <= "z") {
+        res += String.fromCharCode((c.charCodeAt(0) - 97 + shift) % 26 + 97);
+      } else if (c >= "A" && c <= "Z") {
+        res += String.fromCharCode((c.charCodeAt(0) - 65 + shift) % 26 + 65);
+      } else {
+        res += c;
+      }
+    }
+    return res;
+  },
+  base64_encode: (target) => {
+    return Buffer.from(plainToString(target), "utf-8").toString("base64");
+  },
+  base64_decode: (target) => {
+    return Buffer.from(plainToString(target), "base64").toString("utf-8");
+  },
+  slugify: (target) => {
+    return plainToString(target).toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
+  }
+};
+
+// src/builtins/geometry.ts
+var geometryBuiltins = {
+  hypotenuse: (aVal, bVal) => {
+    const a = mathBuiltins.to_number(aVal);
+    const b = mathBuiltins.to_number(bVal);
+    return Math.sqrt(a * a + b * b);
+  },
+  distance_2d: (x1, y1, x2, y2) => {
+    const dx = mathBuiltins.to_number(x2) - mathBuiltins.to_number(x1);
+    const dy = mathBuiltins.to_number(y2) - mathBuiltins.to_number(y1);
+    return Math.sqrt(dx * dx + dy * dy);
+  },
+  distance_3d: (x1, y1, z1, x2, y2, z2) => {
+    const dx = mathBuiltins.to_number(x2) - mathBuiltins.to_number(x1);
+    const dy = mathBuiltins.to_number(y2) - mathBuiltins.to_number(y1);
+    const dz = mathBuiltins.to_number(z2) - mathBuiltins.to_number(z1);
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  },
+  area_circle: (radiusVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    return Math.PI * r * r;
+  },
+  circumference_circle: (radiusVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    return 2 * Math.PI * r;
+  },
+  area_triangle: (baseVal, heightVal) => {
+    return 0.5 * mathBuiltins.to_number(baseVal) * mathBuiltins.to_number(heightVal);
+  },
+  area_rectangle: (lengthVal, widthVal) => {
+    return mathBuiltins.to_number(lengthVal) * mathBuiltins.to_number(widthVal);
+  },
+  perimeter_rectangle: (lengthVal, widthVal) => {
+    return 2 * (mathBuiltins.to_number(lengthVal) + mathBuiltins.to_number(widthVal));
+  },
+  area_trapezoid: (base1Val, base2Val, heightVal) => {
+    const b1 = mathBuiltins.to_number(base1Val);
+    const b2 = mathBuiltins.to_number(base2Val);
+    const h = mathBuiltins.to_number(heightVal);
+    return 0.5 * (b1 + b2) * h;
+  },
+  volume_cube: (sideVal) => {
+    const s = mathBuiltins.to_number(sideVal);
+    return s * s * s;
+  },
+  volume_sphere: (radiusVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    return 4 / 3 * Math.PI * Math.pow(r, 3);
+  },
+  surface_area_sphere: (radiusVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    return 4 * Math.PI * r * r;
+  },
+  volume_cylinder: (radiusVal, heightVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    const h = mathBuiltins.to_number(heightVal);
+    return Math.PI * r * r * h;
+  },
+  surface_area_cylinder: (radiusVal, heightVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    const h = mathBuiltins.to_number(heightVal);
+    return 2 * Math.PI * r * h + 2 * Math.PI * r * r;
+  },
+  volume_cone: (radiusVal, heightVal) => {
+    const r = mathBuiltins.to_number(radiusVal);
+    const h = mathBuiltins.to_number(heightVal);
+    return 1 / 3 * Math.PI * r * r * h;
+  }
+};
+
+// src/builtins/stats.ts
+function getNumericArray(val, fnName) {
+  if (!Array.isArray(val)) {
+    throw new PlainError(`'${fnName}' expects a list of numbers.`, { line: 1, column: 1 }, { kind: "TypeError" });
+  }
+  if (val.length === 0) {
+    throw new PlainError(`'${fnName}' cannot be calculated on an empty list.`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+  }
+  return val.map((v) => mathBuiltins.to_number(v));
+}
+var statsBuiltins = {
+  mean: (listVal) => {
+    const arr = getNumericArray(listVal, "mean");
+    const sum = arr.reduce((acc, v) => acc + v, 0);
+    return sum / arr.length;
+  },
+  median: (listVal) => {
+    const arr = [...getNumericArray(listVal, "median")].sort((a, b) => a - b);
+    const mid = Math.floor(arr.length / 2);
+    if (arr.length % 2 !== 0) return arr[mid];
+    return (arr[mid - 1] + arr[mid]) / 2;
+  },
+  mode: (listVal) => {
+    if (!Array.isArray(listVal) || listVal.length === 0) {
+      throw new PlainError("'mode' expects a non-empty list.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    const freq = {};
+    let maxCount = 0;
+    let modeVal = listVal[0];
+    for (const item of listVal) {
+      const key = plainToString(item);
+      if (!freq[key]) freq[key] = { item, count: 0 };
+      freq[key].count++;
+      if (freq[key].count > maxCount) {
+        maxCount = freq[key].count;
+        modeVal = item;
+      }
+    }
+    return modeVal;
+  },
+  range_of: (listVal) => {
+    const arr = getNumericArray(listVal, "range_of");
+    return Math.max(...arr) - Math.min(...arr);
+  },
+  variance: (listVal) => {
+    const arr = getNumericArray(listVal, "variance");
+    const avg = statsBuiltins.mean(arr);
+    const sumSqDiff = arr.reduce((acc, v) => acc + Math.pow(v - avg, 2), 0);
+    return sumSqDiff / arr.length;
+  },
+  standard_deviation: (listVal) => {
+    return Math.sqrt(statsBuiltins.variance(listVal));
+  },
+  z_score: (valueVal, meanVal, stdevVal) => {
+    const v = mathBuiltins.to_number(valueVal);
+    const m = mathBuiltins.to_number(meanVal);
+    const s = mathBuiltins.to_number(stdevVal);
+    if (s === 0) throw new PlainError("Standard deviation cannot be zero for z-score.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return (v - m) / s;
+  },
+  percentile: (listVal, pVal) => {
+    const arr = [...getNumericArray(listVal, "percentile")].sort((a, b) => a - b);
+    const p = mathBuiltins.to_number(pVal);
+    if (p < 0 || p > 100) throw new PlainError("Percentile must be between 0 and 100.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    const idx = p / 100 * (arr.length - 1);
+    const lower = Math.floor(idx);
+    const upper = Math.ceil(idx);
+    if (lower === upper) return arr[lower];
+    return arr[lower] + (arr[upper] - arr[lower]) * (idx - lower);
+  },
+  quartiles: (listVal) => {
+    return [
+      statsBuiltins.percentile(listVal, 25),
+      statsBuiltins.percentile(listVal, 50),
+      statsBuiltins.percentile(listVal, 75)
+    ];
+  },
+  iqr: (listVal) => {
+    const q1 = statsBuiltins.percentile(listVal, 25);
+    const q3 = statsBuiltins.percentile(listVal, 75);
+    return q3 - q1;
+  },
+  frequency_table: (listVal) => {
+    if (!Array.isArray(listVal)) throw new PlainError("'frequency_table' expects a list.", { line: 1, column: 1 }, { kind: "TypeError" });
+    const table = {};
+    for (const item of listVal) {
+      const k = plainToString(item);
+      table[k] = (table[k] || 0) + 1;
+    }
+    return table;
+  },
+  covariance: (listAVal, listBVal) => {
+    const a = getNumericArray(listAVal, "covariance");
+    const b = getNumericArray(listBVal, "covariance");
+    if (a.length !== b.length) throw new PlainError("Lists must have equal lengths for covariance.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    const meanA = statsBuiltins.mean(a);
+    const meanB = statsBuiltins.mean(b);
+    let sum = 0;
+    for (let i = 0; i < a.length; i++) {
+      sum += (a[i] - meanA) * (b[i] - meanB);
+    }
+    return sum / a.length;
+  },
+  correlation: (listAVal, listBVal) => {
+    const cov = statsBuiltins.covariance(listAVal, listBVal);
+    const stdevA = statsBuiltins.standard_deviation(listAVal);
+    const stdevB = statsBuiltins.standard_deviation(listBVal);
+    if (stdevA === 0 || stdevB === 0) return 0;
+    return cov / (stdevA * stdevB);
+  },
+  linear_regression: (xListVal, yListVal) => {
+    const x = getNumericArray(xListVal, "linear_regression");
+    const y = getNumericArray(yListVal, "linear_regression");
+    if (x.length !== y.length) throw new PlainError("Lists must have equal lengths for linear regression.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    const meanX = statsBuiltins.mean(x);
+    const meanY = statsBuiltins.mean(y);
+    let num = 0;
+    let den = 0;
+    for (let i = 0; i < x.length; i++) {
+      num += (x[i] - meanX) * (y[i] - meanY);
+      den += Math.pow(x[i] - meanX, 2);
+    }
+    if (den === 0) throw new PlainError("Denominator in linear regression is zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    const slope = num / den;
+    const intercept = meanY - slope * meanX;
+    return { slope, intercept };
+  },
+  cumulative_sum: (listVal) => {
+    const arr = getNumericArray(listVal, "cumulative_sum");
+    const res = [];
+    let cur = 0;
+    for (const v of arr) {
+      cur += v;
+      res.push(cur);
+    }
+    return res;
+  },
+  product_of: (listVal) => {
+    const arr = getNumericArray(listVal, "product_of");
+    return arr.reduce((acc, v) => acc * v, 1);
+  }
+};
+
+// src/builtins/science.ts
+var PERIODIC_TABLE = {
+  H: { number: 1, name: "Hydrogen", mass: 1.008 },
+  HE: { number: 2, name: "Helium", mass: 4.0026 },
+  LI: { number: 3, name: "Lithium", mass: 6.94 },
+  BE: { number: 4, name: "Beryllium", mass: 9.0122 },
+  B: { number: 5, name: "Boron", mass: 10.81 },
+  C: { number: 6, name: "Carbon", mass: 12.011 },
+  N: { number: 7, name: "Nitrogen", mass: 14.007 },
+  O: { number: 8, name: "Oxygen", mass: 15.999 },
+  F: { number: 9, name: "Fluorine", mass: 18.998 },
+  NE: { number: 10, name: "Neon", mass: 20.18 },
+  NA: { number: 11, name: "Sodium", mass: 22.99 },
+  MG: { number: 12, name: "Magnesium", mass: 24.305 },
+  AL: { number: 13, name: "Aluminium", mass: 26.982 },
+  SI: { number: 14, name: "Silicon", mass: 28.085 },
+  P: { number: 15, name: "Phosphorus", mass: 30.974 },
+  S: { number: 16, name: "Sulfur", mass: 32.06 },
+  CL: { number: 17, name: "Chlorine", mass: 35.45 },
+  AR: { number: 18, name: "Argon", mass: 39.948 },
+  K: { number: 19, name: "Potassium", mass: 39.098 },
+  CA: { number: 20, name: "Calcium", mass: 40.078 },
+  TI: { number: 22, name: "Titanium", mass: 47.867 },
+  CR: { number: 24, name: "Chromium", mass: 51.996 },
+  MN: { number: 25, name: "Manganese", mass: 54.938 },
+  FE: { number: 26, name: "Iron", mass: 55.845 },
+  CO: { number: 27, name: "Cobalt", mass: 58.933 },
+  NI: { number: 28, name: "Nickel", mass: 58.693 },
+  CU: { number: 29, name: "Copper", mass: 63.546 },
+  ZN: { number: 30, name: "Zinc", mass: 65.38 },
+  BR: { number: 35, name: "Bromine", mass: 79.904 },
+  AG: { number: 47, name: "Silver", mass: 107.87 },
+  SN: { number: 50, name: "Tin", mass: 118.71 },
+  I: { number: 53, name: "Iodine", mass: 126.9 },
+  PT: { number: 78, name: "Platinum", mass: 195.08 },
+  AU: { number: 79, name: "Gold", mass: 196.97 },
+  HG: { number: 80, name: "Mercury", mass: 200.59 },
+  PB: { number: 82, name: "Lead", mass: 207.2 },
+  U: { number: 92, name: "Uranium", mass: 238.03 }
+};
+function lookupElement(queryVal) {
+  const query = plainToString(queryVal).trim().toUpperCase();
+  if (PERIODIC_TABLE[query]) return PERIODIC_TABLE[query];
+  for (const sym of Object.keys(PERIODIC_TABLE)) {
+    if (PERIODIC_TABLE[sym].name.toUpperCase() === query) {
+      return PERIODIC_TABLE[sym];
+    }
+  }
+  throw new PlainError(`Element '${query}' not found in periodic table.`, { line: 1, column: 1 }, { kind: "RuntimeError" });
+}
+var scienceBuiltins = {
+  // Chemistry
+  atomic_mass: (queryVal) => {
+    return lookupElement(queryVal).mass;
+  },
+  atomic_number: (queryVal) => {
+    return lookupElement(queryVal).number;
+  },
+  element_name: (queryVal) => {
+    return lookupElement(queryVal).name;
+  },
+  density: (massVal, volumeVal) => {
+    const v = mathBuiltins.to_number(volumeVal);
+    if (v === 0) throw new PlainError("Volume cannot be zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return mathBuiltins.to_number(massVal) / v;
+  },
+  // Physics Formulas
+  speed: (distanceVal, timeVal) => {
+    const t = mathBuiltins.to_number(timeVal);
+    if (t === 0) throw new PlainError("Time cannot be zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return mathBuiltins.to_number(distanceVal) / t;
+  },
+  acceleration: (vInitVal, vFinalVal, timeVal) => {
+    const t = mathBuiltins.to_number(timeVal);
+    if (t === 0) throw new PlainError("Time cannot be zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return (mathBuiltins.to_number(vFinalVal) - mathBuiltins.to_number(vInitVal)) / t;
+  },
+  force: (massVal, accelVal) => {
+    return mathBuiltins.to_number(massVal) * mathBuiltins.to_number(accelVal);
+  },
+  momentum: (massVal, velocityVal) => {
+    return mathBuiltins.to_number(massVal) * mathBuiltins.to_number(velocityVal);
+  },
+  kinetic_energy: (massVal, velocityVal) => {
+    const v = mathBuiltins.to_number(velocityVal);
+    return 0.5 * mathBuiltins.to_number(massVal) * v * v;
+  },
+  potential_energy: (massVal, heightVal, gVal) => {
+    const g = gVal ? mathBuiltins.to_number(gVal) : 9.80665;
+    return mathBuiltins.to_number(massVal) * g * mathBuiltins.to_number(heightVal);
+  },
+  work_done: (forceVal, distanceVal) => {
+    return mathBuiltins.to_number(forceVal) * mathBuiltins.to_number(distanceVal);
+  },
+  power_watts: (workVal, timeVal) => {
+    const t = mathBuiltins.to_number(timeVal);
+    if (t === 0) throw new PlainError("Time cannot be zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return mathBuiltins.to_number(workVal) / t;
+  },
+  ohms_voltage: (currentVal, resistanceVal) => {
+    return mathBuiltins.to_number(currentVal) * mathBuiltins.to_number(resistanceVal);
+  },
+  ohms_current: (voltageVal, resistanceVal) => {
+    const r = mathBuiltins.to_number(resistanceVal);
+    if (r === 0) throw new PlainError("Resistance cannot be zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return mathBuiltins.to_number(voltageVal) / r;
+  },
+  ohms_resistance: (voltageVal, currentVal) => {
+    const i = mathBuiltins.to_number(currentVal);
+    if (i === 0) throw new PlainError("Current cannot be zero.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return mathBuiltins.to_number(voltageVal) / i;
+  },
+  electrical_power: (voltageVal, currentVal) => {
+    return mathBuiltins.to_number(voltageVal) * mathBuiltins.to_number(currentVal);
+  },
+  free_fall_time: (heightVal, gVal) => {
+    const h = mathBuiltins.to_number(heightVal);
+    const g = gVal ? mathBuiltins.to_number(gVal) : 9.80665;
+    if (h < 0) throw new PlainError("Height cannot be negative.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    return Math.sqrt(2 * h / g);
+  },
+  projectile_range: (v0Val, angleDegVal, gVal) => {
+    const v0 = mathBuiltins.to_number(v0Val);
+    const rad = 2 * mathBuiltins.to_number(angleDegVal) * Math.PI / 180;
+    const g = gVal ? mathBuiltins.to_number(gVal) : 9.80665;
+    return v0 * v0 * Math.sin(rad) / g;
+  }
+};
+
+// src/builtins/student.ts
+var studentBuiltins = {
+  // Grades & GPA
+  letter_grade: (percentageVal) => {
+    const score = mathBuiltins.to_number(percentageVal);
+    if (score >= 97) return "A+";
+    if (score >= 93) return "A";
+    if (score >= 90) return "A-";
+    if (score >= 87) return "B+";
+    if (score >= 83) return "B";
+    if (score >= 80) return "B-";
+    if (score >= 77) return "C+";
+    if (score >= 73) return "C";
+    if (score >= 70) return "C-";
+    if (score >= 67) return "D+";
+    if (score >= 60) return "D";
+    return "F";
+  },
+  gpa_from_percentage: (percentageVal) => {
+    const score = mathBuiltins.to_number(percentageVal);
+    if (score >= 93) return 4;
+    if (score >= 90) return 3.7;
+    if (score >= 87) return 3.3;
+    if (score >= 83) return 3;
+    if (score >= 80) return 2.7;
+    if (score >= 77) return 2.3;
+    if (score >= 73) return 2;
+    if (score >= 70) return 1.7;
+    if (score >= 67) return 1.3;
+    if (score >= 60) return 1;
+    return 0;
+  },
+  gpa_from_grades: (gradesListVal, creditsListVal) => {
+    if (!Array.isArray(gradesListVal) || !Array.isArray(creditsListVal)) {
+      throw new PlainError("'gpa_from_grades' expects two lists: grades and credits.", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    if (gradesListVal.length !== creditsListVal.length || gradesListVal.length === 0) {
+      throw new PlainError("Grade and credit lists must be non-empty and of equal length.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    let totalPoints = 0;
+    let totalCredits = 0;
+    for (let i = 0; i < gradesListVal.length; i++) {
+      const g = mathBuiltins.to_number(gradesListVal[i]);
+      const c = mathBuiltins.to_number(creditsListVal[i]);
+      totalPoints += g * c;
+      totalCredits += c;
+    }
+    if (totalCredits === 0) return 0;
+    return Math.round(totalPoints / totalCredits * 100) / 100;
+  },
+  weighted_score: (scoresListVal, weightsListVal) => {
+    if (!Array.isArray(scoresListVal) || !Array.isArray(weightsListVal)) {
+      throw new PlainError("'weighted_score' expects two lists: scores and weights.", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    if (scoresListVal.length !== weightsListVal.length || scoresListVal.length === 0) {
+      throw new PlainError("Scores and weights lists must be non-empty and of equal length.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    let weightedSum = 0;
+    let totalWeight = 0;
+    for (let i = 0; i < scoresListVal.length; i++) {
+      const s = mathBuiltins.to_number(scoresListVal[i]);
+      const w = mathBuiltins.to_number(weightsListVal[i]);
+      weightedSum += s * w;
+      totalWeight += w;
+    }
+    if (totalWeight === 0) return 0;
+    return weightedSum / totalWeight;
+  },
+  // Temperature Conversions
+  celsius_to_fahrenheit: (cVal) => {
+    return mathBuiltins.to_number(cVal) * 9 / 5 + 32;
+  },
+  fahrenheit_to_celsius: (fVal) => {
+    return (mathBuiltins.to_number(fVal) - 32) * 5 / 9;
+  },
+  celsius_to_kelvin: (cVal) => {
+    return mathBuiltins.to_number(cVal) + 273.15;
+  },
+  kelvin_to_celsius: (kVal) => {
+    return mathBuiltins.to_number(kVal) - 273.15;
+  },
+  // Distance Conversions
+  km_to_miles: (kmVal) => {
+    return mathBuiltins.to_number(kmVal) * 0.621371;
+  },
+  miles_to_km: (milesVal) => {
+    return mathBuiltins.to_number(milesVal) / 0.621371;
+  },
+  meters_to_feet: (mVal) => {
+    return mathBuiltins.to_number(mVal) * 3.28084;
+  },
+  feet_to_meters: (ftVal) => {
+    return mathBuiltins.to_number(ftVal) / 3.28084;
+  },
+  cm_to_inches: (cmVal) => {
+    return mathBuiltins.to_number(cmVal) / 2.54;
+  },
+  inches_to_cm: (inVal) => {
+    return mathBuiltins.to_number(inVal) * 2.54;
+  },
+  // Mass / Weight Conversions
+  kg_to_pounds: (kgVal) => {
+    return mathBuiltins.to_number(kgVal) * 2.20462;
+  },
+  pounds_to_kg: (lbsVal) => {
+    return mathBuiltins.to_number(lbsVal) / 2.20462;
+  },
+  grams_to_ounces: (gVal) => {
+    return mathBuiltins.to_number(gVal) / 28.3495;
+  },
+  ounces_to_grams: (ozVal) => {
+    return mathBuiltins.to_number(ozVal) * 28.3495;
+  },
+  // Volume Conversions
+  liters_to_gallons: (lVal) => {
+    return mathBuiltins.to_number(lVal) * 0.264172;
+  },
+  gallons_to_liters: (galVal) => {
+    return mathBuiltins.to_number(galVal) / 0.264172;
+  },
+  // Time unit conversions
+  hours_to_minutes: (hVal) => {
+    return mathBuiltins.to_number(hVal) * 60;
+  },
+  minutes_to_seconds: (mVal) => {
+    return mathBuiltins.to_number(mVal) * 60;
+  }
+};
+
+// src/builtins/system.ts
+var os = __toESM(require("os"));
+var crypto = __toESM(require("crypto"));
+var SUITS = ["Hearts", "Diamonds", "Clubs", "Spades"];
+var RANKS = ["Ace", "2", "3", "4", "5", "6", "7", "8", "9", "10", "Jack", "Queen", "King"];
+var STUDENT_DICTIONARY = {
+  algorithm: "A step-by-step set of instructions or rules designed to solve a specific problem or perform a task.",
+  hypothesis: "A proposed, testable explanation for an observed phenomenon made as a starting point for further investigation.",
+  photosynthesis: "The biological process by which green plants use sunlight to synthesize nutrients from carbon dioxide and water.",
+  gravity: "The universal force of attraction acting between all matter, proportional to their masses and inversely to the distance squared.",
+  variable: "A symbolic name associated with a value and whose associated value may be changed or modified.",
+  function: "A reusable block of code designed to perform a particular computation or operation when called.",
+  derivative: "In calculus, the rate at which a function's value changes with respect to a change in its input.",
+  integral: "In calculus, a mathematical object that can be interpreted as an area or a generalization of area.",
+  osmosis: "The spontaneous net movement of solvent molecules through a selectively permeable membrane into a region of higher solute concentration.",
+  mitosis: "A type of cell division that results in two daughter cells each having the same number and kind of chromosomes as the parent nucleus.",
+  ecosystem: "A biological community of interacting organisms and their physical environment.",
+  entropy: "A measure of the thermal energy per unit temperature that is unavailable for doing useful work; a measure of molecular disorder.",
+  momentum: "The quantity of motion of a moving body, measured as a product of its mass and velocity.",
+  velocity: "The speed of something in a given direction.",
+  acceleration: "The rate of change of velocity per unit of time.",
+  metaphor: "A figure of speech in which a word or phrase is applied to an object or action to which it is not literally applicable.",
+  simile: "A figure of speech involving the comparison of one thing with another thing of a different kind using 'like' or 'as'.",
+  alliteration: "The occurrence of the same letter or sound at the beginning of adjacent or closely connected words.",
+  democracy: "A system of government by the whole population or all eligible members of a state, typically through elected representatives.",
+  republic: "A state in which supreme power is held by the people and their elected representatives, with an elected or nominated president.",
+  inflation: "A general increase in prices and fall in the purchasing value of money over time.",
+  opportunity_cost: "The loss of potential gain from other alternatives when one alternative is chosen.",
+  catalyst: "A substance that increases the rate of a chemical reaction without itself undergoing any permanent chemical change.",
+  molecule: "A group of atoms bonded together, representing the smallest fundamental unit of a chemical compound.",
+  atom: "The basic unit of a chemical element, consisting of a dense central nucleus surrounded by a cloud of negatively charged electrons.",
+  isotope: "Two or more forms of the same element that contain equal numbers of protons but different numbers of neutrons in their nuclei.",
+  wavelength: "The distance between successive crests of a wave, especially points in a sound wave or electromagnetic wave.",
+  frequency: "The number of occurrences of a repeating event per unit of time, measured in Hertz (Hz).",
+  refraction: "The bending of a wave when it passes from one medium into another in which its speed is different.",
+  resonance: "The reinforcement or prolongation of sound by reflection or by the synchronous vibration of a neighboring object."
+};
+var FLASHCARDS = [
+  { question: "What is the speed of light in a vacuum?", answer: "Approximately 3.00 x 10^8 meters per second (299,792,458 m/s)." },
+  { question: "What are the three subatomic particles in an atom?", answer: "Protons, neutrons, and electrons." },
+  { question: "What is Newton's First Law of Motion?", answer: "An object will remain at rest or in uniform motion unless acted upon by a net external force." },
+  { question: "What is the formula for the Pythagorean Theorem?", answer: "a^2 + b^2 = c^2 (where c is the hypotenuse of a right triangle)." },
+  { question: "What gas do plants absorb during photosynthesis?", answer: "Carbon dioxide (CO2)." },
+  { question: "What is the pH value of pure water at 25 degrees Celsius?", answer: "7 (neutral)." },
+  { question: "Who formulated the general theory of relativity?", answer: "Albert Einstein (1915)." },
+  { question: "What is the most abundant gas in Earth's atmosphere?", answer: "Nitrogen (approx. 78%)." }
+];
+var systemBuiltins = {
+  os_platform: () => {
+    return os.platform();
+  },
+  os_arch: () => {
+    return os.arch();
+  },
+  cpu_count: () => {
+    return os.cpus().length;
+  },
+  memory_usage: () => {
+    return Math.round(process.memoryUsage().heapUsed / (1024 * 1024));
+  },
+  get_env: (keyVal) => {
+    const key = plainToString(keyVal);
+    return process.env[key] || "";
+  },
+  random_id: (lengthVal) => {
+    const len = lengthVal !== void 0 ? mathBuiltins.to_number(lengthVal) : 8;
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    let res = "";
+    for (let i = 0; i < len; i++) {
+      res += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return res;
+  },
+  generate_password: (lengthVal) => {
+    const len = lengthVal !== void 0 ? mathBuiltins.to_number(lengthVal) : 12;
+    const chars = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()_+";
+    let res = "";
+    for (let i = 0; i < len; i++) {
+      res += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return res;
+  },
+  roll_dice: (sidesVal, countVal) => {
+    const sides = sidesVal !== void 0 ? mathBuiltins.to_number(sidesVal) : 6;
+    const count = countVal !== void 0 ? mathBuiltins.to_number(countVal) : 1;
+    if (sides < 1 || count < 1) {
+      throw new PlainError("Dice sides and count must be at least 1.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
+    if (count === 1) {
+      return Math.floor(Math.random() * sides) + 1;
+    }
+    const results = [];
+    for (let i = 0; i < count; i++) {
+      results.push(Math.floor(Math.random() * sides) + 1);
+    }
+    return results;
+  },
+  flip_coin: () => {
+    return Math.random() < 0.5 ? "heads" : "tails";
+  },
+  pick_card: () => {
+    const suit = SUITS[Math.floor(Math.random() * SUITS.length)];
+    const rank = RANKS[Math.floor(Math.random() * RANKS.length)];
+    return `${rank} of ${suit}`;
+  },
+  deck_of_cards: () => {
+    const deck = [];
+    for (const s of SUITS) {
+      for (const r of RANKS) {
+        deck.push(`${r} of ${s}`);
+      }
+    }
+    return deck;
+  },
+  beep: () => {
+    if (process.stdout && process.stdout.write) {
+      process.stdout.write("\x07");
+    }
+  },
+  to_json: (value) => {
+    try {
+      return JSON.stringify(value, null, 2);
+    } catch {
+      return JSON.stringify(String(value));
+    }
+  },
+  from_json: (jsonVal) => {
+    const str = plainToString(jsonVal);
+    try {
+      const parsed = JSON.parse(str);
+      const convert = (item) => {
+        if (item === null || item === void 0) return null;
+        if (typeof item === "number" || typeof item === "string" || typeof item === "boolean") return item;
+        if (Array.isArray(item)) return item.map(convert);
+        if (typeof item === "object") {
+          return Object.entries(item).map(([k, v]) => `${k}: ${plainToString(convert(v))}`);
+        }
+        return String(item);
+      };
+      return convert(parsed);
+    } catch (err) {
+      throw new PlainError(`Invalid JSON text: ${err.message}`, { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+  },
+  hash_text: (textVal, algoVal) => {
+    const text = plainToString(textVal);
+    const algo = algoVal !== void 0 ? plainToString(algoVal).toLowerCase() : "sha256";
+    try {
+      return crypto.createHash(algo).update(text).digest("hex");
+    } catch {
+      return crypto.createHash("sha256").update(text).digest("hex");
+    }
+  },
+  uuid: () => {
+    return crypto.randomUUID();
+  },
+  define_word: (wordVal) => {
+    const word = plainToString(wordVal).toLowerCase().trim().replace(/\s+/g, "_");
+    if (STUDENT_DICTIONARY[word]) {
+      return STUDENT_DICTIONARY[word];
+    }
+    return `Definition for '${word}' not found in local student dictionary.`;
+  },
+  flashcard: () => {
+    const card = FLASHCARDS[Math.floor(Math.random() * FLASHCARDS.length)];
+    return `Q: ${card.question}
+A: ${card.answer}`;
+  },
+  banner: (styleVal) => {
+    const style = styleVal !== void 0 ? plainToString(styleVal).toLowerCase() : "star";
+    if (style === "trophy") {
+      return `  ___________ 
+ '._==_==_=_.'
+ .-\\:      /-.
+| (|:.     |) |
+ '-|:.     |-' 
+   \\::.    /  
+    '::. .'   
+      ) (     
+    _.' '._   
+   \`"""""""\`  `;
+    }
+    if (style === "heart") {
+      return "  **     **  \n ****   **** \n****** *******\n *********** \n   *******   \n     ***     \n      *      ";
+    }
+    return "     *     \n   * * *   \n * * * * * \n   * * *   \n     *     ";
+  }
+};
+
+// src/builtins/network.ts
+var networkBuiltins = {
+  fetch_text: async (urlVal) => {
+    const url = plainToString(urlVal);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+      }
+      return await response.text();
+    } catch (err) {
+      throw new PlainError(
+        `Failed to fetch URL "${url}": ${err.message}`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError", suggestion: "Make sure the URL is valid and you have an active internet connection." }
+      );
+    }
+  },
+  fetch_json: async (urlVal) => {
+    const url = plainToString(urlVal);
+    try {
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`HTTP error ${response.status}: ${response.statusText}`);
+      }
+      const data = await response.json();
+      const convert = (item) => {
+        if (item === null || item === void 0) return null;
+        if (typeof item === "number" || typeof item === "string" || typeof item === "boolean") return item;
+        if (Array.isArray(item)) return item.map(convert);
+        if (typeof item === "object") {
+          return Object.entries(item).map(([k, v]) => `${k}: ${plainToString(convert(v))}`);
+        }
+        return String(item);
+      };
+      return convert(data);
+    } catch (err) {
+      throw new PlainError(
+        `Failed to fetch JSON from "${url}": ${err.message}`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+  },
+  url_encode: (textVal) => {
+    const text = plainToString(textVal);
+    return encodeURIComponent(text);
+  },
+  url_decode: (textVal) => {
+    const text = plainToString(textVal);
+    return decodeURIComponent(text);
+  },
+  is_valid_url: (urlVal) => {
+    const text = plainToString(urlVal);
+    try {
+      const u = new URL(text);
+      return u.protocol === "http:" || u.protocol === "https:";
+    } catch {
+      return false;
+    }
   }
 };
 
@@ -2027,7 +3262,98 @@ var FileSystemSandbox = class {
     const rawPath = plainToString(filePathVal);
     try {
       const safePath = this.resolveSafePath(rawPath);
-      return fs.existsSync(safePath);
+      return fs.existsSync(safePath) && fs.statSync(safePath).isFile();
+    } catch {
+      return false;
+    }
+  }
+  appendFile(filePathVal, contentVal) {
+    const rawPath = plainToString(filePathVal);
+    const safePath = this.resolveSafePath(rawPath);
+    const content = plainToString(contentVal);
+    try {
+      const dir = path.dirname(safePath);
+      if (!fs.existsSync(dir)) {
+        fs.mkdirSync(dir, { recursive: true });
+      }
+      fs.appendFileSync(safePath, content, "utf-8");
+    } catch (err) {
+      throw new PlainError(
+        `Could not append to file "${rawPath}": ${err.message}`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+  }
+  deleteFile(filePathVal) {
+    const rawPath = plainToString(filePathVal);
+    const safePath = this.resolveSafePath(rawPath);
+    if (!fs.existsSync(safePath)) {
+      return false;
+    }
+    try {
+      fs.unlinkSync(safePath);
+      return true;
+    } catch (err) {
+      throw new PlainError(
+        `Could not delete file "${rawPath}": ${err.message}`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+  }
+  listFiles(dirPathVal) {
+    const rawDir = dirPathVal !== void 0 ? plainToString(dirPathVal) : ".";
+    const safeDir = this.resolveSafePath(rawDir);
+    if (!fs.existsSync(safeDir)) {
+      throw new PlainError(
+        `Folder not found: "${rawDir}".`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+    try {
+      return fs.readdirSync(safeDir);
+    } catch (err) {
+      throw new PlainError(
+        `Could not list folder "${rawDir}": ${err.message}`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+  }
+  fileSize(filePathVal) {
+    const rawPath = plainToString(filePathVal);
+    const safePath = this.resolveSafePath(rawPath);
+    if (!fs.existsSync(safePath)) {
+      throw new PlainError(
+        `File not found: "${rawPath}".`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+    return fs.statSync(safePath).size;
+  }
+  createFolder(dirPathVal) {
+    const rawDir = plainToString(dirPathVal);
+    const safeDir = this.resolveSafePath(rawDir);
+    try {
+      if (!fs.existsSync(safeDir)) {
+        fs.mkdirSync(safeDir, { recursive: true });
+      }
+    } catch (err) {
+      throw new PlainError(
+        `Could not create folder "${rawDir}": ${err.message}`,
+        { line: 1, column: 1 },
+        { kind: "RuntimeError" }
+      );
+    }
+  }
+  folderExists(dirPathVal) {
+    const rawDir = plainToString(dirPathVal);
+    try {
+      const safeDir = this.resolveSafePath(rawDir);
+      return fs.existsSync(safeDir) && fs.statSync(safeDir).isDirectory();
     } catch {
       return false;
     }
@@ -2047,29 +3373,64 @@ function createStandardEnvironment(options) {
     };
     env.define(name, plainFn);
   };
-  for (const [name, fn] of Object.entries(textBuiltins)) {
+  for (const [name, fn] of Object.entries(mathBuiltins)) {
     register(name, fn);
   }
-  for (const [name, fn] of Object.entries(mathBuiltins)) {
+  for (const [name, fn] of Object.entries(geometryBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(statsBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(scienceBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(studentBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(textBuiltins)) {
     register(name, fn);
   }
   for (const [name, fn] of Object.entries(listBuiltins)) {
     register(name, fn);
   }
-  register("today", () => timeBuiltins.today());
-  register("current_time", () => timeBuiltins.current_time());
-  register("days_between", (d1, d2) => timeBuiltins.days_between(d1, d2));
-  register("wait", (sec) => timeBuiltins.sleep(sec));
+  for (const [name, fn] of Object.entries(timeBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(systemBuiltins)) {
+    register(name, fn);
+  }
+  for (const [name, fn] of Object.entries(networkBuiltins)) {
+    register(name, fn);
+  }
   register("read_file", (path3) => fileSandbox.readFile(path3));
   register("write_file", (path3, content) => fileSandbox.writeFile(path3, content));
+  register("append_file", (path3, content) => fileSandbox.appendFile(path3, content));
   register("file_exists", (path3) => fileSandbox.fileExists(path3));
-  register("to_number", mathBuiltins.to_number);
-  register("number", mathBuiltins.to_number);
-  register("to_text", mathBuiltins.to_text);
-  register("text", mathBuiltins.to_text);
+  register("delete_file", (path3) => fileSandbox.deleteFile(path3));
+  register("list_files", (dir) => fileSandbox.listFiles(dir));
+  register("file_size", (path3) => fileSandbox.fileSize(path3));
+  register("create_folder", (dir) => fileSandbox.createFolder(dir));
+  register("folder_exists", (dir) => fileSandbox.folderExists(dir));
+  register("print", (val) => options?.onSay ? options.onSay(plainToString(val)) : console.log(plainToString(val)));
+  register("wait", (sec) => timeBuiltins.sleep(sec));
+  register("sqrt", mathBuiltins.square_root);
+  register("cbrt", mathBuiltins.cube_root);
+  register("pow", mathBuiltins.power);
+  register("fact", mathBuiltins.factorial);
+  register("abs", mathBuiltins.absolute);
+  register("min", mathBuiltins.minimum);
+  register("max", mathBuiltins.maximum);
+  register("avg", listBuiltins.average);
   register("len", textBuiltins.length);
-  register("size", textBuiltins.length);
-  register("print", (val) => options?.onSay ? options.onSay(String(val)) : console.log(val));
+  register("size", listBuiltins.count);
+  register("upper", textBuiltins.uppercase);
+  register("lower", textBuiltins.lowercase);
+  register("capitalize", textBuiltins.title_case);
+  register("stdev", statsBuiltins.standard_deviation);
+  register("now", timeBuiltins.current_time);
+  register("square root", mathBuiltins.square_root);
+  register("cube root", mathBuiltins.cube_root);
   register("starts with", textBuiltins.starts_with);
   register("ends with", textBuiltins.ends_with);
   register("random between", mathBuiltins.random_between);
@@ -2077,7 +3438,17 @@ function createStandardEnvironment(options) {
   register("current time", () => timeBuiltins.current_time());
   register("read file", (path3) => fileSandbox.readFile(path3));
   register("write file", (path3, content) => fileSandbox.writeFile(path3, content));
+  register("append file", (path3, content) => fileSandbox.appendFile(path3, content));
   register("file exists", (path3) => fileSandbox.fileExists(path3));
+  register("delete file", (path3) => fileSandbox.deleteFile(path3));
+  register("list files", (dir) => fileSandbox.listFiles(dir));
+  register("file size", (path3) => fileSandbox.fileSize(path3));
+  register("roll dice", (sides, count) => systemBuiltins.roll_dice(sides, count));
+  register("flip coin", () => systemBuiltins.flip_coin());
+  register("pick card", () => systemBuiltins.pick_card());
+  register("letter grade", (pct) => studentBuiltins.letter_grade(pct));
+  register("atomic mass", (elem) => scienceBuiltins.atomic_mass(elem));
+  register("element name", (elem) => scienceBuiltins.element_name(elem));
   return env;
 }
 
