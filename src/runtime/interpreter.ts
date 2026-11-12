@@ -1,3 +1,4 @@
+import * as readline from "readline";
 import {
   BinaryExpression,
   CallExpression,
@@ -67,16 +68,17 @@ export class Interpreter {
     this.onShow = options?.onShow || ((s) => console.log(s));
     this.onAsk =
       options?.onAsk ||
-      (async (p) => {
-        // Fallback readline prompt
-        const readline = await import("readline/promises");
-        const rl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout
+      ((p) => {
+        return new Promise<string>((resolve) => {
+          const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+          });
+          rl.question(p ? `${p} ` : "", (ans) => {
+            rl.close();
+            resolve(ans);
+          });
         });
-        const ans = await rl.question(p ? `${p} ` : "");
-        rl.close();
-        return ans;
       });
     this.onClear = options?.onClear || (() => console.clear());
 

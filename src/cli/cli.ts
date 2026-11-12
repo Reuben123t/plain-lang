@@ -33,7 +33,12 @@ export async function main(): Promise<void> {
   }
 
   if (command === "examples" || command === "example") {
-    const examplesDir = path.resolve(__dirname, "..", "..", "examples");
+    const candidates = [
+      path.resolve(__dirname, "..", "examples"),
+      path.resolve(__dirname, "..", "..", "examples"),
+      path.resolve(process.cwd(), "examples")
+    ];
+    const examplesDir = candidates.find((d) => fs.existsSync(d)) || candidates[0];
     const target = args[1] === "run" ? args[2] : args[1];
 
     if (!target) {

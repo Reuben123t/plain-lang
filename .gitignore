@@ -2,6 +2,13 @@
 node_modules/
 package-lock.json
 
+# Large binaries (hosted on GitHub Releases)
+dist/*.exe
+dist/*.zip
+dist/*.blob
+build/
+build_assets/
+
 # Test outputs & coverage
 coverage/
 .nyc_output/

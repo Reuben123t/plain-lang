@@ -8,7 +8,18 @@ Whether you have never written a line of code in your life or you want a languag
 
 ## 1. Installation
 
-### Option A: Automatic 1-Line Terminal Install (Recommended)
+### Option 1: Standalone Windows Executable (`plain.exe`) — No Setup Required!
+Download and run directly without installing Node.js or npm:
+- [**Download plain.exe**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe)
+- [**Download plain-windows-x64.zip**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain-windows-x64.zip)
+
+Or download via terminal:
+```powershell
+curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe
+.\plain.exe
+```
+
+### Option 2: Automatic 1-Line Terminal Install (Recommended)
 
 **Windows (PowerShell):**
 ```powershell
@@ -22,10 +33,10 @@ curl -fsSL https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.
 
 **Universal via NPM:**
 ```bash
-npm install -g https://github.com/Reuben123t/plain-lang.git
+npm install -g https://github.com/Reuben123t/plain-lang/archive/refs/heads/main.tar.gz
 ```
 
-### Option B: Clone & Build Manually from GitHub
+### Option 3: Clone & Build Manually from GitHub
 ```bash
 git clone https://github.com/Reuben123t/plain-lang.git
 cd plain-lang

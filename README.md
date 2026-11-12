@@ -37,6 +37,23 @@ No semicolons. No curly braces. Just clear English instructions.
 
 ## Quick Installation & Downloading
 
+### 💻 Standalone Windows Executable (`plain.exe`) — No Setup Required!
+You can download and run PLAIN as a standalone `.exe` without installing Node.js, npm, or any other tools:
+
+1. **Direct Download**:
+   - [**Download plain.exe (Direct)**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe)
+   - [**Download plain-windows-x64.zip**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain-windows-x64.zip)
+
+2. **Or Download in Terminal (PowerShell)**:
+   ```powershell
+   curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe
+   .\plain.exe
+   ```
+
+*Double-click `plain.exe` to launch the interactive English REPL, or run `plain.exe my_script.plain` from the command prompt!*
+
+---
+
 ### 🚀 Automatic 1-Line Terminal Install (Recommended)
 
 Paste this into your terminal to automatically download, build, and install PLAIN:
@@ -53,7 +70,7 @@ curl -fsSL https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.
 
 **Universal via NPM:**
 ```bash
-npm install -g https://github.com/Reuben123t/plain-lang.git
+npm install -g https://github.com/Reuben123t/plain-lang/archive/refs/heads/main.tar.gz
 ```
 
 ---
