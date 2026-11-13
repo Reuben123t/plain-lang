@@ -323,8 +323,12 @@ New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\edit\\command" -Val
     try {
       const ideExe = path.join(this.binDir, "plain-ide.exe");
       const plainCmd = path.join(this.binDir, "plain.cmd");
+      const plainIco = path.join(this.binDir, "plain.ico");
       const targetExec = fs.existsSync(ideExe) ? ideExe : plainCmd;
       const targetArgs = fs.existsSync(ideExe) ? "" : "ide";
+      const iconSetting = fs.existsSync(plainIco) ? `$desktopShortcut.IconLocation = "${plainIco.replace(/\\/g, "\\\\")},0"` : "";
+      const iconSettingStart = fs.existsSync(plainIco) ? `$startShortcut.IconLocation = "${plainIco.replace(/\\/g, "\\\\")},0"` : "";
+
       const psScript = `
 $WshShell = New-Object -ComObject WScript.Shell
 
@@ -333,8 +337,9 @@ $desktopPath = [Environment]::GetFolderPath("Desktop")
 $desktopShortcut = $WshShell.CreateShortcut("$desktopPath\\PLAIN IDE.lnk")
 $desktopShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
 $desktopShortcut.Arguments = "${targetArgs}"
-$desktopShortcut.Description = "PLAIN Programming Language IDE (Python IDLE Equivalent • Author: Reuben)"
+$desktopShortcut.Description = "PLAIN Programming Language IDE"
 $desktopShortcut.WorkingDirectory = "$desktopPath"
+${iconSetting}
 $desktopShortcut.Save()
 
 # Start Menu Shortcut
@@ -342,7 +347,8 @@ $programsPath = [Environment]::GetFolderPath("Programs")
 $startShortcut = $WshShell.CreateShortcut("$programsPath\\PLAIN IDE.lnk")
 $startShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
 $startShortcut.Arguments = "${targetArgs}"
-$startShortcut.Description = "PLAIN Programming Language IDE (Author: Reuben)"
+$startShortcut.Description = "PLAIN Programming Language IDE"
+${iconSettingStart}
 $startShortcut.Save()
 `;
       this.runPowerShell(psScript);

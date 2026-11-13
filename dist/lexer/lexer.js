@@ -64,6 +64,10 @@ class Lexer {
     parenDepth = 0;
     bracketDepth = 0;
     constructor(source, sourceFile) {
+        // Strip UTF-8 Byte Order Mark (BOM) if present (\uFEFF)
+        if (source && source.charCodeAt(0) === 0xFEFF) {
+            source = source.slice(1);
+        }
         this.source = source;
         this.sourceFile = sourceFile;
     }
@@ -71,8 +75,8 @@ class Lexer {
         const tokens = [];
         while (!this.isAtEnd()) {
             const char = this.peek();
-            // Skip whitespace other than newlines
-            if (char === " " || char === "\t" || char === "\r") {
+            // Skip whitespace and BOM if encountered anywhere
+            if (char === " " || char === "\t" || char === "\r" || char === "\uFEFF") {
                 this.advance();
                 continue;
             }

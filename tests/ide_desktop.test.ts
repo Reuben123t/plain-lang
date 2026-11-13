@@ -2,16 +2,19 @@ import { test, describe } from "node:test";
 import * as assert from "node:assert";
 import * as fs from "fs";
 import * as path from "path";
+import { runPlain } from "../src/index";
 
 describe("PLAIN Native Desktop IDE (Python IDLE Equivalent)", () => {
   const workspaceRoot = path.resolve(__dirname, "..");
   const distIdeExe = path.join(workspaceRoot, "dist", "plain-ide.exe");
   const localAppIdeExe = path.join(process.env.LOCALAPPDATA || "", "PLAIN", "bin", "plain-ide.exe");
   const ideSourceCs = path.join(workspaceRoot, "src", "ide", "plain-ide.cs");
+  const iconPath = path.join(workspaceRoot, "build_assets", "plain.ico");
 
-  test("verifies that plain-ide.exe binary is compiled and exists", () => {
+  test("verifies that plain-ide.exe and plain.ico exist", () => {
     assert.strictEqual(fs.existsSync(distIdeExe), true, "dist/plain-ide.exe should exist");
     assert.strictEqual(fs.existsSync(localAppIdeExe), true, "Local AppData plain-ide.exe should exist");
+    assert.strictEqual(fs.existsSync(iconPath), true, "build_assets/plain.ico should exist");
     
     const stats = fs.statSync(distIdeExe);
     assert.ok(stats.size > 10000, "plain-ide.exe should be a non-trivial executable");
@@ -35,8 +38,38 @@ describe("PLAIN Native Desktop IDE (Python IDLE Equivalent)", () => {
     assert.ok(sourceCode.includes("Keys.F5"), "F5 must trigger Run Module");
     assert.ok(sourceCode.includes("RunModule()"), "RunModule must exist");
 
-    // Must display Author: Reuben
-    assert.ok(sourceCode.includes("Author: Reuben"), "Must attribute Author: Reuben");
+    // Must save with Utf8NoBom (no BOM)
+    assert.ok(sourceCode.includes("Utf8NoBom"), "Must use UTF-8 without BOM");
+  });
+
+  test("verifies lexer silently handles and strips UTF-8 BOM if present", async () => {
+    let captured = "";
+    const bomCode = "\uFEFFsay \"No BOM error!\"";
+    await runPlain(bomCode, {
+      onSay: (msg) => { captured = msg; }
+    });
+    assert.strictEqual(captured, "No BOM error!");
+  });
+
+  test("verifies Python standard builtins str(), int(), float(), bool(), type()", async () => {
+    let captured: string[] = [];
+    const pyCode = `
+x = 10
+y = 25
+say "Calculation: " + str((x + y) * 2)
+say "Type of x: " + type(x)
+say "Float val: " + str(float("3.14"))
+say "Int val: " + str(int(9.9))
+say "Bool val: " + str(bool(1))
+`;
+    await runPlain(pyCode, {
+      onSay: (msg) => { captured.push(msg); }
+    });
+    assert.strictEqual(captured[0], "Calculation: 70");
+    assert.strictEqual(captured[1], "Type of x: int");
+    assert.strictEqual(captured[2], "Float val: 3.14");
+    assert.strictEqual(captured[3], "Int val: 9");
+    assert.strictEqual(captured[4], "Bool val: true");
   });
 
   test("verifies cli.ts ide command launches native plain-ide.exe without starting Chrome localhost", () => {

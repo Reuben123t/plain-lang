@@ -1,8 +1,54 @@
-import { PlainValue, plainToString } from "../runtime/values";
+import { PlainValue, plainToString, plainToBoolean } from "../runtime/values";
 import { PlainError } from "../errors/plain-error";
 import { mathBuiltins } from "./math";
 
 export const textBuiltins: Record<string, (...args: any[]) => any> = {
+  str: (val: PlainValue): string => {
+    return plainToString(val);
+  },
+
+  string: (val: PlainValue): string => {
+    return plainToString(val);
+  },
+
+  to_string: (val: PlainValue): string => {
+    return plainToString(val);
+  },
+
+  int: (val: PlainValue): number => {
+    return Math.trunc(mathBuiltins.to_number(val));
+  },
+
+  to_int: (val: PlainValue): number => {
+    return Math.trunc(mathBuiltins.to_number(val));
+  },
+
+  float: (val: PlainValue): number => {
+    return mathBuiltins.to_number(val);
+  },
+
+  to_float: (val: PlainValue): number => {
+    return mathBuiltins.to_number(val);
+  },
+
+  bool: (val: PlainValue): boolean => {
+    return plainToBoolean(val);
+  },
+
+  to_bool: (val: PlainValue): boolean => {
+    return plainToBoolean(val);
+  },
+
+  type: (val: PlainValue): string => {
+    if (val === null || val === undefined) return "none";
+    if (typeof val === "boolean") return "bool";
+    if (typeof val === "number") return Number.isInteger(val) ? "int" : "float";
+    if (typeof val === "string") return "str";
+    if (Array.isArray(val)) return "list";
+    if (typeof val === "object") return "dict";
+    return typeof val;
+  },
+
   join: (...args: PlainValue[]): string => {
     return args.map((a) => plainToString(a)).join("");
   },

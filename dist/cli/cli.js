@@ -75,7 +75,7 @@ async function main() {
         ];
         const ideExe = ideCandidates.find((c) => fs.existsSync(c));
         if (ideExe) {
-            console.log("Launching PLAIN IDE (Python IDLE Desktop Edition • Author: Reuben)...");
+            console.log("Launching PLAIN IDE...");
             if (fileArg) {
                 console.log(`Loaded "${path.basename(fileArg)}" into code editor area (not executed).`);
             }
@@ -116,7 +116,7 @@ async function main() {
         const localIndex = path.resolve(__dirname, "..", "..", "index.html");
         const ghPagesUrl = "https://reuben123t.github.io/plain-lang/";
         const target = fs.existsSync(localIndex) ? localIndex : ghPagesUrl;
-        console.log("Opening PLAIN Website (Dev Mode 3D Showcase • Author: Reuben)...");
+        console.log("Opening PLAIN Website...");
         console.log(`URL: ${ghPagesUrl}`);
         const openCmd = process.platform === "win32" ? `start "" "${target}"` : process.platform === "darwin" ? `open "${target}"` : `xdg-open "${target}"`;
         const { exec } = require("child_process");
