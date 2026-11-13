@@ -8,9 +8,9 @@ using System.Collections.Generic;
 
 [assembly: System.Reflection.AssemblyTitle("PLAIN IDE")]
 [assembly: System.Reflection.AssemblyDescription("Simple Python IDLE-like Desktop Environment for PLAIN")]
-[assembly: System.Reflection.AssemblyCompany("Reuben")]
+[assembly: System.Reflection.AssemblyCompany("PLAIN Language Foundation")]
 [assembly: System.Reflection.AssemblyProduct("PLAIN Language Environment")]
-[assembly: System.Reflection.AssemblyCopyright("Copyright © Reuben 2026")]
+[assembly: System.Reflection.AssemblyCopyright("Copyright © 2026 PLAIN")]
 [assembly: System.Reflection.AssemblyVersion("1.2.0.0")]
 [assembly: System.Reflection.AssemblyFileVersion("1.2.0.0")]
 
@@ -18,6 +18,9 @@ namespace PlainIde
 {
     public class PlainIdeForm : Form
     {
+        // Explicitly UTF-8 without Byte Order Mark (BOM)
+        private static readonly Encoding Utf8NoBom = new UTF8Encoding(false);
+
         private string currentFilePath = null;
         private bool isModified = false;
         private Process activeProcess = null;
@@ -84,7 +87,7 @@ namespace PlainIde
 
         private void InitializeComponent()
         {
-            this.Text = "Untitled - PLAIN IDE (Author: Reuben)";
+            this.Text = "Untitled - PLAIN IDE";
             this.Size = new Size(1000, 720);
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(24, 24, 37);
@@ -94,6 +97,29 @@ namespace PlainIde
             this.AllowDrop = true;
             this.DragEnter += PlainIdeForm_DragEnter;
             this.DragDrop += PlainIdeForm_DragDrop;
+
+            // Load PLAIN Logo Icon
+            try
+            {
+                string appDir = Path.GetDirectoryName(Application.ExecutablePath);
+                string candidate1 = Path.Combine(appDir, "plain.ico");
+                string candidate2 = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "PLAIN", "plain.ico");
+
+                if (File.Exists(candidate1))
+                {
+                    this.Icon = new Icon(candidate1);
+                }
+                else if (File.Exists(candidate2))
+                {
+                    this.Icon = new Icon(candidate2);
+                }
+                else
+                {
+                    Icon extracted = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                    if (extracted != null) this.Icon = extracted;
+                }
+            }
+            catch { }
 
             // 1. MenuStrip
             menuStrip = new MenuStrip();
@@ -298,7 +324,7 @@ namespace PlainIde
             statusCursorLabel = new ToolStripStatusLabel("Ln: 1, Col: 1");
             statusCursorLabel.Width = 140;
 
-            statusAuthorLabel = new ToolStripStatusLabel("Author: Reuben | PLAIN v1.2.0 (F5 to Run)");
+            statusAuthorLabel = new ToolStripStatusLabel("PLAIN v1.2.0 (F5 to Run)");
             statusAuthorLabel.ForeColor = Color.FromArgb(137, 180, 250);
 
             statusStrip.Items.AddRange(new ToolStripItem[] { statusFileLabel, statusCursorLabel, statusAuthorLabel });
@@ -350,7 +376,7 @@ namespace PlainIde
         {
             string docName = string.IsNullOrEmpty(currentFilePath) ? "Untitled" : Path.GetFileName(currentFilePath);
             string modMarker = isModified ? "*" : "";
-            this.Text = string.Format("{0}{1} - PLAIN IDE (Author: Reuben)", modMarker, docName);
+            this.Text = string.Format("{0}{1} - PLAIN IDE", modMarker, docName);
             statusFileLabel.Text = string.IsNullOrEmpty(currentFilePath) ? "Untitled (unsaved)" : currentFilePath;
         }
 
@@ -358,7 +384,6 @@ namespace PlainIde
         {
             shellTextBox.Clear();
             AppendShellText("PLAIN 1.2.0 Interactive Shell\n", Color.FromArgb(137, 180, 250), true);
-            AppendShellText("Author: Reuben | Standalone Windows Environment\n", Color.FromArgb(166, 227, 161), false);
             AppendShellText("Press F5 or click 'Run Module' to execute code. Type one-liners in '>>>' below.\n", Color.FromArgb(147, 153, 178), false);
             AppendShellText(new string('-', 68) + "\n\n", Color.FromArgb(69, 71, 90), false);
         }
@@ -414,7 +439,13 @@ namespace PlainIde
         {
             try
             {
-                string content = File.ReadAllText(filePath, Encoding.UTF8);
+                // Read with Utf8NoBom and strip any existing BOM
+                string content = File.ReadAllText(filePath, Utf8NoBom);
+                if (content.Length > 0 && content[0] == '\uFEFF')
+                {
+                    content = content.Substring(1);
+                }
+
                 currentFilePath = Path.GetFullPath(filePath);
                 
                 // CRITICAL REQUIREMENT: Load into code-writing area ONLY. DO NOT RUN.
@@ -441,7 +472,8 @@ namespace PlainIde
 
             try
             {
-                File.WriteAllText(currentFilePath, editorTextBox.Text, Encoding.UTF8);
+                // Write clean UTF-8 WITHOUT BOM
+                File.WriteAllText(currentFilePath, editorTextBox.Text, Utf8NoBom);
                 isModified = false;
                 UpdateWindowTitle();
                 return true;
@@ -511,6 +543,15 @@ namespace PlainIde
             if (string.IsNullOrEmpty(currentFilePath) || isModified)
             {
                 if (!SaveFile()) return;
+            }
+            else
+            {
+                // Ensure file on disk has no BOM
+                try
+                {
+                    File.WriteAllText(currentFilePath, editorTextBox.Text, Utf8NoBom);
+                }
+                catch { }
             }
 
             StopExecution();
@@ -644,19 +685,15 @@ namespace PlainIde
 
         private void ShowAboutDialog()
         {
-            string msg = "PLAIN IDE — Version 1.2.0\n" +
-                         "Author: Reuben\n\n" +
-                         "A Python-like programming language designed for students, developers,\n" +
-                         "and cybersecurity researchers.\n\n" +
+            string msg = "PLAIN IDE — Version 1.2.0\n\n" +
+                         "A modern, focused desktop environment for the PLAIN programming language.\n\n" +
                          "Features:\n" +
-                         " • 1,309 Standard Functions\n" +
-                         " • Native Desktop Code Editor (IDLE Equivalent)\n" +
-                         " • Built-In Neural Network Training & AI\n" +
-                         " • Live IP Web Server Hosting\n" +
-                         " • Cybersecurity & Threat Intelligence Reconnaissance\n" +
-                         " • Standard Operators (+, -, *, /, =, **, //)\n" +
-                         " • Set ABC = Main Support\n\n" +
-                         "Author: Reuben\n" +
+                         " • 1,300+ Standard Library Functions\n" +
+                         " • Native Code Editor & IDLE Interactive Shell\n" +
+                         " • AI Deep Learning & Neural Network Training\n" +
+                         " • Live Network Web Server Deployment\n" +
+                         " • Built-In Cybersecurity & Threat Intelligence\n" +
+                         " • Standard Operators (+, -, *, /, =, **, //)\n\n" +
                          "Website: https://reuben123t.github.io/plain-lang/";
 
             MessageBox.Show(msg, "About PLAIN IDE", MessageBoxButtons.OK, MessageBoxIcon.Information);

@@ -4,6 +4,48 @@ exports.textBuiltins = void 0;
 const values_1 = require("../runtime/values");
 const math_1 = require("./math");
 exports.textBuiltins = {
+    str: (val) => {
+        return (0, values_1.plainToString)(val);
+    },
+    string: (val) => {
+        return (0, values_1.plainToString)(val);
+    },
+    to_string: (val) => {
+        return (0, values_1.plainToString)(val);
+    },
+    int: (val) => {
+        return Math.trunc(math_1.mathBuiltins.to_number(val));
+    },
+    to_int: (val) => {
+        return Math.trunc(math_1.mathBuiltins.to_number(val));
+    },
+    float: (val) => {
+        return math_1.mathBuiltins.to_number(val);
+    },
+    to_float: (val) => {
+        return math_1.mathBuiltins.to_number(val);
+    },
+    bool: (val) => {
+        return (0, values_1.plainToBoolean)(val);
+    },
+    to_bool: (val) => {
+        return (0, values_1.plainToBoolean)(val);
+    },
+    type: (val) => {
+        if (val === null || val === undefined)
+            return "none";
+        if (typeof val === "boolean")
+            return "bool";
+        if (typeof val === "number")
+            return Number.isInteger(val) ? "int" : "float";
+        if (typeof val === "string")
+            return "str";
+        if (Array.isArray(val))
+            return "list";
+        if (typeof val === "object")
+            return "dict";
+        return typeof val;
+    },
     join: (...args) => {
         return args.map((a) => (0, values_1.plainToString)(a)).join("");
     },

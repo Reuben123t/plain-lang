@@ -4,10 +4,10 @@ using System.Reflection;
 using System.Diagnostics;
 
 [assembly: AssemblyTitle("PLAIN Programming Language")]
-[assembly: AssemblyDescription("The simplest, most powerful programming language. 1,300+ functions, symbols (+, -, *, /, =), AI, server deployment & Cybersecurity. Author: Reuben")]
-[assembly: AssemblyCompany("Reuben")]
+[assembly: AssemblyDescription("The simplest, most powerful programming language. 1,300+ functions, symbols (+, -, *, /, =), AI, server deployment & Cybersecurity.")]
+[assembly: AssemblyCompany("PLAIN Language Foundation")]
 [assembly: AssemblyProduct("PLAIN")]
-[assembly: AssemblyCopyright("Copyright © 2026 Reuben. All rights reserved.")]
+[assembly: AssemblyCopyright("Copyright © 2026 PLAIN")]
 [assembly: AssemblyTrademark("PLAIN")]
 [assembly: AssemblyVersion("1.2.0.0")]
 [assembly: AssemblyFileVersion("1.2.0.0")]
@@ -28,8 +28,24 @@ namespace PlainLanguage
 
                 string nodeExe = Path.Combine(appDir, "plain-runtime.exe");
                 string bundleJs = Path.Combine(appDir, "plain-bundle.js");
+                string iconFile = Path.Combine(appDir, "plain.ico");
 
                 var assembly = Assembly.GetExecutingAssembly();
+
+                // Extract icon if present
+                if (!File.Exists(iconFile))
+                {
+                    using (var s = assembly.GetManifestResourceStream("plain.ico"))
+                    {
+                        if (s != null)
+                        {
+                            using (var fs = new FileStream(iconFile, FileMode.Create, FileAccess.Write, FileShare.None))
+                            {
+                                s.CopyTo(fs);
+                            }
+                        }
+                    }
+                }
 
                 // Extract embedded runtime if not exists or if size is 0
                 if (!File.Exists(nodeExe) || new FileInfo(nodeExe).Length < 1000)

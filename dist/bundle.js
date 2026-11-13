@@ -856,6 +856,42 @@ var init_text = __esm({
     init_values();
     init_math();
     textBuiltins = {
+      str: (val) => {
+        return plainToString(val);
+      },
+      string: (val) => {
+        return plainToString(val);
+      },
+      to_string: (val) => {
+        return plainToString(val);
+      },
+      int: (val) => {
+        return Math.trunc(mathBuiltins.to_number(val));
+      },
+      to_int: (val) => {
+        return Math.trunc(mathBuiltins.to_number(val));
+      },
+      float: (val) => {
+        return mathBuiltins.to_number(val);
+      },
+      to_float: (val) => {
+        return mathBuiltins.to_number(val);
+      },
+      bool: (val) => {
+        return plainToBoolean(val);
+      },
+      to_bool: (val) => {
+        return plainToBoolean(val);
+      },
+      type: (val) => {
+        if (val === null || val === void 0) return "none";
+        if (typeof val === "boolean") return "bool";
+        if (typeof val === "number") return Number.isInteger(val) ? "int" : "float";
+        if (typeof val === "string") return "str";
+        if (Array.isArray(val)) return "list";
+        if (typeof val === "object") return "dict";
+        return typeof val;
+      },
       join: (...args) => {
         return args.map((a) => plainToString(a)).join("");
       },
@@ -6321,6 +6357,9 @@ var Lexer = class {
   parenDepth = 0;
   bracketDepth = 0;
   constructor(source, sourceFile) {
+    if (source && source.charCodeAt(0) === 65279) {
+      source = source.slice(1);
+    }
     this.source = source;
     this.sourceFile = sourceFile;
   }
@@ -6328,7 +6367,7 @@ var Lexer = class {
     const tokens = [];
     while (!this.isAtEnd()) {
       const char = this.peek();
-      if (char === " " || char === "	" || char === "\r") {
+      if (char === " " || char === "	" || char === "\r" || char === "\uFEFF") {
         this.advance();
         continue;
       }
@@ -9471,8 +9510,11 @@ exec node "$(dirname "$0")/../bundle.js" "$@"
     try {
       const ideExe = path6.join(this.binDir, "plain-ide.exe");
       const plainCmd = path6.join(this.binDir, "plain.cmd");
+      const plainIco = path6.join(this.binDir, "plain.ico");
       const targetExec = fs6.existsSync(ideExe) ? ideExe : plainCmd;
       const targetArgs = fs6.existsSync(ideExe) ? "" : "ide";
+      const iconSetting = fs6.existsSync(plainIco) ? `$desktopShortcut.IconLocation = "${plainIco.replace(/\\/g, "\\\\")},0"` : "";
+      const iconSettingStart = fs6.existsSync(plainIco) ? `$startShortcut.IconLocation = "${plainIco.replace(/\\/g, "\\\\")},0"` : "";
       const psScript = `
 $WshShell = New-Object -ComObject WScript.Shell
 
@@ -9481,8 +9523,9 @@ $desktopPath = [Environment]::GetFolderPath("Desktop")
 $desktopShortcut = $WshShell.CreateShortcut("$desktopPath\\PLAIN IDE.lnk")
 $desktopShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
 $desktopShortcut.Arguments = "${targetArgs}"
-$desktopShortcut.Description = "PLAIN Programming Language IDE (Python IDLE Equivalent \u2022 Author: Reuben)"
+$desktopShortcut.Description = "PLAIN Programming Language IDE"
 $desktopShortcut.WorkingDirectory = "$desktopPath"
+${iconSetting}
 $desktopShortcut.Save()
 
 # Start Menu Shortcut
@@ -9490,7 +9533,8 @@ $programsPath = [Environment]::GetFolderPath("Programs")
 $startShortcut = $WshShell.CreateShortcut("$programsPath\\PLAIN IDE.lnk")
 $startShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
 $startShortcut.Arguments = "${targetArgs}"
-$startShortcut.Description = "PLAIN Programming Language IDE (Author: Reuben)"
+$startShortcut.Description = "PLAIN Programming Language IDE"
+${iconSettingStart}
 $startShortcut.Save()
 `;
       this.runPowerShell(psScript);
@@ -10435,7 +10479,7 @@ async function main() {
     ];
     const ideExe = ideCandidates.find((c) => fs8.existsSync(c));
     if (ideExe) {
-      console.log("Launching PLAIN IDE (Python IDLE Desktop Edition \u2022 Author: Reuben)...");
+      console.log("Launching PLAIN IDE...");
       if (fileArg) {
         console.log(`Loaded "${path8.basename(fileArg)}" into code editor area (not executed).`);
       }
@@ -10474,7 +10518,7 @@ async function main() {
     const localIndex = path8.resolve(__dirname, "..", "..", "index.html");
     const ghPagesUrl = "https://reuben123t.github.io/plain-lang/";
     const target = fs8.existsSync(localIndex) ? localIndex : ghPagesUrl;
-    console.log("Opening PLAIN Website (Dev Mode 3D Showcase \u2022 Author: Reuben)...");
+    console.log("Opening PLAIN Website...");
     console.log(`URL: ${ghPagesUrl}`);
     const openCmd = process.platform === "win32" ? `start "" "${target}"` : process.platform === "darwin" ? `open "${target}"` : `xdg-open "${target}"`;
     const { exec: exec2 } = require("child_process");
