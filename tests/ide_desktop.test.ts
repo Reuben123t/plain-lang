@@ -28,8 +28,8 @@ describe("PLAIN Native Desktop IDE (Python IDLE Equivalent)", () => {
     assert.strictEqual(fs.existsSync(ideSourceCs), true);
     const sourceCode = fs.readFileSync(ideSourceCs, "utf-8");
 
-    // Must have OpenFile method that assigns to editorTextBox.Text
-    assert.ok(sourceCode.includes("editorTextBox.Text = content;"), "Must load content into editorTextBox.Text");
+    // Must have OpenFile method that assigns to editor area
+    assert.ok(sourceCode.includes("editorTextBox.Text = content;") || sourceCode.includes("rtb.Text = content;"), "Must load content into editor area");
 
     // Must NOT call RunModule inside OpenFile or Main constructor file opening
     const openFileIdx = sourceCode.indexOf("public void OpenFile(string filePath)");

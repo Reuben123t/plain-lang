@@ -330,3 +330,4 @@ class FileIconGenerator
         return path;
     }
 }
+
