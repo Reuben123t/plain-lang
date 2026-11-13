@@ -3406,12 +3406,12 @@ var init_ai_training = __esm({
       create_neural_network: (layers, activationVal = "sigmoid") => {
         const layerSizes = Array.isArray(layers) ? layers.map((n) => typeof n === "number" ? n : parseInt(String(n), 10) || 1) : [2, 4, 1];
         const act = typeof activationVal === "string" ? activationVal : "sigmoid";
-        const net = new NeuralNetwork(layerSizes, act);
+        const net2 = new NeuralNetwork(layerSizes, act);
         return {
           _type: "NeuralNetwork",
           layers: layerSizes,
           activation: act,
-          net
+          net: net2
         };
       },
       train_neural_network: (netObj, datasetVal, epochsVal = 100, lrVal = 0.1) => {
@@ -3922,9 +3922,9 @@ function getLocalIpAddress() {
   for (const name of Object.keys(nets)) {
     const interfaces = nets[name];
     if (!interfaces) continue;
-    for (const net of interfaces) {
-      if (net.family === "IPv4" && !net.internal) {
-        return net.address;
+    for (const net2 of interfaces) {
+      if (net2.family === "IPv4" && !net2.internal) {
+        return net2.address;
       }
     }
   }
@@ -3936,9 +3936,9 @@ function getAllIpAddresses() {
   for (const name of Object.keys(nets)) {
     const interfaces = nets[name];
     if (!interfaces) continue;
-    for (const net of interfaces) {
-      if (net.family === "IPv4") {
-        ips.push(net.address);
+    for (const net2 of interfaces) {
+      if (net2.family === "IPv4") {
+        ips.push(net2.address);
       }
     }
   }
@@ -4543,6 +4543,753 @@ var init_crypto_security = __esm({
         return crypto3.timingSafeEqual(bufA, bufB);
       }
     };
+  }
+});
+
+// src/builtins/cyber_security.ts
+function netmaskToPrefix(netmask) {
+  return netmask.split(".").map(Number).map((n) => (n >>> 0).toString(2)).join("").split("1").length - 1;
+}
+var net, dns, http3, https2, COMMON_PORTS, CVE_DATABASE, rateLimiterStore, cyberSecurityBuiltins, CRC32_TABLE;
+var init_cyber_security = __esm({
+  "src/builtins/cyber_security.ts"() {
+    "use strict";
+    net = __toESM(require("net"));
+    dns = __toESM(require("dns"));
+    http3 = __toESM(require("http"));
+    https2 = __toESM(require("https"));
+    COMMON_PORTS = {
+      20: { service: "FTP-Data", desc: "File Transfer Protocol Data" },
+      21: { service: "FTP", desc: "File Transfer Protocol Control" },
+      22: { service: "SSH", desc: "Secure Shell Remote Login" },
+      23: { service: "Telnet", desc: "Unencrypted Text Terminal", risk: "HIGH - Insecure plaintext" },
+      25: { service: "SMTP", desc: "Simple Mail Transfer Protocol" },
+      53: { service: "DNS", desc: "Domain Name System" },
+      80: { service: "HTTP", desc: "World Wide Web Plaintext" },
+      110: { service: "POP3", desc: "Post Office Protocol v3" },
+      111: { service: "RPCBind", desc: "RPC Portmapper" },
+      135: { service: "MSRPC", desc: "Microsoft RPC Endpoint Mapper" },
+      139: { service: "NetBIOS", desc: "NetBIOS Session Service" },
+      143: { service: "IMAP", desc: "Internet Message Access Protocol" },
+      443: { service: "HTTPS", desc: "HTTP over TLS/SSL Secure Web" },
+      445: { service: "SMB", desc: "Microsoft Server Message Block", risk: "TARGET - EternalBlue attack vector" },
+      993: { service: "IMAPS", desc: "IMAP over TLS/SSL" },
+      995: { service: "POP3S", desc: "POP3 over TLS/SSL" },
+      1433: { service: "MSSQL", desc: "Microsoft SQL Server Database" },
+      1521: { service: "Oracle", desc: "Oracle Database Listener" },
+      3306: { service: "MySQL", desc: "MySQL Database" },
+      3389: { service: "RDP", desc: "Remote Desktop Protocol", risk: "TARGET - Brute-force & BlueKeep vector" },
+      4444: { service: "Metasploit", desc: "Metasploit Default Listener Shell", risk: "CRITICAL - Known exploit payload" },
+      5432: { service: "PostgreSQL", desc: "PostgreSQL Database" },
+      5900: { service: "VNC", desc: "Virtual Network Computing Remote Desktop" },
+      6379: { service: "Redis", desc: "Redis Key-Value In-Memory Store" },
+      8080: { service: "HTTP-Proxy", desc: "Common Web App & Proxy Port" },
+      8443: { service: "HTTPS-Alt", desc: "Alternate HTTPS Web Port" },
+      8888: { service: "HTTP-Alt", desc: "Alternate Web & Jupyter Notebook" },
+      27017: { service: "MongoDB", desc: "MongoDB NoSQL Database" },
+      31337: { service: "BackOrifice", desc: "Back Orifice Trojan Backdoor", risk: "CRITICAL - Legacy malware backdoor" }
+    };
+    CVE_DATABASE = {
+      "cve-2021-44228": {
+        cve_id: "CVE-2021-44228",
+        title: "Log4Shell (Apache Log4j Remote Code Execution)",
+        cvss: 10,
+        severity: "CRITICAL",
+        affected_software: "Apache Log4j 2.0-beta9 through 2.14.1",
+        attack_vector: "Network (JNDI Lookup injection in log messages)",
+        description: "JNDI lookup features do not protect against attacker-controlled LDAP and other JNDI related endpoints, allowing unauthenticated RCE.",
+        mitigation: "Upgrade Apache Log4j to >= 2.17.1 or set log4j2.formatMsgNoLookups=true."
+      },
+      "cve-2017-0144": {
+        cve_id: "CVE-2017-0144",
+        title: "EternalBlue (Windows SMB Remote Code Execution)",
+        cvss: 8.1,
+        severity: "HIGH",
+        affected_software: "Microsoft Windows SMBv1 Server",
+        attack_vector: "Network (SMBv1 buffer overflow used by WannaCry and NotPetya)",
+        description: "SMBv1 server handling allows remote attackers to execute arbitrary code via crafted packets.",
+        mitigation: "Apply Microsoft patch MS17-010 and disable SMBv1 across all systems."
+      },
+      "cve-2014-0160": {
+        cve_id: "CVE-2014-0160",
+        title: "Heartbleed (OpenSSL TLS Heartbeat Memory Leak)",
+        cvss: 7.5,
+        severity: "HIGH",
+        affected_software: "OpenSSL 1.0.1 through 1.0.1f",
+        attack_vector: "Network (TLS Heartbeat Extension buffer over-read)",
+        description: "Missing bounds check allows remote attackers to obtain sensitive process memory including private keys and user credentials.",
+        mitigation: "Upgrade OpenSSL to 1.0.1g or compile with -DOPENSSL_NO_HEARTBEATS."
+      },
+      "cve-2024-3094": {
+        cve_id: "CVE-2024-3094",
+        title: "XZ Utils Supply Chain Backdoor",
+        cvss: 10,
+        severity: "CRITICAL",
+        affected_software: "XZ Utils liblzma 5.6.0 and 5.6.1",
+        attack_vector: "Supply Chain (Targeted OpenSSH via systemd notify interception)",
+        description: "Malicious code injected into build scripts modified RSA decryption routines in liblzma to intercept SSH authentication.",
+        mitigation: "Downgrade xz-utils to 5.4.x and audit all systems running versions 5.6.0/5.6.1."
+      },
+      "cve-2019-0708": {
+        cve_id: "CVE-2019-0708",
+        title: "BlueKeep (Windows Remote Desktop Services RCE)",
+        cvss: 9.8,
+        severity: "CRITICAL",
+        affected_software: "Windows 7, Server 2008, Server 2008 R2, Windows XP",
+        attack_vector: "Network (RDP pre-authentication memory corruption)",
+        description: "Remote Desktop Services does not properly handle connection requests, allowing a wormable unauthenticated remote code execution.",
+        mitigation: "Apply KB4499175 patch or enable Network Level Authentication (NLA) on RDP."
+      },
+      "cve-2020-1472": {
+        cve_id: "CVE-2020-1472",
+        title: "Zerologon (Netlogon Cryptographic Flaw)",
+        cvss: 10,
+        severity: "CRITICAL",
+        affected_software: "Windows Server Active Directory Domain Controllers",
+        attack_vector: "Network (Flawed AES-CFB8 encryption with all-zero initialization vector)",
+        description: "Flaw in Netlogon Remote Protocol AES implementation allows an attacker on the local network to reset the Domain Controller machine account password.",
+        mitigation: "Apply August 2020 Windows Server security update and enforce secure RPC."
+      },
+      "cve-2022-22965": {
+        cve_id: "CVE-2022-22965",
+        title: "Spring4Shell (Spring Framework Data Binding RCE)",
+        cvss: 9.8,
+        severity: "CRITICAL",
+        affected_software: "Spring Framework 5.3.0 to 5.3.17, 5.2.0 to 5.2.19 on JDK 9+",
+        attack_vector: "Network (HTTP request parameter classLoader binding)",
+        description: "Data binding via classLoader allows unauthenticated remote attackers to write arbitrary JSP web shells on Tomcat servers.",
+        mitigation: "Upgrade Spring Framework to >= 5.3.18 or >= 5.2.20."
+      }
+    };
+    rateLimiterStore = /* @__PURE__ */ new Map();
+    cyberSecurityBuiltins = {
+      // ==========================================
+      // 1. NETWORK RECONNAISSANCE & PORT SCANNING
+      // ==========================================
+      port_scan: async (targetHost = "127.0.0.1", customPorts, timeoutMs = 400) => {
+        const host = String(targetHost).trim().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+        const ports = Array.isArray(customPorts) && customPorts.length > 0 ? customPorts.map((p) => Math.floor(Number(p))).filter((p) => p > 0 && p <= 65535) : [21, 22, 23, 25, 53, 80, 110, 135, 139, 143, 443, 445, 993, 995, 1433, 1521, 3306, 3389, 5432, 5900, 6379, 8080, 8443, 27017, 4444, 31337];
+        const startTime = Date.now();
+        const openPorts = [];
+        const probe = (port) => new Promise((resolve9) => {
+          const socket = new net.Socket();
+          socket.setTimeout(timeoutMs);
+          socket.on("connect", () => {
+            const info = COMMON_PORTS[port] || { service: "unknown", desc: "User-specified service" };
+            openPorts.push({
+              port,
+              service: info.service,
+              desc: info.desc,
+              ...info.risk ? { risk: info.risk } : {}
+            });
+            socket.destroy();
+            resolve9();
+          });
+          socket.on("timeout", () => {
+            socket.destroy();
+            resolve9();
+          });
+          socket.on("error", () => {
+            socket.destroy();
+            resolve9();
+          });
+          try {
+            socket.connect(port, host);
+          } catch {
+            resolve9();
+          }
+        });
+        const chunkSize = 15;
+        for (let i = 0; i < ports.length; i += chunkSize) {
+          const slice = ports.slice(i, i + chunkSize);
+          await Promise.all(slice.map((p) => probe(p)));
+        }
+        openPorts.sort((a, b) => a.port - b.port);
+        const duration = Date.now() - startTime;
+        return {
+          target: host,
+          scanned_ports_count: ports.length,
+          open_ports_count: openPorts.length,
+          open_ports: openPorts,
+          scan_duration_ms: duration,
+          status: openPorts.length > 0 ? "HOST_UP_SERVICES_DETECTED" : "NO_OPEN_PORTS_FOUND"
+        };
+      },
+      is_port_open: async (targetHost, portNumber, timeoutMs = 600) => {
+        const host = String(targetHost).trim().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+        const port = Math.floor(Number(portNumber));
+        return new Promise((resolve9) => {
+          const socket = new net.Socket();
+          socket.setTimeout(timeoutMs);
+          socket.on("connect", () => {
+            socket.destroy();
+            resolve9(true);
+          });
+          socket.on("timeout", () => {
+            socket.destroy();
+            resolve9(false);
+          });
+          socket.on("error", () => {
+            socket.destroy();
+            resolve9(false);
+          });
+          try {
+            socket.connect(port, host);
+          } catch {
+            resolve9(false);
+          }
+        });
+      },
+      banner_grab: async (targetHost, portNumber = 80, timeoutMs = 1500) => {
+        const host = String(targetHost).trim().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+        const port = Math.floor(Number(portNumber));
+        return new Promise((resolve9) => {
+          const socket = new net.Socket();
+          let banner = "";
+          socket.setTimeout(timeoutMs);
+          socket.on("connect", () => {
+            if (port === 80 || port === 8080 || port === 8888) {
+              socket.write(`HEAD / HTTP/1.0\r
+Host: ${host}\r
+User-Agent: PLAIN-Cyber-Scanner/1.1\r
+\r
+`);
+            }
+          });
+          socket.on("data", (chunk) => {
+            banner += chunk.toString("utf-8");
+            socket.destroy();
+            resolve9(banner.trim());
+          });
+          socket.on("timeout", () => {
+            socket.destroy();
+            resolve9(banner.trim() || "[Timeout: No service banner received]");
+          });
+          socket.on("error", (err) => {
+            socket.destroy();
+            resolve9(`[Error: ${err.message}]`);
+          });
+          try {
+            socket.connect(port, host);
+          } catch (err) {
+            resolve9(`[Connection Failed: ${err.message}]`);
+          }
+        });
+      },
+      ping_host: async (targetHost, timeoutMs = 800) => {
+        const host = String(targetHost).trim().replace(/^https?:\/\//, "").split("/")[0].split(":")[0];
+        const startTime = Date.now();
+        return new Promise((resolve9) => {
+          const socket = new net.Socket();
+          socket.setTimeout(timeoutMs);
+          const finish = (alive) => {
+            const duration = Date.now() - startTime;
+            socket.destroy();
+            resolve9({
+              host,
+              alive,
+              latency_ms: alive ? duration : null,
+              status: alive ? "REACHABLE" : "UNREACHABLE_OR_FILTERED"
+            });
+          };
+          socket.on("connect", () => finish(true));
+          socket.on("timeout", () => finish(false));
+          socket.on("error", () => finish(false));
+          try {
+            socket.connect(80, host);
+          } catch {
+            finish(false);
+          }
+        });
+      },
+      dns_resolve: async (hostname2, recordType = "A") => {
+        const host = String(hostname2).trim().replace(/^https?:\/\//, "").split("/")[0];
+        const type = String(recordType).toUpperCase();
+        try {
+          const records = await dns.promises.resolve(host, type);
+          return { host, type, records };
+        } catch (err) {
+          return { host, type, error: err.message };
+        }
+      },
+      reverse_dns: async (ipAddress) => {
+        const ip = String(ipAddress).trim();
+        try {
+          const hostnames = await dns.promises.reverse(ip);
+          return { ip, hostnames };
+        } catch (err) {
+          return { ip, error: err.message };
+        }
+      },
+      subnet_calculator: (cidrOrIp, netmaskStr) => {
+        let [ip, maskPart] = String(cidrOrIp).trim().split("/");
+        let prefix = maskPart ? parseInt(maskPart, 10) : netmaskStr ? netmaskToPrefix(netmaskStr) : 24;
+        if (isNaN(prefix) || prefix < 0 || prefix > 32) prefix = 24;
+        const ipParts = ip.split(".").map(Number);
+        if (ipParts.length !== 4 || ipParts.some((n) => isNaN(n) || n < 0 || n > 255)) {
+          throw new Error(`Invalid IPv4 address: '${ip}'. Expected standard format like '192.168.1.0/24'.`);
+        }
+        const ipInt = ipParts[0] << 24 | ipParts[1] << 16 | ipParts[2] << 8 | ipParts[3];
+        const maskInt = prefix === 0 ? 0 : ~0 << 32 - prefix >>> 0;
+        const wildcardInt = ~maskInt >>> 0;
+        const networkInt = (ipInt & maskInt) >>> 0;
+        const broadcastInt = (networkInt | wildcardInt) >>> 0;
+        const intToIp = (num) => [
+          num >>> 24 & 255,
+          num >>> 16 & 255,
+          num >>> 8 & 255,
+          num & 255
+        ].join(".");
+        const totalHosts = Math.pow(2, 32 - prefix);
+        const usableHosts = prefix >= 31 ? prefix === 31 ? 2 : 1 : totalHosts - 2;
+        const firstHost = prefix >= 31 ? intToIp(networkInt) : intToIp(networkInt + 1);
+        const lastHost = prefix >= 31 ? intToIp(broadcastInt) : intToIp(broadcastInt - 1);
+        return {
+          ip,
+          cidr: prefix,
+          netmask: intToIp(maskInt),
+          wildcard: intToIp(wildcardInt),
+          network: intToIp(networkInt),
+          broadcast: intToIp(broadcastInt),
+          first_usable_host: firstHost,
+          last_usable_host: lastHost,
+          total_ips: totalHosts,
+          usable_hosts: usableHosts
+        };
+      },
+      port_lookup: (portNumber) => {
+        const port = Math.floor(Number(portNumber));
+        const info = COMMON_PORTS[port];
+        if (info) {
+          return { port, service: info.service, description: info.desc, risk: info.risk || "STANDARD" };
+        }
+        return { port, service: "unknown", description: "Unassigned or custom port", risk: "UNKNOWN" };
+      },
+      // ==========================================
+      // 2. WEB SECURITY & VULNERABILITY AUDITING
+      // ==========================================
+      audit_security_headers: async (targetUrl) => {
+        let cleanUrl = String(targetUrl).trim();
+        if (!cleanUrl.startsWith("http://") && !cleanUrl.startsWith("https://")) {
+          cleanUrl = "https://" + cleanUrl;
+        }
+        return new Promise((resolve9) => {
+          const urlObj = new URL(cleanUrl);
+          const isHttps = urlObj.protocol === "https:";
+          const client = isHttps ? https2 : http3;
+          const req = client.request(
+            cleanUrl,
+            {
+              method: "HEAD",
+              timeout: 4e3,
+              headers: { "User-Agent": "PLAIN-Cyber-Auditor/1.1 (+https://plain-lang-reuben.vercel.app)" }
+            },
+            (res) => {
+              const headers = res.headers;
+              const passed = [];
+              const warnings = [];
+              const remedies = [];
+              let score = 100;
+              if (headers["content-security-policy"]) {
+                passed.push("Content-Security-Policy is active.");
+              } else {
+                warnings.push("Missing Content-Security-Policy (CSP) \u2014 high risk of XSS.");
+                remedies.push("Add header: Content-Security-Policy: default-src 'self';");
+                score -= 25;
+              }
+              if (headers["strict-transport-security"]) {
+                passed.push("Strict-Transport-Security (HSTS) is enabled.");
+              } else if (isHttps) {
+                warnings.push("Missing Strict-Transport-Security (HSTS) \u2014 risk of SSL-stripping.");
+                remedies.push("Add header: Strict-Transport-Security: max-age=31536000; includeSubDomains; preload");
+                score -= 20;
+              }
+              if (headers["x-frame-options"]) {
+                passed.push(`X-Frame-Options is set to '${headers["x-frame-options"]}'.`);
+              } else {
+                warnings.push("Missing X-Frame-Options \u2014 vulnerable to Clickjacking attacks.");
+                remedies.push("Add header: X-Frame-Options: SAMEORIGIN (or DENY)");
+                score -= 20;
+              }
+              if (headers["x-content-type-options"]) {
+                passed.push("X-Content-Type-Options is nosniff.");
+              } else {
+                warnings.push("Missing X-Content-Type-Options \u2014 vulnerable to MIME-sniffing exploits.");
+                remedies.push("Add header: X-Content-Type-Options: nosniff");
+                score -= 15;
+              }
+              if (headers["referrer-policy"]) {
+                passed.push(`Referrer-Policy configured (${headers["referrer-policy"]}).`);
+              } else {
+                warnings.push("Missing Referrer-Policy \u2014 URL tokens may leak in HTTP referer.");
+                remedies.push("Add header: Referrer-Policy: strict-origin-when-cross-origin");
+                score -= 10;
+              }
+              if (headers["permissions-policy"]) {
+                passed.push("Permissions-Policy configured.");
+              } else {
+                warnings.push("Missing Permissions-Policy.");
+                score -= 10;
+              }
+              const cors = headers["access-control-allow-origin"];
+              if (cors === "*") {
+                warnings.push("Access-Control-Allow-Origin is set to wildcard '*' \u2014 public API exposure.");
+                score -= 10;
+              }
+              score = Math.max(0, score);
+              let grade = "F";
+              if (score >= 90) grade = "A+";
+              else if (score >= 80) grade = "A";
+              else if (score >= 70) grade = "B";
+              else if (score >= 55) grade = "C";
+              else if (score >= 40) grade = "D";
+              resolve9({
+                url: cleanUrl,
+                status_code: res.statusCode || 0,
+                security_score: score,
+                grade,
+                is_https: isHttps,
+                passed_checks: passed,
+                vulnerabilities_found: warnings,
+                recommended_remediation: remedies,
+                raw_headers: JSON.parse(JSON.stringify(headers))
+              });
+            }
+          );
+          req.on("error", (err) => {
+            resolve9({
+              url: cleanUrl,
+              error: err.message,
+              security_score: 0,
+              grade: "F",
+              status: "FAILED_TO_CONNECT"
+            });
+          });
+          req.on("timeout", () => {
+            req.destroy();
+            resolve9({
+              url: cleanUrl,
+              error: "Connection timed out",
+              security_score: 0,
+              grade: "F",
+              status: "TIMEOUT"
+            });
+          });
+          req.end();
+        });
+      },
+      detect_sql_injection: (inputString) => {
+        const text = String(inputString);
+        const sqliPatterns = [
+          { name: "UNION SELECT Injection", regex: /\bUNION\b\s+(ALL\s+)?\bSELECT\b/i },
+          { name: "Tautology (' OR '1'='1')", regex: /('|"|`)\s*OR\s*('1'='1'|1=1|[a-z]=[a-z])/i },
+          { name: "Comment Evasion (-- or /* */)", regex: /(--|\/\*|\*\/|#\s*$)/ },
+          { name: "Stacked Queries (; DROP / ; DELETE)", regex: /;\s*(DROP|DELETE|UPDATE|INSERT|TRUNCATE|ALTER)\b/i },
+          { name: "Time-based Blind Delay (SLEEP / WAITFOR)", regex: /\b(SLEEP\s*\(|WAITFOR\s+DELAY|BENCHMARK\s*\()/i },
+          { name: "System Command Injection (xp_cmdshell)", regex: /\b(xp_cmdshell|exec\s*\(|system\s*\()/i },
+          { name: "Schema Enumeration", regex: /\bFROM\s+INFORMATION_SCHEMA\b/i }
+        ];
+        const matches = [];
+        for (const p of sqliPatterns) {
+          if (p.regex.test(text)) {
+            matches.push(p.name);
+          }
+        }
+        return {
+          input_sample: text.length > 80 ? text.slice(0, 80) + "..." : text,
+          is_malicious: matches.length > 0,
+          risk_level: matches.length > 0 ? "HIGH" : "NONE",
+          matched_threats: matches,
+          recommendation: matches.length > 0 ? "CRITICAL: Untrusted SQL pattern detected. Use parameterized queries or ORM bindings." : "Input looks clean of common SQL injection signatures."
+        };
+      },
+      detect_xss: (inputString) => {
+        const text = String(inputString);
+        const xssPatterns = [
+          { name: "Script Tag Injection", regex: /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi },
+          { name: "HTML Event Handler (onerror, onload, onmouseover)", regex: /\bon[a-z]+\s*=/i },
+          { name: "JavaScript Pseudo-Protocol (javascript:...)", regex: /javascript:\s*[^"'\s>]+/i },
+          { name: "Dangerous DOM Functions (eval, document.cookie)", regex: /\b(eval|document\.cookie|document\.location|window\.location)\b/i },
+          { name: "SVG / IFrame Vector", regex: /<(iframe|embed|object|svg\s+onload)\b/i },
+          { name: "Base64 Data URI Payload", regex: /data:text\/html;base64,/i }
+        ];
+        const matches = [];
+        for (const p of xssPatterns) {
+          if (p.regex.test(text)) {
+            matches.push(p.name);
+          }
+        }
+        return {
+          input_sample: text.length > 80 ? text.slice(0, 80) + "..." : text,
+          is_malicious: matches.length > 0,
+          risk_level: matches.length > 0 ? "HIGH" : "NONE",
+          matched_threats: matches,
+          recommendation: matches.length > 0 ? "CRITICAL: Malicious Cross-Site Scripting (XSS) payload detected. Sanitize input with sanitize_html()." : "Input looks clean of common XSS vectors."
+        };
+      },
+      detect_path_traversal: (filePath) => {
+        const text = String(filePath);
+        const isTraversal = text.includes("..") || text.includes("%2e%2e") || text.includes("%2f") || text.includes("/etc/") || /^[a-z]:\\windows/i.test(text);
+        return {
+          path: text,
+          is_malicious: isTraversal,
+          risk_level: isTraversal ? "HIGH" : "NONE",
+          recommendation: isTraversal ? "Reject path traversal attempts: Resolve path within an explicit safe directory root." : "Path safe."
+        };
+      },
+      sanitize_html: (htmlString) => {
+        return String(htmlString).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+      },
+      sanitize_sql_param: (paramString) => {
+        return String(paramString).replace(/[\0\x08\x09\x1a\n\r"'\\\%]/g, (char) => {
+          switch (char) {
+            case "\0":
+              return "\\0";
+            case "\b":
+              return "\\b";
+            case "	":
+              return "\\t";
+            case "":
+              return "\\z";
+            case "\n":
+              return "\\n";
+            case "\r":
+              return "\\r";
+            case '"':
+            case "'":
+            case "\\":
+            case "%":
+              return "\\" + char;
+            default:
+              return char;
+          }
+        });
+      },
+      check_password_strength: (passwordText) => {
+        const pwd = String(passwordText);
+        const length = pwd.length;
+        const commonPasswords = /* @__PURE__ */ new Set([
+          "123456",
+          "password",
+          "12345678",
+          "qwerty",
+          "123456789",
+          "12345",
+          "1234",
+          "111111",
+          "1234567",
+          "dragon",
+          "welcome",
+          "admin",
+          "admin123",
+          "root",
+          "master",
+          "iloveyou"
+        ]);
+        const isBreachedCommon = commonPasswords.has(pwd.toLowerCase());
+        const hasLower = /[a-z]/.test(pwd);
+        const hasUpper = /[A-Z]/.test(pwd);
+        const hasNumber = /[0-9]/.test(pwd);
+        const hasSymbol = /[^a-zA-Z0-9]/.test(pwd);
+        let charsetSize = 0;
+        if (hasLower) charsetSize += 26;
+        if (hasUpper) charsetSize += 26;
+        if (hasNumber) charsetSize += 10;
+        if (hasSymbol) charsetSize += 33;
+        const entropyBits = charsetSize > 0 ? Math.round(length * Math.log2(charsetSize)) : 0;
+        let score = 0;
+        const suggestions = [];
+        if (isBreachedCommon) {
+          score = 5;
+          suggestions.push("This is one of the most breached passwords in history. Choose a unique passphrase.");
+        } else {
+          if (length >= 8) score += 20;
+          if (length >= 12) score += 20;
+          if (length >= 16) score += 10;
+          if (hasLower) score += 10;
+          if (hasUpper) score += 15;
+          if (hasNumber) score += 10;
+          if (hasSymbol) score += 15;
+        }
+        if (!hasLower) suggestions.push("Add lowercase letters.");
+        if (!hasUpper) suggestions.push("Add uppercase letters.");
+        if (!hasNumber) suggestions.push("Add digits.");
+        if (!hasSymbol) suggestions.push("Add special symbols (!@#$%^&*).");
+        if (length < 12) suggestions.push("Make password at least 12 characters long.");
+        let strength = "VERY_WEAK";
+        if (score >= 85) strength = "VERY_STRONG";
+        else if (score >= 70) strength = "STRONG";
+        else if (score >= 50) strength = "MEDIUM";
+        else if (score >= 30) strength = "WEAK";
+        return {
+          password_length: length,
+          entropy_bits: entropyBits,
+          strength_score: score,
+          strength_rating: strength,
+          breached_common: isBreachedCommon,
+          suggestions: suggestions.length > 0 ? suggestions : ["Password meets top cybersecurity recommendations!"]
+        };
+      },
+      // ==========================================
+      // 3. MALWARE ANALYSIS & FORENSICS
+      // ==========================================
+      calculate_entropy: (data) => {
+        const buffer = Buffer.isBuffer(data) ? data : Array.isArray(data) ? Buffer.from(data) : Buffer.from(String(data), "utf-8");
+        if (buffer.length === 0) {
+          return { entropy: 0, analysis: "Empty data (Entropy 0.0)" };
+        }
+        const frequencies = {};
+        for (let i = 0; i < buffer.length; i++) {
+          const byte = buffer[i];
+          frequencies[byte] = (frequencies[byte] || 0) + 1;
+        }
+        let entropy = 0;
+        const total = buffer.length;
+        for (const count of Object.values(frequencies)) {
+          const p = count / total;
+          entropy -= p * Math.log2(p);
+        }
+        const rounded = Math.round(entropy * 1e3) / 1e3;
+        let analysis = "Standard structured plain text / code";
+        if (rounded > 7.2) {
+          analysis = "ALERT: High Entropy (> 7.2). Data is almost certainly compressed, encrypted, or packed malware/shellcode.";
+        } else if (rounded > 6) {
+          analysis = "Moderate-to-high entropy. Typical of binary executables, fonts, or assets.";
+        } else if (rounded < 3.5) {
+          analysis = "Very low entropy. Repetitive or sparse data.";
+        }
+        return {
+          bytes_analyzed: total,
+          shannon_entropy: rounded,
+          max_entropy: 8,
+          percentage: Math.round(rounded / 8 * 100),
+          analysis
+        };
+      },
+      detect_file_signature: (hexOrData) => {
+        let hex = String(hexOrData).trim().replace(/\s+/g, "").toUpperCase();
+        if (hex.length < 4) {
+          return { detected: false, file_type: "Unknown", error: "Input too short for magic byte identification." };
+        }
+        const signatures = [
+          { magic: "4D5A", type: "Windows PE Executable (.exe / .dll)", mime: "application/x-dosexec" },
+          { magic: "7F454C46", type: "Linux ELF Executable (.bin / .elf)", mime: "application/x-executable" },
+          { magic: "CAFEBABE", type: "Java Class File / Mach-O Fat Binary", mime: "application/java-vm" },
+          { magic: "FEEDFACE", type: "macOS Mach-O 32-bit Binary", mime: "application/x-mach-binary" },
+          { magic: "FEEDFACF", type: "macOS Mach-O 64-bit Binary", mime: "application/x-mach-binary" },
+          { magic: "504B0304", type: "ZIP Archive / Office Document (.zip / .docx / .jar / .apk)", mime: "application/zip" },
+          { magic: "25504446", type: "PDF Document (.pdf)", mime: "application/pdf" },
+          { magic: "89504E47", type: "PNG Image (.png)", mime: "image/png" },
+          { magic: "FFD8FF", type: "JPEG Image (.jpg / .jpeg)", mime: "image/jpeg" },
+          { magic: "47494638", type: "GIF Image (.gif)", mime: "image/gif" },
+          { magic: "1F8B08", type: "GZIP Compressed File (.gz)", mime: "application/gzip" },
+          { magic: "D4C3B2A1", type: "PCAP Packet Capture File (.pcap)", mime: "application/vnd.tcpdump.pcap" },
+          { magic: "A1B2C3D4", type: "PCAP Packet Capture File (.pcap - Little Endian)", mime: "application/vnd.tcpdump.pcap" },
+          { magic: "526172211A07", type: "RAR Archive (.rar)", mime: "application/x-rar-compressed" },
+          { magic: "377ABCAF271C", type: "7-Zip Archive (.7z)", mime: "application/x-7z-compressed" }
+        ];
+        for (const sig of signatures) {
+          if (hex.startsWith(sig.magic)) {
+            return {
+              detected: true,
+              magic_bytes_hex: sig.magic,
+              file_type: sig.type,
+              mime_type: sig.mime
+            };
+          }
+        }
+        return {
+          detected: false,
+          magic_bytes_hex: hex.slice(0, 8),
+          file_type: "Unidentified file format",
+          mime_type: "application/octet-stream"
+        };
+      },
+      extract_strings: (data, minLength = 4) => {
+        const str = Buffer.isBuffer(data) ? data.toString("latin1") : String(data);
+        const min = Math.max(2, Math.floor(Number(minLength)));
+        const regex = new RegExp(`[\\x20-\\x7E]{${min},}`, "g");
+        return str.match(regex) || [];
+      },
+      cve_lookup: (cveId) => {
+        const key = String(cveId).trim().toLowerCase();
+        const info = CVE_DATABASE[key];
+        if (info) {
+          return info;
+        }
+        return {
+          cve_id: cveId,
+          error: "CVE not found in offline threat knowledge base.",
+          available_popular_cves: Object.keys(CVE_DATABASE).map((k) => k.toUpperCase())
+        };
+      },
+      // ==========================================
+      // 4. RATE LIMITING & DEFENSE
+      // ==========================================
+      rate_limit_check: (clientKey, maxRequests = 100, windowSeconds = 60) => {
+        const key = String(clientKey).trim();
+        const now = Date.now();
+        const windowMs = Math.max(1, windowSeconds) * 1e3;
+        let entry = rateLimiterStore.get(key);
+        if (!entry || now > entry.resetAt) {
+          entry = { count: 1, resetAt: now + windowMs };
+          rateLimiterStore.set(key, entry);
+          return {
+            key,
+            allowed: true,
+            current_requests: 1,
+            max_allowed: maxRequests,
+            remaining: maxRequests - 1,
+            reset_in_seconds: Math.round((entry.resetAt - now) / 1e3)
+          };
+        }
+        entry.count++;
+        const allowed = entry.count <= maxRequests;
+        return {
+          key,
+          allowed,
+          current_requests: entry.count,
+          max_allowed: maxRequests,
+          remaining: Math.max(0, maxRequests - entry.count),
+          reset_in_seconds: Math.round((entry.resetAt - now) / 1e3),
+          action: allowed ? "PASS" : "BLOCK_RATE_LIMIT_EXCEEDED"
+        };
+      },
+      // ==========================================
+      // 5. EXTENDED CIPHERS & ENCODINGS
+      // ==========================================
+      xor_cipher: (plainText, keyText) => {
+        const text = String(plainText);
+        const key = String(keyText);
+        if (key.length === 0) return text;
+        let result = "";
+        for (let i = 0; i < text.length; i++) {
+          const charCode = text.charCodeAt(i) ^ key.charCodeAt(i % key.length);
+          result += String.fromCharCode(charCode);
+        }
+        return result;
+      },
+      crc32: (data) => {
+        const str = String(data);
+        let crc = 0 ^ -1;
+        for (let i = 0; i < str.length; i++) {
+          let byte = str.charCodeAt(i);
+          crc = crc >>> 8 ^ CRC32_TABLE[(crc ^ byte) & 255];
+        }
+        return ((crc ^ -1) >>> 0).toString(16).padStart(8, "0");
+      }
+    };
+    CRC32_TABLE = (() => {
+      const table = [];
+      for (let i = 0; i < 256; i++) {
+        let c = i;
+        for (let j = 0; j < 8; j++) {
+          c = c & 1 ? 3988292384 ^ c >>> 1 : c >>> 1;
+        }
+        table.push(c >>> 0);
+      }
+      return table;
+    })();
   }
 });
 
@@ -5187,7 +5934,7 @@ var init_algorithms = __esm({
 async function fetchLatestRelease() {
   return new Promise((resolve9) => {
     const url2 = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
-    const req = https2.get(
+    const req = https3.get(
       url2,
       {
         headers: {
@@ -5291,11 +6038,11 @@ async function performUpdate() {
   console.log("To update via npm:       npm install -g plain-lang@latest");
   console.log("To download executable:  Visit https://github.com/" + GITHUB_REPO + "/releases/latest");
 }
-var https2, CURRENT_PLAIN_VERSION, GITHUB_REPO, updaterBuiltins;
+var https3, CURRENT_PLAIN_VERSION, GITHUB_REPO, updaterBuiltins;
 var init_updater = __esm({
   "src/builtins/updater.ts"() {
     "use strict";
-    https2 = __toESM(require("https"));
+    https3 = __toESM(require("https"));
     CURRENT_PLAIN_VERSION = "1.1.0";
     GITHUB_REPO = "Reuben123t/plain-lang";
     updaterBuiltins = {
@@ -5366,6 +6113,7 @@ function createStandardEnvironment(options) {
   registerModule(serverDeployer);
   registerModule(linearAlgebraBuiltins);
   registerModule(cryptoSecurityBuiltins);
+  registerModule(cyberSecurityBuiltins);
   registerModule(dataProcessingBuiltins);
   registerModule(engineeringPhysicsBuiltins);
   registerModule(algorithmsBuiltins);
@@ -5446,6 +6194,17 @@ function createStandardEnvironment(options) {
   register("uuid", cryptoSecurityBuiltins.generate_uuid);
   register("jwt_sign", cryptoSecurityBuiltins.create_jwt);
   register("jwt_verify", cryptoSecurityBuiltins.verify_jwt);
+  register("scan", cyberSecurityBuiltins.port_scan);
+  register("audit", cyberSecurityBuiltins.audit_security_headers);
+  register("sqli_check", cyberSecurityBuiltins.detect_sql_injection);
+  register("xss_check", cyberSecurityBuiltins.detect_xss);
+  register("entropy", cyberSecurityBuiltins.calculate_entropy);
+  register("magic_bytes", cyberSecurityBuiltins.detect_file_signature);
+  register("cve", cyberSecurityBuiltins.cve_lookup);
+  register("pwd_strength", cyberSecurityBuiltins.check_password_strength);
+  register("subnet", cyberSecurityBuiltins.subnet_calculator);
+  register("ping", cyberSecurityBuiltins.ping_host);
+  register("banner", cyberSecurityBuiltins.banner_grab);
   register("sort", algorithmsBuiltins.quick_sort);
   register("binary_search", algorithmsBuiltins.binary_search);
   register("bfs", algorithmsBuiltins.graph_bfs);
@@ -5480,6 +6239,7 @@ var init_builtins = __esm({
     init_server_deploy();
     init_linear_algebra();
     init_crypto_security();
+    init_cyber_security();
     init_data_processing();
     init_engineering_physics();
     init_algorithms();
@@ -6021,31 +6781,32 @@ var Parser = class {
         {
           kind: "ParserError",
           sourceCode: this.source,
-          suggestion: "Example: set score to 100"
+          suggestion: "Example: Set ABC = Main or ABC = 10"
         }
       );
     }
     const nameToken = this.advance();
-    const varName = nameToken.value;
-    if (!this.match("To" /* To */)) {
+    const varName = nameToken.raw || nameToken.value;
+    if (this.match("Equal" /* Equal */) || this.match("To" /* To */) || this.match("EqualEqual" /* EqualEqual */)) {
+    } else {
       throw new PlainError(
-        `I expected 'to' after the variable name in 'set ${varName} to ...'.`,
+        `I expected '=' after the variable name in 'Set ${varName} = ...'.`,
         this.peek().location,
         {
           kind: "ParserError",
           sourceCode: this.source,
-          suggestion: `Write 'set ${varName} to <value>'`
+          suggestion: `Write 'Set ${varName} = <value>' or '${varName} = <value>'`
         }
       );
     }
     if (this.isAtStatementEnd()) {
       throw new PlainError(
-        `I expected a value after 'set ${varName} to'.`,
+        `I expected a value after 'Set ${varName} ='.`,
         this.peek().location,
         {
           kind: "ParserError",
           sourceCode: this.source,
-          suggestion: `Provide a value, such as: set ${varName} to 10`
+          suggestion: `Provide a value, such as: Set ${varName} = 10`
         }
       );
     }
@@ -7417,11 +8178,21 @@ var Interpreter = class _Interpreter {
     }
   }
   async executeSet(stmt) {
-    const value = await this.evaluate(stmt.value);
+    let value;
+    if (stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+      value = stmt.value.name;
+    } else {
+      value = await this.evaluate(stmt.value);
+    }
     this.currentEnv.assign(stmt.name, value);
   }
   async executeAssignment(stmt) {
-    const rhs = await this.evaluate(stmt.value);
+    let rhs;
+    if (stmt.operator === "=" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+      rhs = stmt.value.name;
+    } else {
+      rhs = await this.evaluate(stmt.value);
+    }
     if (stmt.operator === "=") {
       this.currentEnv.assign(stmt.name, rhs);
       return;
@@ -7972,59 +8743,63 @@ function getHelp(topic) {
   if (t === "variables" || t === "set") {
     return `
 === PLAIN: Variables ===
-To create or update a variable, use:
-    set <name> to <value>
+To create or update a variable, use standard symbols:
+    Set ABC = Main
+    x = 100
+    score = score + 5
 
 Examples:
-    set name to "Alex"
-    set age to 15
-    set is_ready to true
-    set scores to [85, 92, 78]
+    Set ABC = Main
+    name = "Alex"
+    age = 15
+    is_ready = true
+    scores = [85, 92, 78]
+    total = 10 * 5 + 2
 
 Rules:
 - Names can use letters, numbers, and underscores (e.g. total_score).
-- Names cannot start with a number.
+- Use '=' for assignment, with '+', '-', '*', '/' for math operations.
 `;
   }
   if (t === "conditions" || t === "if") {
     return `
 === PLAIN: Conditions (If Statements) ===
-Make decisions in your code:
+Make decisions using standard symbols:
 
-    if <condition> then
-        ...
-    otherwise if <another_condition> then
-        ...
+    if score >= 90 then
+        say "A"
+    otherwise if score >= 80 then
+        say "B"
     otherwise
-        ...
+        say "Pass"
     end
 
-Comparisons:
-    is equal to      (or ==)
-    is not equal to  (or !=)
-    is greater than  (or >)
-    is less than     (or <)
-    is at least      (or >=)
-    is at most       (or <=)
+Comparisons (Standard Symbols):
+    ==   Equal to
+    !=   Not equal to
+    >    Greater than
+    <    Less than
+    >=   At least / Greater or equal
+    <=   At most / Less or equal
 
-Logical words:
+Logical operators:
     and, or, not
 `;
   }
-  if (t === "loops" || t === "repeat" || t === "for") {
+  if (t === "loops" || t === "repeat" || t === "for" || t === "while") {
     return `
 === PLAIN: Loops (Repeating Actions) ===
 
-1. Repeat a set number of times:
-    repeat 3 times
-        say "Hello!"
+1. While loop with symbols:
+    count = 3
+    while count > 0
+        say count
+        count = count - 1
     end
 
-2. Repeat while a condition is true:
-    set count to 3
-    repeat while count is greater than 0
-        say count
-        set count to count minus 1
+2. Repeat a set number of times:
+    repeat 3 times
+        say "Hello!"
     end
 
 3. For each item in a list:
@@ -8033,24 +8808,48 @@ Logical words:
     end
 `;
   }
-  if (t === "functions" || t === "to") {
+  if (t === "functions" || t === "def" || t === "to") {
     return `
 === PLAIN: Functions ===
-Define custom actions:
+Define custom actions with Pythonic or English syntax:
 
-    to greet person
-        say "Hello " plus person
+    def greet(person):
+        say "Hello " + person
     end
 
-    greet "Alex"
+    greet("Alex")
 
 Functions that return a value:
-    to add first and second
-        give back first plus second
+    def add(a, b):
+        return a + b
     end
 
-    set result to add 4 and 6
+    result = add(4, 6)
     say result
+`;
+  }
+  if (t === "cyber" || t === "security" || t === "cybersecurity") {
+    return `
+=== PLAIN: Cybersecurity & Penetration Testing ===
+PLAIN includes built-in reconnaissance, cryptanalysis, and threat intelligence:
+
+Network Recon:
+    info = port_scan("127.0.0.1", [80, 443, 8080])
+    is_open = is_port_open("127.0.0.1", 80)
+    banner = banner_grab("scanme.nmap.org", 22)
+    dns = dns_resolve("google.com", "A")
+    sub = subnet_calculator("192.168.1.0/24")
+
+Web Security & Pentesting:
+    report = audit_security_headers("https://example.com")
+    sqli = detect_sql_injection(user_input)
+    xss = detect_xss(user_input)
+    pwd = check_password_strength("MyP@ssw0rd123!")
+
+Threat Intelligence & Forensics:
+    cve = cve_lookup("CVE-2021-44228")
+    entropy = calculate_entropy(file_bytes)
+    sig = detect_file_signature("4D5A")
 `;
   }
   if (t === "lists" || t === "list") {
@@ -8058,11 +8857,12 @@ Functions that return a value:
 === PLAIN: Lists ===
 Lists hold multiple items:
 
-    set colors to ["red", "green", "blue"]
+    colors = ["red", "green", "blue"]
 
 Accessing items (PLAIN uses 1-based indexing):
     say first(colors)          # "red"
     say last(colors)           # "blue"
+    say colors[1]              # 1-based or 0-based supported
     say item 2 of colors       # "green"
 
 Modifying lists:
@@ -8070,7 +8870,7 @@ Modifying lists:
     remove "green" from colors
 
 Math with lists:
-    set scores to [80, 95, 70, 100]
+    scores = [80, 95, 70, 100]
     say count(scores)          # 4
     say average(scores)        # 86.25
     say highest(scores)        # 100
@@ -8081,16 +8881,20 @@ Math with lists:
   return `
 ========================================================================
                       PLAIN Programming Language
-                 Super Simple \u2022 1,200+ Functions \u2022 Pythonic
+           Pythonic \u2022 Cybersecurity \u2022 Built-In AI & IDE
                          Author: Reuben
 ========================================================================
 PLAIN is designed to be the simplest, most powerful programming language.
-Supports both English and Pythonic syntax with 1,200+ built-in functions.
+Supports symbols (+, -, *, /, =), 1,250+ functions, AI, and Cybersecurity.
 
 COMMANDS:
   plain <file.plain>         Run a .plain script
   plain run <file.plain>     Run a .plain script
   plain ide [file.plain]     Launch the PLAIN IDE (Python IDLE Equivalent)
+  plain scan <host> [ports]  Run fast multi-port scanner for network recon
+  plain audit <url>          Audit website security headers (CSP, HSTS, etc.)
+  plain hash <file>          Print MD5, SHA-1, SHA-256 of any file
+  plain cve <cve_id>         Inspect CVE threat database vulnerability info
   plain setup                Interactive setup wizard & permissions configurator
   plain doctor               Run diagnostics and auto-repair any errors
   plain update               Check for software updates and upgrade
@@ -8098,20 +8902,22 @@ COMMANDS:
   plain repl                 Start the interactive shell
   plain uninstall            Cleanly uninstall PLAIN and remove shortcuts
   plain check <file.plain>   Check syntax without executing
-  plain playground           Launch the visual web playground
   plain help <topic>         Detailed help (topics: variables, conditions,
-                             loops, functions, lists)
+                             loops, functions, cyber, lists)
 
 SYNTAX STYLES:
-  x = 100                              Python-style assignment
-  set x to 100                         English assignment
-  x += 5                               Compound assignment (+=, -=, *=, /=)
-  x ** 2,  10 // 3                     Power and floor division
-  def greet(name): say "Hi " + name end  Function definition
+  Set ABC = Main                       Variable assignment
+  x = 100                              Direct symbol assignment
+  x += 5,  x -= 2,  x *= 3,  x /= 2    Compound operator symbols
+  x ** 2,  10 // 3,  17 % 5            Power, floor division, modulo
+  x = (10 + 5) * 2 - 4 / 2             Standard arithmetic with symbols
+  def greet(name): return "Hi " + name end  Function definition
   import "math_tools.plain" as math    Import local or virtual packages
   user = { "name": "Reuben", "age": 20 } Dictionary syntax
   deploy_server(8080)                  Deploy web server on 0.0.0.0
   train_neural_network(net, data)      AI deep neural network training
+  port_scan("127.0.0.1")               Cybersecurity TCP port reconnaissance
+  audit_security_headers(url)          HTTP security header vulnerability check
 
 FILE EXTENSION:
   Save your code in files ending with .plain
@@ -8201,7 +9007,7 @@ function startRepl() {
 }
 
 // src/playground/server.ts
-var http3 = __toESM(require("http"));
+var http4 = __toESM(require("http"));
 var HTML_PAGE = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -8327,7 +9133,7 @@ var HTML_PAGE = `<!DOCTYPE html>
 </body>
 </html>`;
 function startPlayground(port = 3e3) {
-  const server = http3.createServer(async (req, res) => {
+  const server = http4.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/") {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(HTML_PAGE);
@@ -8373,7 +9179,7 @@ init_updater();
 init_server_deploy();
 
 // src/ide/server.ts
-var http4 = __toESM(require("http"));
+var http5 = __toESM(require("http"));
 var fs7 = __toESM(require("fs"));
 var path7 = __toESM(require("path"));
 var os5 = __toESM(require("os"));
@@ -8858,7 +9664,7 @@ say "Iris sample count: " + dataset.sample_count
     } catch {
     }
   }
-  const server = http4.createServer(async (req, res) => {
+  const server = http5.createServer(async (req, res) => {
     const parsedUrl = new URL(req.url || "/", `http://localhost:${port}`);
     const pathname = parsedUrl.pathname;
     res.setHeader("Access-Control-Allow-Origin", "*");
@@ -9586,6 +10392,8 @@ Author: Reuben \u2022 All 1,235 Functions Loaded.
 }
 
 // src/cli/cli.ts
+init_cyber_security();
+init_crypto_security();
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
@@ -9630,6 +10438,87 @@ async function main() {
     const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
     const deployer = createServerDeployer();
     await deployer.deploy_server(portArg, void 0, "0.0.0.0");
+    return;
+  }
+  if (command === "scan" || command === "portscan") {
+    const target = args[1] || "127.0.0.1";
+    const rawPortArgs = args.slice(2).join(",");
+    const portList = rawPortArgs ? rawPortArgs.split(",").map(Number).filter((p) => !isNaN(p) && p > 0) : void 0;
+    console.log(`
+\u{1F50D} PLAIN Cybersecurity Reconnaissance: Scanning ${target}...`);
+    const res = await cyberSecurityBuiltins.port_scan(target, portList);
+    console.log(`==================================================================`);
+    console.log(`Target: ${res.target} | Scanned Ports: ${res.scanned_ports_count} | Scan Time: ${res.scan_duration_ms} ms`);
+    console.log(`Open Ports: ${res.open_ports_count}`);
+    if (Array.isArray(res.open_ports) && res.open_ports.length > 0) {
+      for (const p of res.open_ports) {
+        const risk = p.risk ? ` [${p.risk}]` : "";
+        console.log(`  \u2713 Port ${p.port}	${p.service}	${p.desc}${risk}`);
+      }
+    } else {
+      console.log(`  (No open ports found on scanned targets)`);
+    }
+    console.log(`==================================================================
+`);
+    return;
+  }
+  if (command === "audit" || command === "secure" || command === "security") {
+    const targetUrl = args[1];
+    if (!targetUrl) {
+      console.error("Usage: plain audit <url> (e.g. plain audit https://example.com)");
+      process.exit(1);
+    }
+    console.log(`
+\u{1F6E1}\uFE0F  Auditing HTTP Security Headers for ${targetUrl}...`);
+    const report = await cyberSecurityBuiltins.audit_security_headers(targetUrl);
+    console.log(`==================================================================`);
+    console.log(`URL: ${report.url} | Status: ${report.status_code || report.status}`);
+    console.log(`Security Score: ${report.security_score}/100 | Grade: [ ${report.grade} ]`);
+    console.log(`------------------------------------------------------------------`);
+    if (Array.isArray(report.passed_checks) && report.passed_checks.length > 0) {
+      console.log(`PASSED CHECKS:`);
+      report.passed_checks.forEach((c) => console.log(`  [\u2713] ${c}`));
+    }
+    if (Array.isArray(report.vulnerabilities_found) && report.vulnerabilities_found.length > 0) {
+      console.log(`
+VULNERABILITIES & WARNINGS:`);
+      report.vulnerabilities_found.forEach((v) => console.log(`  [!] ${v}`));
+    }
+    if (Array.isArray(report.recommended_remediation) && report.recommended_remediation.length > 0) {
+      console.log(`
+RECOMMENDED REMEDIATION:`);
+      report.recommended_remediation.forEach((r) => console.log(`  \u21B3 ${r}`));
+    }
+    console.log(`==================================================================
+`);
+    return;
+  }
+  if (command === "hash" || command === "checksum") {
+    const filename2 = args[1];
+    if (!filename2 || !fs8.existsSync(filename2)) {
+      console.error("Usage: plain hash <file>");
+      process.exit(1);
+    }
+    const buf = fs8.readFileSync(filename2);
+    console.log(`
+File: ${filename2} (${buf.length} bytes)`);
+    console.log(`MD5:    ${cryptoSecurityBuiltins.md5(buf.toString("latin1"))}`);
+    console.log(`SHA1:   ${cryptoSecurityBuiltins.sha1(buf.toString("latin1"))}`);
+    console.log(`SHA256: ${cryptoSecurityBuiltins.sha256(buf.toString("latin1"))}
+`);
+    return;
+  }
+  if (command === "cve") {
+    const id = args[1];
+    if (!id) {
+      console.error("Usage: plain cve <CVE-ID> (e.g. plain cve CVE-2021-44228)");
+      process.exit(1);
+    }
+    const info = cyberSecurityBuiltins.cve_lookup(id);
+    console.log(`
+=== CVE Threat Intelligence ===`);
+    console.log(JSON.stringify(info, null, 2));
+    console.log("");
     return;
   }
   if (command === "help" || command === "--help" || command === "-h") {

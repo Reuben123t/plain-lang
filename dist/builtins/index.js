@@ -21,6 +21,7 @@ const ai_training_1 = require("./ai_training");
 const server_deploy_1 = require("./server_deploy");
 const linear_algebra_1 = require("./linear_algebra");
 const crypto_security_1 = require("./crypto_security");
+const cyber_security_1 = require("./cyber_security");
 const data_processing_1 = require("./data_processing");
 const engineering_physics_1 = require("./engineering_physics");
 const algorithms_1 = require("./algorithms");
@@ -90,6 +91,8 @@ function createStandardEnvironment(options) {
     registerModule(linear_algebra_1.linearAlgebraBuiltins);
     // 18. Crypto & Security
     registerModule(crypto_security_1.cryptoSecurityBuiltins);
+    // 18b. Cybersecurity, Pentesting, Recon & Threat Intel
+    registerModule(cyber_security_1.cyberSecurityBuiltins);
     // 19. Data Processing & DataFrames
     registerModule(data_processing_1.dataProcessingBuiltins);
     // 20. Engineering, Physics & Relativity
@@ -175,12 +178,23 @@ function createStandardEnvironment(options) {
     register("deploy", serverDeployer.deploy_server);
     register("local_ip", serverDeployer.get_local_ip);
     register("public_ip", serverDeployer.get_public_ip);
-    // Security shortcuts
+    // Security & Cybersecurity shortcuts
     register("hash_sha256", crypto_security_1.cryptoSecurityBuiltins.sha256);
     register("hash_md5", crypto_security_1.cryptoSecurityBuiltins.md5);
     register("uuid", crypto_security_1.cryptoSecurityBuiltins.generate_uuid);
     register("jwt_sign", crypto_security_1.cryptoSecurityBuiltins.create_jwt);
     register("jwt_verify", crypto_security_1.cryptoSecurityBuiltins.verify_jwt);
+    register("scan", cyber_security_1.cyberSecurityBuiltins.port_scan);
+    register("audit", cyber_security_1.cyberSecurityBuiltins.audit_security_headers);
+    register("sqli_check", cyber_security_1.cyberSecurityBuiltins.detect_sql_injection);
+    register("xss_check", cyber_security_1.cyberSecurityBuiltins.detect_xss);
+    register("entropy", cyber_security_1.cyberSecurityBuiltins.calculate_entropy);
+    register("magic_bytes", cyber_security_1.cyberSecurityBuiltins.detect_file_signature);
+    register("cve", cyber_security_1.cyberSecurityBuiltins.cve_lookup);
+    register("pwd_strength", cyber_security_1.cyberSecurityBuiltins.check_password_strength);
+    register("subnet", cyber_security_1.cyberSecurityBuiltins.subnet_calculator);
+    register("ping", cyber_security_1.cyberSecurityBuiltins.ping_host);
+    register("banner", cyber_security_1.cyberSecurityBuiltins.banner_grab);
     // CS Algorithms
     register("sort", algorithms_1.algorithmsBuiltins.quick_sort);
     register("binary_search", algorithms_1.algorithmsBuiltins.binary_search);

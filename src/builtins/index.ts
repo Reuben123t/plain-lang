@@ -18,6 +18,7 @@ import { aiTrainingBuiltins } from "./ai_training";
 import { createServerDeployer } from "./server_deploy";
 import { linearAlgebraBuiltins } from "./linear_algebra";
 import { cryptoSecurityBuiltins } from "./crypto_security";
+import { cyberSecurityBuiltins } from "./cyber_security";
 import { dataProcessingBuiltins } from "./data_processing";
 import { engineeringPhysicsBuiltins } from "./engineering_physics";
 import { algorithmsBuiltins } from "./algorithms";
@@ -118,6 +119,9 @@ export function createStandardEnvironment(options?: {
   // 18. Crypto & Security
   registerModule(cryptoSecurityBuiltins);
 
+  // 18b. Cybersecurity, Pentesting, Recon & Threat Intel
+  registerModule(cyberSecurityBuiltins);
+
   // 19. Data Processing & DataFrames
   registerModule(dataProcessingBuiltins);
 
@@ -213,12 +217,23 @@ export function createStandardEnvironment(options?: {
   register("local_ip", serverDeployer.get_local_ip);
   register("public_ip", serverDeployer.get_public_ip);
 
-  // Security shortcuts
+  // Security & Cybersecurity shortcuts
   register("hash_sha256", cryptoSecurityBuiltins.sha256);
   register("hash_md5", cryptoSecurityBuiltins.md5);
   register("uuid", cryptoSecurityBuiltins.generate_uuid);
   register("jwt_sign", cryptoSecurityBuiltins.create_jwt);
   register("jwt_verify", cryptoSecurityBuiltins.verify_jwt);
+  register("scan", cyberSecurityBuiltins.port_scan);
+  register("audit", cyberSecurityBuiltins.audit_security_headers);
+  register("sqli_check", cyberSecurityBuiltins.detect_sql_injection);
+  register("xss_check", cyberSecurityBuiltins.detect_xss);
+  register("entropy", cyberSecurityBuiltins.calculate_entropy);
+  register("magic_bytes", cyberSecurityBuiltins.detect_file_signature);
+  register("cve", cyberSecurityBuiltins.cve_lookup);
+  register("pwd_strength", cyberSecurityBuiltins.check_password_strength);
+  register("subnet", cyberSecurityBuiltins.subnet_calculator);
+  register("ping", cyberSecurityBuiltins.ping_host);
+  register("banner", cyberSecurityBuiltins.banner_grab);
 
   // CS Algorithms
   register("sort", algorithmsBuiltins.quick_sort);

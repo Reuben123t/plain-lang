@@ -157,11 +157,25 @@ class Interpreter {
         }
     }
     async executeSet(stmt) {
-        const value = await this.evaluate(stmt.value);
+        let value;
+        if (stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+            // Unquoted identifier fallback (e.g. Set ABC = Main -> "Main")
+            value = stmt.value.name;
+        }
+        else {
+            value = await this.evaluate(stmt.value);
+        }
         this.currentEnv.assign(stmt.name, value);
     }
     async executeAssignment(stmt) {
-        const rhs = await this.evaluate(stmt.value);
+        let rhs;
+        if (stmt.operator === "=" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+            // Unquoted identifier fallback (e.g. ABC = Main -> "Main")
+            rhs = stmt.value.name;
+        }
+        else {
+            rhs = await this.evaluate(stmt.value);
+        }
         if (stmt.operator === "=") {
             this.currentEnv.assign(stmt.name, rhs);
             return;

@@ -46,6 +46,8 @@ const updater_1 = require("../builtins/updater");
 const server_deploy_1 = require("../builtins/server_deploy");
 const server_2 = require("../ide/server");
 const installer_1 = require("../setup/installer");
+const cyber_security_1 = require("../builtins/cyber_security");
+const crypto_security_1 = require("../builtins/crypto_security");
 async function main() {
     const args = process.argv.slice(2);
     if (args.length === 0) {
@@ -91,6 +93,79 @@ async function main() {
         const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
         const deployer = (0, server_deploy_1.createServerDeployer)();
         await deployer.deploy_server(portArg, undefined, "0.0.0.0");
+        return;
+    }
+    if (command === "scan" || command === "portscan") {
+        const target = args[1] || "127.0.0.1";
+        const rawPortArgs = args.slice(2).join(",");
+        const portList = rawPortArgs ? rawPortArgs.split(",").map(Number).filter((p) => !isNaN(p) && p > 0) : undefined;
+        console.log(`\n🔍 PLAIN Cybersecurity Reconnaissance: Scanning ${target}...`);
+        const res = await cyber_security_1.cyberSecurityBuiltins.port_scan(target, portList);
+        console.log(`==================================================================`);
+        console.log(`Target: ${res.target} | Scanned Ports: ${res.scanned_ports_count} | Scan Time: ${res.scan_duration_ms} ms`);
+        console.log(`Open Ports: ${res.open_ports_count}`);
+        if (Array.isArray(res.open_ports) && res.open_ports.length > 0) {
+            for (const p of res.open_ports) {
+                const risk = p.risk ? ` [${p.risk}]` : "";
+                console.log(`  ✓ Port ${p.port}\t${p.service}\t${p.desc}${risk}`);
+            }
+        }
+        else {
+            console.log(`  (No open ports found on scanned targets)`);
+        }
+        console.log(`==================================================================\n`);
+        return;
+    }
+    if (command === "audit" || command === "secure" || command === "security") {
+        const targetUrl = args[1];
+        if (!targetUrl) {
+            console.error("Usage: plain audit <url> (e.g. plain audit https://example.com)");
+            process.exit(1);
+        }
+        console.log(`\n🛡️  Auditing HTTP Security Headers for ${targetUrl}...`);
+        const report = await cyber_security_1.cyberSecurityBuiltins.audit_security_headers(targetUrl);
+        console.log(`==================================================================`);
+        console.log(`URL: ${report.url} | Status: ${report.status_code || report.status}`);
+        console.log(`Security Score: ${report.security_score}/100 | Grade: [ ${report.grade} ]`);
+        console.log(`------------------------------------------------------------------`);
+        if (Array.isArray(report.passed_checks) && report.passed_checks.length > 0) {
+            console.log(`PASSED CHECKS:`);
+            report.passed_checks.forEach((c) => console.log(`  [✓] ${c}`));
+        }
+        if (Array.isArray(report.vulnerabilities_found) && report.vulnerabilities_found.length > 0) {
+            console.log(`\nVULNERABILITIES & WARNINGS:`);
+            report.vulnerabilities_found.forEach((v) => console.log(`  [!] ${v}`));
+        }
+        if (Array.isArray(report.recommended_remediation) && report.recommended_remediation.length > 0) {
+            console.log(`\nRECOMMENDED REMEDIATION:`);
+            report.recommended_remediation.forEach((r) => console.log(`  ↳ ${r}`));
+        }
+        console.log(`==================================================================\n`);
+        return;
+    }
+    if (command === "hash" || command === "checksum") {
+        const filename = args[1];
+        if (!filename || !fs.existsSync(filename)) {
+            console.error("Usage: plain hash <file>");
+            process.exit(1);
+        }
+        const buf = fs.readFileSync(filename);
+        console.log(`\nFile: ${filename} (${buf.length} bytes)`);
+        console.log(`MD5:    ${crypto_security_1.cryptoSecurityBuiltins.md5(buf.toString("latin1"))}`);
+        console.log(`SHA1:   ${crypto_security_1.cryptoSecurityBuiltins.sha1(buf.toString("latin1"))}`);
+        console.log(`SHA256: ${crypto_security_1.cryptoSecurityBuiltins.sha256(buf.toString("latin1"))}\n`);
+        return;
+    }
+    if (command === "cve") {
+        const id = args[1];
+        if (!id) {
+            console.error("Usage: plain cve <CVE-ID> (e.g. plain cve CVE-2021-44228)");
+            process.exit(1);
+        }
+        const info = cyber_security_1.cyberSecurityBuiltins.cve_lookup(id);
+        console.log(`\n=== CVE Threat Intelligence ===`);
+        console.log(JSON.stringify(info, null, 2));
+        console.log("");
         return;
     }
     if (command === "help" || command === "--help" || command === "-h") {

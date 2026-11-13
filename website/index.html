@@ -2,9 +2,9 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8">
-  <title>PLAIN — The Python-Easy Programming Language with Built-In AI & Server Deployment</title>
+  <title>PLAIN — Python-Easy Language with Built-In AI, Web Server Deployment & Cybersecurity</title>
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <meta name="description" content="PLAIN is a super simple, Python-like programming language with 1,235 built-in functions, AI neural network training, live network web servers, and its own IDE. Author: Reuben.">
+  <meta name="description" content="PLAIN is a super simple, Python-like programming language with 1,309 built-in functions, AI neural network training, live network web servers, cybersecurity recon & auditing, and its own IDE. Author: Reuben.">
 
   <!-- Fonts -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -24,6 +24,7 @@
       --accent-alt: #4facfe;
       --emerald: #10b981;
       --purple: #a855f7;
+      --red: #f43f5e;
       --text: #f1f5f9;
       --text-muted: #94a3b8;
       --font-mono: 'Fira Code', monospace;
@@ -205,7 +206,7 @@
       font-weight: 800;
       letter-spacing: -2px;
       line-height: 1.1;
-      max-width: 900px;
+      max-width: 920px;
       margin: 0 auto 24px auto;
       background: linear-gradient(180deg, #ffffff 30%, #94a3b8 100%);
       -webkit-background-clip: text;
@@ -215,7 +216,7 @@
     .hero-subtitle {
       font-size: 20px;
       color: var(--text-muted);
-      max-width: 680px;
+      max-width: 740px;
       margin: 0 auto 40px auto;
       font-weight: 400;
     }
@@ -274,7 +275,7 @@
 
     /* Terminal Command Box */
     .terminal-box {
-      max-width: 640px;
+      max-width: 680px;
       margin: 0 auto;
       background: rgba(13, 16, 24, 0.85);
       border: 1px solid var(--card-border);
@@ -398,11 +399,11 @@
     .section-desc {
       color: var(--text-muted);
       font-size: 16px;
-      max-width: 620px;
+      max-width: 640px;
       margin: 0 auto;
     }
 
-    /* Code Showcase Section (Clean & Robust, No Mock Terminal) */
+    /* Code Showcase Section */
     .section-showcase {
       padding: 40px 0 70px 0;
     }
@@ -422,13 +423,13 @@
     }
 
     .showcase-toolbar {
-      height: 52px;
+      min-height: 52px;
       background: rgba(10, 13, 20, 0.95);
       border-bottom: 1px solid var(--card-border);
       display: flex;
       align-items: center;
       justify-content: space-between;
-      padding: 0 18px;
+      padding: 8px 18px;
       gap: 12px;
       flex-wrap: wrap;
     }
@@ -748,7 +749,7 @@
         <a href="#features">Features</a>
         <a href="#download">Download</a>
         <a href="https://github.com/Reuben123t/plain-lang" target="_blank" rel="noopener">GitHub</a>
-        <a href="#download" class="btn-nav-download">Get PLAIN (531 MB)</a>
+        <a href="#download" class="btn-nav-download">Get PLAIN (646 MB)</a>
       </div>
     </nav>
 
@@ -757,16 +758,16 @@
       <div class="container">
         <div class="eyebrow-pill">
           <span class="status-dot"></span>
-          <span>PLAIN v1.1.0 • 1,235 Functions • Dev Mode Ready</span>
+          <span>PLAIN v1.2.0 • 1,309 Functions • AI, Server & Cybersecurity • Dev Mode Ready</span>
         </div>
         <h1 class="hero-title">The Python-Easy Programming Language</h1>
         <p class="hero-subtitle">
-          Write code as effortlessly as everyday English or Python. Train neural networks, deploy live IP web servers, run a built-in IDE, and build anything with zero configuration headaches.
+          Write code with standard symbols <code>=</code>, <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>**</code>, <code>//</code>. Set ABC = Main, train neural networks, deploy live IP web servers, run penetration testing & cybersecurity tools, and enjoy a built-in IDE with zero headaches.
         </p>
 
         <div class="hero-actions">
           <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe" class="btn-primary">
-            <span>💻 Download plain.exe (531 MB)</span>
+            <span>💻 Download plain.exe (646 MB)</span>
           </a>
           <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain-windows-x64.zip" class="btn-secondary">
             <span>📦 Download .ZIP (33 MB)</span>
@@ -811,13 +812,13 @@
       </div>
     </section>
 
-    <!-- Language Code Showcase (Clean, No Web Terminal) -->
+    <!-- Language Code Showcase -->
     <section class="section-showcase" id="showcase">
       <div class="container">
         <div class="section-head">
           <div class="section-tag">// LANGUAGE SHOWCASE</div>
           <h2 class="section-heading">Powerful Capabilities. Super Simple Syntax.</h2>
-          <p class="section-desc">PLAIN eliminates boilerplate so students, developers, and AI researchers can build without syntax friction.</p>
+          <p class="section-desc">PLAIN eliminates boilerplate. Use standard mathematical symbols (+, -, *, /, =), AI deep learning, and built-in Cybersecurity reconnaissance.</p>
         </div>
 
         <div class="showcase-card">
@@ -829,9 +830,10 @@
               <span style="font-family: var(--font-mono); font-size: 12px; color: var(--text-muted); margin-left: 8px;" id="activeSnippetTitle">demo.plain</span>
             </div>
             <div class="showcase-tabs">
-              <button class="showcase-tab-btn active" data-sample="ai">🧠 AI Neural Training</button>
+              <button class="showcase-tab-btn active" data-sample="cyber">🛡️ Cybersecurity</button>
+              <button class="showcase-tab-btn" data-sample="pythonic">🐍 Symbols (+, -, *, /, =)</button>
+              <button class="showcase-tab-btn" data-sample="ai">🧠 AI Neural Training</button>
               <button class="showcase-tab-btn" data-sample="server">🌐 Web Server & Port</button>
-              <button class="showcase-tab-btn" data-sample="pythonic">🐍 Pythonic Math</button>
               <button class="showcase-tab-btn" data-sample="charts">📊 Data Science</button>
             </div>
             <button class="btn-copy-code" id="copyCodeBtn" title="Copy code snippet">📋 Copy Code</button>
@@ -844,7 +846,7 @@
               <span style="color: var(--emerald);">●</span>
               <span>Execute on your device: <code>plain demo.plain</code> or open the GUI with <code>plain ide</code></span>
             </div>
-            <a href="#download" class="btn-secondary" style="padding: 6px 14px; font-size: 12px;">Get PLAIN v1.1.0</a>
+            <a href="#download" class="btn-secondary" style="padding: 6px 14px; font-size: 12px;">Get PLAIN v1.2.0</a>
           </div>
         </div>
       </div>
@@ -885,8 +887,8 @@
 
             <div class="ide-feature-item">
               <div class="ide-feature-icon">📚</div>
-              <div class="ide-feature-title">1,235 Function Docs Browser</div>
-              <div class="ide-feature-text">Searchable encyclopedia covering math, physics, neural networks, server endpoints, and automation.</div>
+              <div class="ide-feature-title">1,309 Function Docs Browser</div>
+              <div class="ide-feature-text">Searchable encyclopedia covering math, physics, neural networks, server endpoints, and cybersecurity tools.</div>
             </div>
 
             <div class="ide-feature-item">
@@ -905,23 +907,37 @@
         <div class="section-head">
           <div class="section-tag">// ARCHITECTURE & CAPABILITIES</div>
           <h2 class="section-heading">Everything You Need. Batteries Included.</h2>
-          <p class="section-desc">1,235 built-in functions designed for students, developers, and AI researchers.</p>
+          <p class="section-desc">1,309 built-in functions designed for students, developers, AI researchers, and cybersecurity engineers.</p>
         </div>
 
         <div class="features-grid">
-          <!-- Card 1 -->
+          <!-- Card 1: Cybersecurity -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon" style="background: rgba(244, 63, 94, 0.15); border-color: rgba(244, 63, 94, 0.3);">🛡️</div>
+              <h3 class="feature-title">Built-In Cybersecurity & Recon</h3>
+              <p class="feature-desc">Perform TCP port scanning, audit HTTP security headers (CSP, HSTS), detect SQL injection & XSS, calculate Shannon entropy, and lookup offline CVE intelligence.</p>
+            </div>
+            <div class="feature-code">scan = port_scan("127.0.0.1", [80, 443])
+audit = audit_security_headers(url)
+sqli = detect_sql_injection(input)
+cve = cve_lookup("CVE-2021-44228")</div>
+          </div>
+
+          <!-- Card 2: Pythonic Math & Symbols -->
           <div class="feature-card">
             <div>
               <div class="feature-icon">🐍</div>
-              <h3 class="feature-title">Pythonic Math & Dual Syntax</h3>
-              <p class="feature-desc">Use standard symbols <code>=</code>, <code>+=</code>, <code>**</code>, <code>//</code>, <code>def</code>, <code>while</code>, <code>for</code>, and dictionaries <code>{}</code> without whitespace crashes.</p>
+              <h3 class="feature-title">Symbol Operators & Set ABC = Main</h3>
+              <p class="feature-desc">Use standard symbols <code>=</code>, <code>+</code>, <code>-</code>, <code>*</code>, <code>/</code>, <code>+=</code>, <code>**</code>, <code>//</code>, <code>def</code>, <code>while</code>, <code>for</code>, and dictionaries <code>{}</code> with zero syntax crashes.</p>
             </div>
-            <div class="feature-code">x = 10; x += 5
-power = 2 ** 8       # 256
+            <div class="feature-code">Set ABC = Main
+x = 10; x += 5
+z = (x * 4) - (10 / 2)
 def square(n): return n * n end</div>
           </div>
 
-          <!-- Card 2 -->
+          <!-- Card 3: AI Neural Training -->
           <div class="feature-card">
             <div>
               <div class="feature-icon">🧠</div>
@@ -933,7 +949,7 @@ net = create_neural_network([4, 8, 3])
 history = train_neural_network(net, data, 100)</div>
           </div>
 
-          <!-- Card 3 -->
+          <!-- Card 4: Web Servers -->
           <div class="feature-card">
             <div>
               <div class="feature-icon">🌐</div>
@@ -944,18 +960,18 @@ history = train_neural_network(net, data, 100)</div>
 deploy_server(8080, handle, "0.0.0.0")</div>
           </div>
 
-          <!-- Card 4 -->
+          <!-- Card 5: Built-In IDE -->
           <div class="feature-card">
             <div>
               <div class="feature-icon">💻</div>
               <h3 class="feature-title">Built-In PLAIN IDE (IDLE)</h3>
-              <p class="feature-desc">Comes with its own desktop IDLE equivalent: code editor, interactive shell, live runner, diagnostics, and 1,235 function browser.</p>
+              <p class="feature-desc">Comes with its own desktop IDLE equivalent: code editor, interactive shell, live runner, diagnostics, and 1,309 function browser.</p>
             </div>
             <div class="feature-code"># Launch IDLE with one command:
 plain ide</div>
           </div>
 
-          <!-- Card 5 -->
+          <!-- Card 6: Self-Healing -->
           <div class="feature-card">
             <div>
               <div class="feature-icon">🩺</div>
@@ -964,17 +980,6 @@ plain ide</div>
             </div>
             <div class="feature-code"># Auto-diagnose and heal:
 plain doctor</div>
-          </div>
-
-          <!-- Card 6 -->
-          <div class="feature-card">
-            <div>
-              <div class="feature-icon">📦</div>
-              <h3 class="feature-title">Package & Import System</h3>
-              <p class="feature-desc">Import external <code>.plain</code> files or virtual modules with aliases, isolated namespaces, and symbol destructuring.</p>
-            </div>
-            <div class="feature-code">import "math_tools.plain" as math
-from "data.plain" import dataset</div>
           </div>
         </div>
       </div>
@@ -987,19 +992,19 @@ from "data.plain" import dataset</div>
           <!-- Main Standalone Card -->
           <div class="download-card-main">
             <span class="download-badge">Standalone Windows App • Author: Reuben</span>
-            <h3 style="font-size: 28px; font-weight: 800; margin-bottom: 12px;">PLAIN Standalone Executable (531 MB)</h3>
+            <h3 style="font-size: 28px; font-weight: 800; margin-bottom: 12px;">PLAIN Standalone Executable (646 MB)</h3>
             <p style="color: var(--text-muted); font-size: 15px;">
-              Zero dependencies required. Includes the complete offline student knowledge base, 1,235 functions, AI engine, and IDLE editor.
+              Zero dependencies required. Complete offline Student Knowledge Base, Cybersecurity Threat Intelligence, 1,309 functions, AI engine, and IDLE editor included.
             </p>
             <ul class="specs-list">
-              <li><span class="check">✓</span> <strong>531.45 MB</strong> self-contained Windows x64 binary</li>
+              <li><span class="check">✓</span> <strong>646.56 MB</strong> self-contained Windows x64 binary (exceeds 500 MB)</li>
               <li><span class="check">✓</span> <strong>Author: Reuben</strong> embedded into Windows executable properties</li>
-              <li><span class="check">✓</span> Includes interactive IDE, REPL, and self-healing installer</li>
-              <li><span class="check">✓</span> 100% offline student science & math encyclopedia</li>
+              <li><span class="check">✓</span> Complete offline Cybersecurity reconnaissance & CVE threat database</li>
+              <li><span class="check">✓</span> Built-in interactive IDE, REPL, and self-healing auto-repair engine</li>
             </ul>
             <div style="display: flex; gap: 14px; flex-wrap: wrap;">
               <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe" class="btn-primary">
-                <span>⬇ Download plain.exe (531 MB)</span>
+                <span>⬇ Download plain.exe (646 MB)</span>
               </a>
               <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain-windows-x64.zip" class="btn-secondary">
                 <span>📦 Download ZIP Archive (33 MB)</span>
@@ -1201,6 +1206,75 @@ from "data.plain" import dataset</div>
 
     // Showcase Code Samples
     const codeSamples = {
+      cyber: {
+        title: "cybersecurity_recon.plain",
+        code: `# PLAIN Cybersecurity Reconnaissance & Threat Intelligence
+# Built-in network scanning, vulnerability analysis & forensics
+
+say "=== PLAIN Cybersecurity Shield ==="
+
+# 1. TCP Port Reconnaissance & Service Discovery
+scan = port_scan("127.0.0.1", [80, 443, 8080, 4444])
+say "Target: " + scan.target + " | Scanned: " + scan.scanned_ports_count
+
+# 2. Heuristic SQL Injection & XSS Attack Detection
+untrusted_input = "SELECT * FROM users WHERE id = 1 OR 1=1--"
+sqli = detect_sql_injection(untrusted_input)
+if sqli.is_malicious then
+    say "ALERT: SQL Injection Detected! (" + sqli.risk_level + ")"
+end
+
+# 3. Shannon Entropy Malware Forensics (Detect packed code)
+entropy = calculate_entropy("SecretMalwareObfuscatedPayload1234567890")
+say "Shannon Entropy: " + entropy.shannon_entropy + "/8.0 (" + entropy.analysis + ")"
+
+# 4. File Magic Bytes Verification
+sig = detect_file_signature("4D5A900003")
+say "Detected True File Format: " + sig.file_type
+
+# 5. Offline CVE Threat Intelligence Lookup
+vuln = cve_lookup("CVE-2021-44228")
+say "Threat: " + vuln.cve_id + " - " + vuln.title + " [CVSS " + vuln.cvss + " " + vuln.severity + "]"`
+      },
+
+      pythonic: {
+        title: "symbols_and_syntax.plain",
+        code: `# PLAIN Standard Symbols (+, -, *, /, =, ==, !=, <, >, <=, >=)
+# Use 'Set ABC = Main' or 'ABC = Main' with zero syntax friction
+
+Set ABC = Main
+say "Assigned ABC: " + ABC
+
+# Standard mathematical symbols
+x = 10
+x += 5
+y = (x * 4) - (10 / 2) + 2
+say "Calculated y: " + y                   # 57
+say "Power (2 ** 8): " + (2 ** 8)             # 256
+say "Floor division (17 // 3): " + (17 // 3)  # 5
+say "Modulo (17 % 5): " + (17 % 5)            # 2
+
+# Recursive Fibonacci Function
+def fibonacci(n):
+    if n <= 1:
+        return n
+    end
+    return fibonacci(n - 1) + fibonacci(n - 2)
+end
+
+say "Fibonacci(10) = " + fibonacci(10)
+
+# Dictionaries & Data Structures
+student = {
+    "name": "Reuben",
+    "role": "Creator",
+    "language": "PLAIN",
+    "functions_count": 1309
+}
+
+say "Welcome " + student.name + " (" + student.role + ")!"`
+      },
+
       ai: {
         title: "ai_neural_training.plain",
         code: `# PLAIN AI Deep Neural Network Training
@@ -1243,7 +1317,7 @@ def handle_request(req):
     if req.path == "/api/status":
         return json_response({
             "status": "online",
-            "version": "1.1.0",
+            "version": "1.2.0",
             "author": "Reuben",
             "uptime_seconds": get_uptime()
         })
@@ -1257,39 +1331,6 @@ info = deploy_server(8080, handle_request, "0.0.0.0")
 say "Local URL:   " + info.local_url
 say "Network URL: " + info.network_url
 say "Server listening for incoming requests..."`
-      },
-
-      pythonic: {
-        title: "math_and_syntax.plain",
-        code: `# PLAIN Pythonic Math, Functions & Dictionaries
-# Seamless Pythonic operators with zero whitespace crashes
-
-x = 10
-x += 5
-say "Calculated x: " + x                   # 15
-say "Power (2 ** 8): " + (2 ** 8)             # 256
-say "Floor division (17 // 3): " + (17 // 3)  # 5
-say "Modulo (17 % 5): " + (17 % 5)            # 2
-
-# Recursive Fibonacci Function
-def fibonacci(n):
-    if n <= 1:
-        return n
-    end
-    return fibonacci(n - 1) + fibonacci(n - 2)
-end
-
-say "Fibonacci(10) = " + fibonacci(10)
-
-# Dictionaries & Data Structures
-student = {
-    "name": "Reuben",
-    "role": "Creator",
-    "language": "PLAIN",
-    "functions_count": 1235
-}
-
-say "Welcome " + student.name + " (" + student.role + ")!"`
       },
 
       charts: {
@@ -1321,17 +1362,17 @@ say chart`
     const showcaseTabs = document.querySelectorAll(".showcase-tab-btn");
     const copyCodeBtn = document.getElementById("copyCodeBtn");
 
-    let currentSampleKey = "ai";
+    let currentSampleKey = "cyber";
 
     function updateShowcase(key) {
       currentSampleKey = key;
-      const sample = codeSamples[key] || codeSamples.ai;
+      const sample = codeSamples[key] || codeSamples.cyber;
       if (codeSnippetEl) codeSnippetEl.textContent = sample.code;
       if (activeSnippetTitle) activeSnippetTitle.textContent = sample.title;
     }
 
-    // Initialize with AI
-    updateShowcase("ai");
+    // Initialize with Cybersecurity
+    updateShowcase("cyber");
 
     showcaseTabs.forEach(tab => {
       tab.addEventListener("click", () => {
