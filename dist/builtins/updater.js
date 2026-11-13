@@ -39,14 +39,14 @@ exports.isVersionNewer = isVersionNewer;
 exports.promptUpdateIfAvailable = promptUpdateIfAvailable;
 exports.performUpdate = performUpdate;
 const https = __importStar(require("https"));
-exports.CURRENT_PLAIN_VERSION = "1.1.0";
+exports.CURRENT_PLAIN_VERSION = "1.2.0";
 exports.GITHUB_REPO = "Reuben123t/plain-lang";
 async function fetchLatestRelease() {
     return new Promise((resolve) => {
         const url = `https://api.github.com/repos/${exports.GITHUB_REPO}/releases/latest`;
         const req = https.get(url, {
             headers: {
-                "User-Agent": "plain-language-updater/1.1.0"
+                "User-Agent": "plain-language-updater/1.2.0"
             },
             timeout: 4000
         }, (res) => {

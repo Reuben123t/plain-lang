@@ -1,4 +1,4 @@
-export declare const CURRENT_PLAIN_VERSION = "1.1.0";
+export declare const CURRENT_PLAIN_VERSION = "1.2.0";
 export declare const GITHUB_REPO = "Reuben123t/plain-lang";
 export interface UpdateInfo {
     currentVersion: string;

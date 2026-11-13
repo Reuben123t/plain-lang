@@ -3,7 +3,7 @@ import * as fs from "fs";
 import * as path from "path";
 import * as os from "os";
 
-export const CURRENT_PLAIN_VERSION = "1.1.0";
+export const CURRENT_PLAIN_VERSION = "1.2.0";
 export const GITHUB_REPO = "Reuben123t/plain-lang";
 
 export interface UpdateInfo {
@@ -22,7 +22,7 @@ export async function fetchLatestRelease(): Promise<UpdateInfo> {
       url,
       {
         headers: {
-          "User-Agent": "plain-language-updater/1.1.0"
+          "User-Agent": "plain-language-updater/1.2.0"
         },
         timeout: 4000
       },

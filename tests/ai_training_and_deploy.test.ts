@@ -113,7 +113,7 @@ describe("AI Training, Server Deployment & 1000+ Functions", () => {
     const versionFn = env.lookup("plain_version") as any;
     const authorFn = env.lookup("author_name") as any;
 
-    assert.equal(versionFn.nativeFn(), "1.1.0");
+    assert.equal(versionFn.nativeFn(), "1.2.0");
     assert.equal(authorFn.nativeFn(), "Reuben");
   });
 });

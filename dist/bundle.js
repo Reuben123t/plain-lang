@@ -5938,7 +5938,7 @@ async function fetchLatestRelease() {
       url2,
       {
         headers: {
-          "User-Agent": "plain-language-updater/1.1.0"
+          "User-Agent": "plain-language-updater/1.2.0"
         },
         timeout: 4e3
       },
@@ -6043,7 +6043,7 @@ var init_updater = __esm({
   "src/builtins/updater.ts"() {
     "use strict";
     https3 = __toESM(require("https"));
-    CURRENT_PLAIN_VERSION = "1.1.0";
+    CURRENT_PLAIN_VERSION = "1.2.0";
     GITHUB_REPO = "Reuben123t/plain-lang";
     updaterBuiltins = {
       check_for_updates: async () => {
