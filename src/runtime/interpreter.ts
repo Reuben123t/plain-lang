@@ -170,12 +170,25 @@ export class Interpreter {
   }
 
   private async executeSet(stmt: SetStatement): Promise<void> {
-    const value = await this.evaluate(stmt.value);
+    let value: PlainValue;
+    if (stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+      // Unquoted identifier fallback (e.g. Set ABC = Main -> "Main")
+      value = stmt.value.name;
+    } else {
+      value = await this.evaluate(stmt.value);
+    }
     this.currentEnv.assign(stmt.name, value);
   }
 
   private async executeAssignment(stmt: AssignmentStatement): Promise<void> {
-    const rhs = await this.evaluate(stmt.value);
+    let rhs: PlainValue;
+    if (stmt.operator === "=" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+      // Unquoted identifier fallback (e.g. ABC = Main -> "Main")
+      rhs = stmt.value.name;
+    } else {
+      rhs = await this.evaluate(stmt.value);
+    }
+
     if (stmt.operator === "=") {
       this.currentEnv.assign(stmt.name, rhs);
       return;

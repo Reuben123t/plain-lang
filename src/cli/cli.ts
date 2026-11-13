@@ -10,6 +10,8 @@ import { promptUpdateIfAvailable, performUpdate, CURRENT_PLAIN_VERSION } from ".
 import { createServerDeployer } from "../builtins/server_deploy";
 import { startPlainIde } from "../ide/server";
 import { PlainSystemManager } from "../setup/installer";
+import { cyberSecurityBuiltins } from "../builtins/cyber_security";
+import { cryptoSecurityBuiltins } from "../builtins/crypto_security";
 
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -64,6 +66,82 @@ export async function main(): Promise<void> {
     const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
     const deployer = createServerDeployer();
     await deployer.deploy_server(portArg, undefined, "0.0.0.0");
+    return;
+  }
+
+  if (command === "scan" || command === "portscan") {
+    const target = args[1] || "127.0.0.1";
+    const rawPortArgs = args.slice(2).join(",");
+    const portList = rawPortArgs ? rawPortArgs.split(",").map(Number).filter((p) => !isNaN(p) && p > 0) : undefined;
+    console.log(`\n🔍 PLAIN Cybersecurity Reconnaissance: Scanning ${target}...`);
+    const res: any = await cyberSecurityBuiltins.port_scan(target, portList);
+    console.log(`==================================================================`);
+    console.log(`Target: ${res.target} | Scanned Ports: ${res.scanned_ports_count} | Scan Time: ${res.scan_duration_ms} ms`);
+    console.log(`Open Ports: ${res.open_ports_count}`);
+    if (Array.isArray(res.open_ports) && res.open_ports.length > 0) {
+      for (const p of res.open_ports) {
+        const risk = p.risk ? ` [${p.risk}]` : "";
+        console.log(`  ✓ Port ${p.port}\t${p.service}\t${p.desc}${risk}`);
+      }
+    } else {
+      console.log(`  (No open ports found on scanned targets)`);
+    }
+    console.log(`==================================================================\n`);
+    return;
+  }
+
+  if (command === "audit" || command === "secure" || command === "security") {
+    const targetUrl = args[1];
+    if (!targetUrl) {
+      console.error("Usage: plain audit <url> (e.g. plain audit https://example.com)");
+      process.exit(1);
+    }
+    console.log(`\n🛡️  Auditing HTTP Security Headers for ${targetUrl}...`);
+    const report: any = await cyberSecurityBuiltins.audit_security_headers(targetUrl);
+    console.log(`==================================================================`);
+    console.log(`URL: ${report.url} | Status: ${report.status_code || report.status}`);
+    console.log(`Security Score: ${report.security_score}/100 | Grade: [ ${report.grade} ]`);
+    console.log(`------------------------------------------------------------------`);
+    if (Array.isArray(report.passed_checks) && report.passed_checks.length > 0) {
+      console.log(`PASSED CHECKS:`);
+      report.passed_checks.forEach((c: string) => console.log(`  [✓] ${c}`));
+    }
+    if (Array.isArray(report.vulnerabilities_found) && report.vulnerabilities_found.length > 0) {
+      console.log(`\nVULNERABILITIES & WARNINGS:`);
+      report.vulnerabilities_found.forEach((v: string) => console.log(`  [!] ${v}`));
+    }
+    if (Array.isArray(report.recommended_remediation) && report.recommended_remediation.length > 0) {
+      console.log(`\nRECOMMENDED REMEDIATION:`);
+      report.recommended_remediation.forEach((r: string) => console.log(`  ↳ ${r}`));
+    }
+    console.log(`==================================================================\n`);
+    return;
+  }
+
+  if (command === "hash" || command === "checksum") {
+    const filename = args[1];
+    if (!filename || !fs.existsSync(filename)) {
+      console.error("Usage: plain hash <file>");
+      process.exit(1);
+    }
+    const buf = fs.readFileSync(filename);
+    console.log(`\nFile: ${filename} (${buf.length} bytes)`);
+    console.log(`MD5:    ${cryptoSecurityBuiltins.md5(buf.toString("latin1"))}`);
+    console.log(`SHA1:   ${cryptoSecurityBuiltins.sha1(buf.toString("latin1"))}`);
+    console.log(`SHA256: ${cryptoSecurityBuiltins.sha256(buf.toString("latin1"))}\n`);
+    return;
+  }
+
+  if (command === "cve") {
+    const id = args[1];
+    if (!id) {
+      console.error("Usage: plain cve <CVE-ID> (e.g. plain cve CVE-2021-44228)");
+      process.exit(1);
+    }
+    const info = cyberSecurityBuiltins.cve_lookup(id);
+    console.log(`\n=== CVE Threat Intelligence ===`);
+    console.log(JSON.stringify(info, null, 2));
+    console.log("");
     return;
   }
 

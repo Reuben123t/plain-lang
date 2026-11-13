@@ -96,23 +96,27 @@ class Parser {
             throw new plain_error_1.PlainError(`I expected a variable name after 'set'.`, this.peek().location, {
                 kind: "ParserError",
                 sourceCode: this.source,
-                suggestion: "Example: set score to 100"
+                suggestion: "Example: Set ABC = Main or ABC = 10"
             });
         }
         const nameToken = this.advance();
-        const varName = nameToken.value;
-        if (!this.match(token_1.TokenType.To)) {
-            throw new plain_error_1.PlainError(`I expected 'to' after the variable name in 'set ${varName} to ...'.`, this.peek().location, {
+        const varName = nameToken.raw || nameToken.value;
+        // Support both '=' (preferred standard) and 'to' (or '==')
+        if (this.match(token_1.TokenType.Equal) || this.match(token_1.TokenType.To) || this.match(token_1.TokenType.EqualEqual)) {
+            // Good
+        }
+        else {
+            throw new plain_error_1.PlainError(`I expected '=' after the variable name in 'Set ${varName} = ...'.`, this.peek().location, {
                 kind: "ParserError",
                 sourceCode: this.source,
-                suggestion: `Write 'set ${varName} to <value>'`
+                suggestion: `Write 'Set ${varName} = <value>' or '${varName} = <value>'`
             });
         }
         if (this.isAtStatementEnd()) {
-            throw new plain_error_1.PlainError(`I expected a value after 'set ${varName} to'.`, this.peek().location, {
+            throw new plain_error_1.PlainError(`I expected a value after 'Set ${varName} ='.`, this.peek().location, {
                 kind: "ParserError",
                 sourceCode: this.source,
-                suggestion: `Provide a value, such as: set ${varName} to 10`
+                suggestion: `Provide a value, such as: Set ${varName} = 10`
             });
         }
         const value = this.parseExpression();
