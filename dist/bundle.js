@@ -9437,12 +9437,34 @@ if (-not ($userPath -split ';' | Where-Object { $_ -eq $target })) {
     try {
       const ideExe = path6.join(this.binDir, "plain-ide.exe");
       const plainCmd = path6.join(this.binDir, "plain.cmd");
+      const fileIco = path6.join(this.binDir, "plain-file.ico");
+      const appIco = path6.join(this.binDir, "plain.ico");
       const targetExec = fs6.existsSync(ideExe) ? ideExe : `${plainCmd} ide`;
+      const targetIco = fs6.existsSync(fileIco) ? fileIco : fs6.existsSync(appIco) ? appIco : fs6.existsSync(ideExe) ? ideExe : "";
+      const icoRegPlain = targetIco ? `New-Item -Path "HKCU:\\Software\\Classes\\.plain\\DefaultIcon" -Value '"${targetIco.replace(/\\/g, "\\\\")}",0' -Force | Out-Null` : "";
+      const icoRegPlainFile = targetIco ? `New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\DefaultIcon" -Value '"${targetIco.replace(/\\/g, "\\\\")}",0' -Force | Out-Null` : "";
+      const icoRegSys = targetIco ? `New-Item -Path "HKCU:\\Software\\Classes\\SystemFileAssociations\\.plain\\DefaultIcon" -Value '"${targetIco.replace(/\\/g, "\\\\")}",0' -Force | Out-Null` : "";
       const psScript = `
 New-Item -Path "HKCU:\\Software\\Classes\\.plain" -Value "PLAIN.File" -Force | Out-Null
+${icoRegPlain}
 New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File" -Value "PLAIN Source File" -Force | Out-Null
+${icoRegPlainFile}
+${icoRegSys}
 New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Value '"${targetExec}" "%1"' -Force | Out-Null
 New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\edit\\command" -Value '"${targetExec}" "%1"' -Force | Out-Null
+
+$code = @"
+using System;
+using System.Runtime.InteropServices;
+public class ShellRefresh {
+    [DllImport("shell32.dll", CharSet = CharSet.Auto, SetLastError = true)]
+    public static extern void SHChangeNotify(int wEventId, int uFlags, IntPtr dwItem1, IntPtr dwItem2);
+}
+"@
+if (-not ([System.Management.Automation.PSTypeName]'ShellRefresh').Type) {
+    try { Add-Type -TypeDefinition $code } catch {}
+}
+try { [ShellRefresh]::SHChangeNotify(0x08000000, 0x0000, [IntPtr]::Zero, [IntPtr]::Zero) } catch {}
 `;
       this.runPowerShell(psScript);
       return true;
@@ -9482,6 +9504,17 @@ New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\edit\\command" -Val
     const sourceIde = ideCandidates.find((c) => fs6.existsSync(c));
     if (sourceIde) {
       fs6.copyFileSync(sourceIde, path6.join(this.binDir, "plain-ide.exe"));
+    }
+    const iconCandidates = [
+      { name: "plain.ico", paths: [path6.resolve(process.cwd(), "build_assets", "plain.ico"), path6.resolve(process.cwd(), "dist", "plain.ico")] },
+      { name: "plain-file.ico", paths: [path6.resolve(process.cwd(), "build_assets", "plain-file.ico"), path6.resolve(process.cwd(), "dist", "plain-file.ico")] }
+    ];
+    for (const ico of iconCandidates) {
+      const src = ico.paths.find((p) => fs6.existsSync(p));
+      if (src) {
+        fs6.copyFileSync(src, path6.join(this.binDir, ico.name));
+        fs6.copyFileSync(src, path6.join(this.installDir, ico.name));
+      }
     }
     if (this.isWindows) {
       const cmdContent = `@echo off\r
