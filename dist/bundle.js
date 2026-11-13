@@ -6256,6 +6256,7 @@ __export(cli_exports, {
 module.exports = __toCommonJS(cli_exports);
 var fs8 = __toESM(require("fs"));
 var path8 = __toESM(require("path"));
+var import_child_process3 = require("child_process");
 
 // src/lexer/lexer.ts
 init_plain_error();
@@ -9395,11 +9396,14 @@ if (-not ($userPath -split ';' | Where-Object { $_ -eq $target })) {
   registerFileAssociation() {
     if (!this.isWindows) return true;
     try {
+      const ideExe = path6.join(this.binDir, "plain-ide.exe");
       const plainCmd = path6.join(this.binDir, "plain.cmd");
+      const targetExec = fs6.existsSync(ideExe) ? ideExe : `${plainCmd} ide`;
       const psScript = `
 New-Item -Path "HKCU:\\Software\\Classes\\.plain" -Value "PLAIN.File" -Force | Out-Null
 New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File" -Value "PLAIN Source File" -Force | Out-Null
-New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Value '"${plainCmd}" ide "%1"' -Force | Out-Null
+New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Value '"${targetExec}" "%1"' -Force | Out-Null
+New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\edit\\command" -Value '"${targetExec}" "%1"' -Force | Out-Null
 `;
       this.runPowerShell(psScript);
       return true;
@@ -9431,6 +9435,15 @@ New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Val
     if (sourceExe) {
       fs6.copyFileSync(sourceExe, path6.join(this.binDir, "plain.exe"));
     }
+    const ideCandidates = [
+      path6.resolve(process.cwd(), "dist", "plain-ide.exe"),
+      path6.resolve(process.cwd(), "build_assets", "plain-ide.exe"),
+      path6.resolve(__dirname, "..", "..", "dist", "plain-ide.exe")
+    ];
+    const sourceIde = ideCandidates.find((c) => fs6.existsSync(c));
+    if (sourceIde) {
+      fs6.copyFileSync(sourceIde, path6.join(this.binDir, "plain-ide.exe"));
+    }
     if (this.isWindows) {
       const cmdContent = `@echo off\r
 node "%~dp0..\\bundle.js" %*\r
@@ -9456,25 +9469,28 @@ exec node "$(dirname "$0")/../bundle.js" "$@"
   createShortcuts() {
     if (!this.isWindows) return true;
     try {
+      const ideExe = path6.join(this.binDir, "plain-ide.exe");
       const plainCmd = path6.join(this.binDir, "plain.cmd");
+      const targetExec = fs6.existsSync(ideExe) ? ideExe : plainCmd;
+      const targetArgs = fs6.existsSync(ideExe) ? "" : "ide";
       const psScript = `
 $WshShell = New-Object -ComObject WScript.Shell
 
 # Desktop Shortcut
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 $desktopShortcut = $WshShell.CreateShortcut("$desktopPath\\PLAIN IDE.lnk")
-$desktopShortcut.TargetPath = "${plainCmd.replace(/\\/g, "\\\\")}"
-$desktopShortcut.Arguments = "ide"
-$desktopShortcut.Description = "PLAIN Programming Language IDE (Like IDLE Python)"
+$desktopShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
+$desktopShortcut.Arguments = "${targetArgs}"
+$desktopShortcut.Description = "PLAIN Programming Language IDE (Python IDLE Equivalent \u2022 Author: Reuben)"
 $desktopShortcut.WorkingDirectory = "$desktopPath"
 $desktopShortcut.Save()
 
 # Start Menu Shortcut
 $programsPath = [Environment]::GetFolderPath("Programs")
 $startShortcut = $WshShell.CreateShortcut("$programsPath\\PLAIN IDE.lnk")
-$startShortcut.TargetPath = "${plainCmd.replace(/\\/g, "\\\\")}"
-$startShortcut.Arguments = "ide"
-$startShortcut.Description = "PLAIN Programming Language IDE"
+$startShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
+$startShortcut.Arguments = "${targetArgs}"
+$startShortcut.Description = "PLAIN Programming Language IDE (Author: Reuben)"
 $startShortcut.Save()
 `;
       this.runPowerShell(psScript);
@@ -10409,7 +10425,27 @@ async function main() {
     return;
   }
   if (command === "ide" || command === "idle") {
-    const fileArg = args[1] && args[1].endsWith(".plain") ? path8.resolve(process.cwd(), args[1]) : void 0;
+    const fileArg = args[1] ? path8.resolve(process.cwd(), args[1]) : void 0;
+    const ideCandidates = [
+      path8.join(process.env.LOCALAPPDATA || "", "PLAIN", "bin", "plain-ide.exe"),
+      path8.resolve(process.cwd(), "dist", "plain-ide.exe"),
+      path8.resolve(__dirname, "..", "..", "dist", "plain-ide.exe"),
+      path8.resolve(__dirname, "..", "ide", "plain-ide.exe"),
+      path8.resolve(process.cwd(), "build_assets", "plain-ide.exe")
+    ];
+    const ideExe = ideCandidates.find((c) => fs8.existsSync(c));
+    if (ideExe) {
+      console.log("Launching PLAIN IDE (Python IDLE Desktop Edition \u2022 Author: Reuben)...");
+      if (fileArg) {
+        console.log(`Loaded "${path8.basename(fileArg)}" into code editor area (not executed).`);
+      }
+      const child = (0, import_child_process3.spawn)(ideExe, fileArg ? [fileArg] : [], {
+        detached: true,
+        stdio: "ignore"
+      });
+      child.unref();
+      return;
+    }
     const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 4200;
     await startPlainIde(portArg, fileArg);
     return;
@@ -10432,6 +10468,18 @@ async function main() {
   }
   if (command === "update" || command === "upgrade") {
     await performUpdate();
+    return;
+  }
+  if (command === "website" || command === "web" || command === "docs") {
+    const localIndex = path8.resolve(__dirname, "..", "..", "index.html");
+    const ghPagesUrl = "https://reuben123t.github.io/plain-lang/";
+    const target = fs8.existsSync(localIndex) ? localIndex : ghPagesUrl;
+    console.log("Opening PLAIN Website (Dev Mode 3D Showcase \u2022 Author: Reuben)...");
+    console.log(`URL: ${ghPagesUrl}`);
+    const openCmd = process.platform === "win32" ? `start "" "${target}"` : process.platform === "darwin" ? `open "${target}"` : `xdg-open "${target}"`;
+    const { exec: exec2 } = require("child_process");
+    exec2(openCmd, () => {
+    });
     return;
   }
   if (command === "deploy") {

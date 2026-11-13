@@ -36,6 +36,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.main = main;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const child_process_1 = require("child_process");
 const index_1 = require("../index");
 const lexer_1 = require("../lexer/lexer");
 const parser_1 = require("../parser/parser");
@@ -63,7 +64,29 @@ async function main() {
         return;
     }
     if (command === "ide" || command === "idle") {
-        const fileArg = args[1] && args[1].endsWith(".plain") ? path.resolve(process.cwd(), args[1]) : undefined;
+        const fileArg = args[1] ? path.resolve(process.cwd(), args[1]) : undefined;
+        // Search for native Windows PLAIN IDE (Python IDLE desktop equivalent)
+        const ideCandidates = [
+            path.join(process.env.LOCALAPPDATA || "", "PLAIN", "bin", "plain-ide.exe"),
+            path.resolve(process.cwd(), "dist", "plain-ide.exe"),
+            path.resolve(__dirname, "..", "..", "dist", "plain-ide.exe"),
+            path.resolve(__dirname, "..", "ide", "plain-ide.exe"),
+            path.resolve(process.cwd(), "build_assets", "plain-ide.exe")
+        ];
+        const ideExe = ideCandidates.find((c) => fs.existsSync(c));
+        if (ideExe) {
+            console.log("Launching PLAIN IDE (Python IDLE Desktop Edition • Author: Reuben)...");
+            if (fileArg) {
+                console.log(`Loaded "${path.basename(fileArg)}" into code editor area (not executed).`);
+            }
+            const child = (0, child_process_1.spawn)(ideExe, fileArg ? [fileArg] : [], {
+                detached: true,
+                stdio: "ignore"
+            });
+            child.unref();
+            return;
+        }
+        // Fallback if binary not found
         const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 4200;
         await (0, server_2.startPlainIde)(portArg, fileArg);
         return;
@@ -87,6 +110,17 @@ async function main() {
     }
     if (command === "update" || command === "upgrade") {
         await (0, updater_1.performUpdate)();
+        return;
+    }
+    if (command === "website" || command === "web" || command === "docs") {
+        const localIndex = path.resolve(__dirname, "..", "..", "index.html");
+        const ghPagesUrl = "https://reuben123t.github.io/plain-lang/";
+        const target = fs.existsSync(localIndex) ? localIndex : ghPagesUrl;
+        console.log("Opening PLAIN Website (Dev Mode 3D Showcase • Author: Reuben)...");
+        console.log(`URL: ${ghPagesUrl}`);
+        const openCmd = process.platform === "win32" ? `start "" "${target}"` : process.platform === "darwin" ? `open "${target}"` : `xdg-open "${target}"`;
+        const { exec } = require("child_process");
+        exec(openCmd, () => { });
         return;
     }
     if (command === "deploy") {

@@ -263,11 +263,14 @@ if (-not ($userPath -split ';' | Where-Object { $_ -eq $target })) {
         if (!this.isWindows)
             return true;
         try {
+            const ideExe = path.join(this.binDir, "plain-ide.exe");
             const plainCmd = path.join(this.binDir, "plain.cmd");
+            const targetExec = fs.existsSync(ideExe) ? ideExe : `${plainCmd} ide`;
             const psScript = `
 New-Item -Path "HKCU:\\Software\\Classes\\.plain" -Value "PLAIN.File" -Force | Out-Null
 New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File" -Value "PLAIN Source File" -Force | Out-Null
-New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Value '"${plainCmd}" ide "%1"' -Force | Out-Null
+New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Value '"${targetExec}" "%1"' -Force | Out-Null
+New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\edit\\command" -Value '"${targetExec}" "%1"' -Force | Out-Null
 `;
             this.runPowerShell(psScript);
             return true;
@@ -293,7 +296,7 @@ New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Val
         if (sourceBundle) {
             fs.copyFileSync(sourceBundle, targetBundle);
         }
-        // Also copy plain.exe if available
+        // Copy plain.exe if available
         const exeCandidates = [
             path.resolve(process.cwd(), "dist", "plain.exe"),
             path.resolve(__dirname, "..", "..", "dist", "plain.exe")
@@ -301,6 +304,16 @@ New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Val
         const sourceExe = exeCandidates.find((c) => fs.existsSync(c));
         if (sourceExe) {
             fs.copyFileSync(sourceExe, path.join(this.binDir, "plain.exe"));
+        }
+        // Copy native desktop IDE (plain-ide.exe)
+        const ideCandidates = [
+            path.resolve(process.cwd(), "dist", "plain-ide.exe"),
+            path.resolve(process.cwd(), "build_assets", "plain-ide.exe"),
+            path.resolve(__dirname, "..", "..", "dist", "plain-ide.exe")
+        ];
+        const sourceIde = ideCandidates.find((c) => fs.existsSync(c));
+        if (sourceIde) {
+            fs.copyFileSync(sourceIde, path.join(this.binDir, "plain-ide.exe"));
         }
         if (this.isWindows) {
             // Create plain.cmd
@@ -328,25 +341,28 @@ New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Val
         if (!this.isWindows)
             return true;
         try {
+            const ideExe = path.join(this.binDir, "plain-ide.exe");
             const plainCmd = path.join(this.binDir, "plain.cmd");
+            const targetExec = fs.existsSync(ideExe) ? ideExe : plainCmd;
+            const targetArgs = fs.existsSync(ideExe) ? "" : "ide";
             const psScript = `
 $WshShell = New-Object -ComObject WScript.Shell
 
 # Desktop Shortcut
 $desktopPath = [Environment]::GetFolderPath("Desktop")
 $desktopShortcut = $WshShell.CreateShortcut("$desktopPath\\PLAIN IDE.lnk")
-$desktopShortcut.TargetPath = "${plainCmd.replace(/\\/g, "\\\\")}"
-$desktopShortcut.Arguments = "ide"
-$desktopShortcut.Description = "PLAIN Programming Language IDE (Like IDLE Python)"
+$desktopShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
+$desktopShortcut.Arguments = "${targetArgs}"
+$desktopShortcut.Description = "PLAIN Programming Language IDE (Python IDLE Equivalent • Author: Reuben)"
 $desktopShortcut.WorkingDirectory = "$desktopPath"
 $desktopShortcut.Save()
 
 # Start Menu Shortcut
 $programsPath = [Environment]::GetFolderPath("Programs")
 $startShortcut = $WshShell.CreateShortcut("$programsPath\\PLAIN IDE.lnk")
-$startShortcut.TargetPath = "${plainCmd.replace(/\\/g, "\\\\")}"
-$startShortcut.Arguments = "ide"
-$startShortcut.Description = "PLAIN Programming Language IDE"
+$startShortcut.TargetPath = "${targetExec.replace(/\\/g, "\\\\")}"
+$startShortcut.Arguments = "${targetArgs}"
+$startShortcut.Description = "PLAIN Programming Language IDE (Author: Reuben)"
 $startShortcut.Save()
 `;
             this.runPowerShell(psScript);
