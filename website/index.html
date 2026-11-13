@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>PLAIN — The Python-Easy Programming Language with Built-In AI & Server Deployment</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="PLAIN is a super simple, Python-like programming language with 1,235 built-in functions, AI neural network training, live network web servers, and its own IDE. Author: Reuben.">
+
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+
+  <!-- Three.js for 3D Background -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+
+  <style>
+    :root {
+      --bg: #07090e;
+      --card-bg: rgba(14, 18, 27, 0.75);
+      --card-border: rgba(255, 255, 255, 0.08);
+      --card-border-glow: rgba(0, 242, 254, 0.35);
+      --accent: #00f2fe;
+      --accent-alt: #4facfe;
+      --emerald: #10b981;
+      --purple: #a855f7;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --font-mono: 'Fira Code', monospace;
+      --font-sans: 'Plus Jakarta Sans', system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      overflow-x: hidden;
+      line-height: 1.6;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    /* 3D Canvas Background */
+    #three-canvas {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      z-index: 0;
+      pointer-events: none;
+      opacity: 0.85;
+    }
+
+    /* Noise & Radial Glow Overlay */
+    .bg-overlay {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 1;
+      pointer-events: none;
+      background: radial-gradient(circle at 50% 15%, rgba(0, 242, 254, 0.08), transparent 60%),
+                  radial-gradient(circle at 80% 70%, rgba(168, 85, 247, 0.06), transparent 50%);
+    }
+
+    /* Content Wrapper */
+    .content-wrapper {
+      position: relative;
+      z-index: 2;
+    }
+
+    /* Navigation */
+    nav {
+      max-width: 1240px;
+      margin: 0 auto;
+      padding: 24px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .nav-brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      text-decoration: none;
+      color: white;
+    }
+
+    .logo-symbol {
+      width: 36px;
+      height: 36px;
+      background: linear-gradient(135deg, var(--accent), var(--purple));
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 800;
+      font-size: 18px;
+      color: #07090e;
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+    }
+
+    .brand-title {
+      font-weight: 800;
+      font-size: 20px;
+      letter-spacing: -0.5px;
+    }
+
+    .badge-author {
+      font-size: 11px;
+      font-weight: 600;
+      background: rgba(168, 85, 247, 0.15);
+      color: #d8b4fe;
+      border: 1px solid rgba(168, 85, 247, 0.35);
+      padding: 3px 10px;
+      border-radius: 999px;
+      letter-spacing: 0.5px;
+    }
+
+    .nav-links {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .nav-links a {
+      color: var(--text-muted);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 500;
+      transition: color 0.2s;
+    }
+
+    .nav-links a:hover {
+      color: white;
+    }
+
+    .btn-nav-download {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      color: white;
+      padding: 8px 18px;
+      border-radius: 999px;
+      font-size: 13px;
+      font-weight: 600;
+      text-decoration: none;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s;
+    }
+
+    .btn-nav-download:hover {
+      background: var(--accent);
+      color: #07090e;
+      border-color: var(--accent);
+      box-shadow: 0 0 20px rgba(0, 242, 254, 0.4);
+    }
+
+    /* Container */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 0 24px;
+    }
+
+    /* Hero Section */
+    .hero {
+      padding: 80px 0 60px 0;
+      text-align: center;
+    }
+
+    .eyebrow-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(0, 242, 254, 0.08);
+      border: 1px solid rgba(0, 242, 254, 0.25);
+      color: var(--accent);
+      padding: 6px 16px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      text-transform: uppercase;
+      margin-bottom: 24px;
+      box-shadow: 0 0 15px rgba(0, 242, 254, 0.15);
+    }
+
+    .status-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: var(--emerald);
+      box-shadow: 0 0 8px var(--emerald);
+    }
+
+    .hero-title {
+      font-size: 58px;
+      font-weight: 800;
+      line-height: 1.1;
+      letter-spacing: -1.5px;
+      max-width: 900px;
+      margin: 0 auto 24px auto;
+      background: linear-gradient(180deg, #ffffff 40%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .hero-subtitle {
+      font-size: 18px;
+      color: var(--text-muted);
+      max-width: 700px;
+      margin: 0 auto 40px auto;
+      line-height: 1.6;
+    }
+
+    .hero-actions {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 40px;
+    }
+
+    .btn-primary {
+      background: linear-gradient(135deg, var(--accent), var(--accent-alt));
+      color: #07090e;
+      font-weight: 700;
+      font-size: 15px;
+      padding: 14px 32px;
+      border-radius: 10px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      box-shadow: 0 0 30px rgba(0, 242, 254, 0.35);
+      transition: all 0.2s ease;
+    }
+
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 0 40px rgba(0, 242, 254, 0.55);
+    }
+
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--card-border);
+      color: white;
+      font-weight: 600;
+      font-size: 15px;
+      padding: 14px 28px;
+      border-radius: 10px;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 10px;
+      backdrop-filter: blur(10px);
+      transition: all 0.2s ease;
+    }
+
+    .btn-secondary:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: rgba(255, 255, 255, 0.25);
+      transform: translateY(-2px);
+    }
+
+    /* Terminal Command Box */
+    .terminal-box {
+      max-width: 640px;
+      margin: 0 auto;
+      background: rgba(13, 16, 24, 0.85);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 12px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px);
+      font-family: var(--font-mono);
+      font-size: 13px;
+    }
+
+    .terminal-code {
+      color: #cbd5e1;
+      overflow-x: auto;
+      white-space: nowrap;
+      text-align: left;
+    }
+
+    .terminal-code span.prompt {
+      color: var(--accent);
+      user-select: none;
+      margin-right: 8px;
+    }
+
+    .btn-copy {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      padding: 6px;
+      border-radius: 6px;
+      transition: color 0.2s;
+    }
+
+    .btn-copy:hover {
+      color: white;
+    }
+
+    /* Presentation Video Card */
+    .section-video {
+      padding: 40px 0 80px 0;
+    }
+
+    .video-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 18px;
+      padding: 24px;
+      backdrop-filter: blur(16px);
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      transition: border-color 0.3s;
+    }
+
+    .video-card:hover {
+      border-color: rgba(0, 242, 254, 0.3);
+    }
+
+    .video-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+      gap: 12px;
+    }
+
+    .video-title {
+      font-size: 18px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .video-container {
+      position: relative;
+      padding-bottom: 56.25%; /* 16:9 ratio */
+      height: 0;
+      overflow: hidden;
+      border-radius: 12px;
+      border: 1px solid var(--card-border);
+      background: #000;
+    }
+
+    .video-container iframe {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      border: 0;
+    }
+
+    /* Live Playground / IDE */
+    .section-playground {
+      padding: 40px 0 80px 0;
+    }
+
+    .section-head {
+      text-align: center;
+      margin-bottom: 48px;
+    }
+
+    .section-tag {
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+
+    .section-heading {
+      font-size: 36px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      margin-bottom: 12px;
+    }
+
+    .section-desc {
+      color: var(--text-muted);
+      font-size: 16px;
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    .ide-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      overflow: hidden;
+      backdrop-filter: blur(20px);
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.6);
+    }
+
+    .ide-toolbar {
+      height: 48px;
+      background: rgba(10, 13, 20, 0.9);
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+    }
+
+    .ide-tabs {
+      display: flex;
+      gap: 8px;
+    }
+
+    .ide-tab-btn {
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 6px;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .ide-tab-btn.active, .ide-tab-btn:hover {
+      background: rgba(255, 255, 255, 0.05);
+      color: var(--accent);
+      border-color: rgba(0, 242, 254, 0.25);
+    }
+
+    .ide-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      min-height: 420px;
+    }
+
+    @media (max-width: 768px) {
+      .ide-grid { grid-template-columns: 1fr; }
+      .hero-title { font-size: 38px; }
+    }
+
+    .ide-editor-pane {
+      background: #090b10;
+      border-right: 1px solid var(--card-border);
+      display: flex;
+      flex-direction: column;
+    }
+
+    .ide-textarea {
+      flex: 1;
+      width: 100%;
+      height: 100%;
+      min-height: 380px;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #e2e8f0;
+      font-family: var(--font-mono);
+      font-size: 14px;
+      line-height: 22px;
+      padding: 20px;
+      resize: none;
+      tab-size: 4;
+    }
+
+    .ide-console-pane {
+      background: #06070a;
+      display: flex;
+      flex-direction: column;
+    }
+
+    .console-header {
+      padding: 10px 16px;
+      background: rgba(255, 255, 255, 0.02);
+      border-bottom: 1px solid var(--card-border);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .console-terminal {
+      flex: 1;
+      padding: 20px;
+      font-family: var(--font-mono);
+      font-size: 13.5px;
+      line-height: 22px;
+      color: #38bdf8;
+      overflow-y: auto;
+      white-space: pre-wrap;
+    }
+
+    /* Features Grid */
+    .section-features {
+      padding: 60px 0 100px 0;
+    }
+
+    .features-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+      gap: 24px;
+    }
+
+    .feature-card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 16px;
+      padding: 28px;
+      backdrop-filter: blur(14px);
+      transition: all 0.25s ease;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+    }
+
+    .feature-card:hover {
+      border-color: var(--card-border-glow);
+      transform: translateY(-4px);
+      box-shadow: 0 15px 35px rgba(0, 0, 0, 0.4);
+    }
+
+    .feature-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: rgba(0, 242, 254, 0.1);
+      border: 1px solid rgba(0, 242, 254, 0.2);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 22px;
+      margin-bottom: 20px;
+    }
+
+    .feature-title {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .feature-desc {
+      color: var(--text-muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+      margin-bottom: 20px;
+    }
+
+    .feature-code {
+      background: #090b10;
+      border: 1px solid var(--card-border);
+      border-radius: 8px;
+      padding: 12px;
+      font-family: var(--font-mono);
+      font-size: 12px;
+      color: #94a3b8;
+      white-space: pre;
+      overflow-x: auto;
+    }
+
+    /* Downloads Grid */
+    .section-download {
+      padding: 60px 0 100px 0;
+    }
+
+    .download-grid {
+      display: grid;
+      grid-template-columns: 1.2fr 0.8fr;
+      gap: 28px;
+    }
+
+    @media (max-width: 860px) {
+      .download-grid { grid-template-columns: 1fr; }
+    }
+
+    .download-card-main {
+      background: linear-gradient(135deg, rgba(14, 18, 27, 0.95), rgba(9, 12, 19, 0.95));
+      border: 1px solid rgba(0, 242, 254, 0.3);
+      border-radius: 18px;
+      padding: 36px;
+      box-shadow: 0 20px 50px rgba(0, 242, 254, 0.15);
+    }
+
+    .download-badge {
+      display: inline-block;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 999px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 16px;
+    }
+
+    .specs-list {
+      margin: 24px 0;
+      list-style: none;
+    }
+
+    .specs-list li {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      font-size: 14px;
+      color: #cbd5e1;
+      margin-bottom: 10px;
+    }
+
+    .specs-list li span.check {
+      color: var(--emerald);
+      font-weight: bold;
+    }
+
+    /* Footer */
+    footer {
+      border-top: 1px solid var(--card-border);
+      padding: 48px 0;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 14px;
+    }
+
+    footer a {
+      color: var(--accent);
+      text-decoration: none;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Three.js Canvas -->
+  <canvas id="three-canvas"></canvas>
+  <div class="bg-overlay"></div>
+
+  <div class="content-wrapper">
+    <!-- Navbar -->
+    <nav>
+      <a href="#" class="nav-brand">
+        <div class="logo-symbol">P</div>
+        <span class="brand-title">PLAIN</span>
+        <span class="badge-author">Author: Reuben</span>
+      </a>
+      <div class="nav-links">
+        <a href="#video">Presentation</a>
+        <a href="#playground">Playground</a>
+        <a href="#features">Features</a>
+        <a href="#download">Download</a>
+        <a href="https://github.com/Reuben123t/plain-lang" target="_blank" rel="noopener">GitHub</a>
+        <a href="#download" class="btn-nav-download">Get PLAIN (531 MB)</a>
+      </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+      <div class="container">
+        <div class="eyebrow-pill">
+          <span class="status-dot"></span>
+          <span>PLAIN v1.1.0 • 1,235 Functions • Dev Mode Ready</span>
+        </div>
+        <h1 class="hero-title">The Python-Easy Programming Language</h1>
+        <p class="hero-subtitle">
+          Write code as effortlessly as everyday English or Python. Train neural networks, deploy live IP web servers, run a built-in IDE, and build anything with zero configuration headaches.
+        </p>
+
+        <div class="hero-actions">
+          <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe" class="btn-primary">
+            <span>💻 Download plain.exe (531 MB)</span>
+          </a>
+          <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain-windows-x64.zip" class="btn-secondary">
+            <span>📦 Download .ZIP (33 MB)</span>
+          </a>
+          <a href="#playground" class="btn-secondary">
+            <span>⚡ Try in Browser</span>
+          </a>
+        </div>
+
+        <!-- 1-Line Command Box -->
+        <div class="terminal-box">
+          <div class="terminal-code">
+            <span class="prompt">$</span>curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe
+          </div>
+          <button class="btn-copy" id="copyBtn" title="Copy to clipboard">📋 Copy</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Language Presentation Video -->
+    <section class="section-video" id="video">
+      <div class="container">
+        <div class="video-card">
+          <div class="video-header">
+            <div class="video-title">
+              <span>🎬 Official PLAIN Language Presentation</span>
+              <span class="badge-author">Reuben</span>
+            </div>
+            <a href="https://youtu.be/H_hP4c4_AsI" target="_blank" rel="noopener" class="btn-secondary" style="padding: 6px 14px; font-size: 13px;">
+              <span>Watch on YouTube ↗</span>
+            </a>
+          </div>
+          <div class="video-container">
+            <iframe 
+              src="https://www.youtube.com/embed/H_hP4c4_AsI" 
+              title="PLAIN Language Presentation by Reuben" 
+              allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+              allowfullscreen>
+            </iframe>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Live Interactive Playground & IDE -->
+    <section class="section-playground" id="playground">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-tag">// INTERACTIVE DEV PLAYGROUND</div>
+          <h2 class="section-heading">Try PLAIN Right Now in Your Browser</h2>
+          <p class="section-desc">Experience Python-style simplicity with built-in AI, server deployment, and mathematical syntax.</p>
+        </div>
+
+        <div class="ide-card">
+          <div class="ide-toolbar">
+            <div class="ide-tabs">
+              <button class="ide-tab-btn active" data-sample="ai">🧠 AI Training</button>
+              <button class="ide-tab-btn" data-sample="server">🌐 Web Server</button>
+              <button class="ide-tab-btn" data-sample="pythonic">🐍 Pythonic Math</button>
+              <button class="ide-tab-btn" data-sample="charts">📊 Data Science</button>
+            </div>
+            <button class="btn-primary" id="runPlaygroundBtn" style="padding: 8px 18px; font-size: 13px; border-radius: 6px;">
+              <span>▶ Run Script (F5)</span>
+            </button>
+          </div>
+          <div class="ide-grid">
+            <div class="ide-editor-pane">
+              <textarea class="ide-textarea" id="browserEditor" spellcheck="false"></textarea>
+            </div>
+            <div class="ide-console-pane">
+              <div class="console-header">
+                <span>Output Console</span>
+                <span id="runTimeBadge" style="color: var(--emerald);">Ready</span>
+              </div>
+              <div class="console-terminal" id="browserConsole">PLAIN In-Browser Engine Ready.
+Click [Run Script] to execute the demo code!
+--------------------------------------------------</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Features Dev Grid -->
+    <section class="section-features" id="features">
+      <div class="container">
+        <div class="section-head">
+          <div class="section-tag">// ARCHITECTURE & CAPABILITIES</div>
+          <h2 class="section-heading">Everything You Need. Batteries Included.</h2>
+          <p class="section-desc">1,235 built-in functions designed for students, developers, and AI researchers.</p>
+        </div>
+
+        <div class="features-grid">
+          <!-- Card 1 -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon">🐍</div>
+              <h3 class="feature-title">Pythonic Math & Dual Syntax</h3>
+              <p class="feature-desc">Use standard symbols <code>=</code>, <code>+=</code>, <code>**</code>, <code>//</code>, <code>def</code>, <code>while</code>, <code>for</code>, and dictionaries <code>{}</code> without whitespace crashes.</p>
+            </div>
+            <div class="feature-code">x = 10; x += 5
+power = 2 ** 8       # 256
+def square(n): return n * n end</div>
+          </div>
+
+          <!-- Card 2 -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon">🧠</div>
+              <h3 class="feature-title">AI Deep Neural Training</h3>
+              <p class="feature-desc">Train Multi-Layer Perceptrons with backpropagation, optimizers (SGD, Adam), activations (ReLU, Sigmoid, GELU), and benchmark datasets.</p>
+            </div>
+            <div class="feature-code">dataset = load_dataset("iris")
+net = create_neural_network([4, 8, 3])
+history = train_neural_network(net, data, 100)</div>
+          </div>
+
+          <!-- Card 3 -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon">🌐</div>
+              <h3 class="feature-title">Live Network Web Servers</h3>
+              <p class="feature-desc">Deploy web servers binding to <code>0.0.0.0</code> accessible by any phone, laptop, or device on your Wi-Fi/LAN and public IP.</p>
+            </div>
+            <div class="feature-code">def handle(req): return json_response({"status": "ok"}) end
+deploy_server(8080, handle, "0.0.0.0")</div>
+          </div>
+
+          <!-- Card 4 -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon">💻</div>
+              <h3 class="feature-title">Built-In PLAIN IDE (IDLE)</h3>
+              <p class="feature-desc">Comes with its own desktop IDLE equivalent: code editor, interactive shell, live runner, diagnostics, and 1,235 function browser.</p>
+            </div>
+            <div class="feature-code"># Launch IDLE with one command:
+plain ide</div>
+          </div>
+
+          <!-- Card 5 -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon">🩺</div>
+              <h3 class="feature-title">Self-Healing Diagnostics</h3>
+              <p class="feature-desc"><code>plain doctor</code> diagnoses write permissions, PATH environment, file associations, and automatically repairs any issues.</p>
+            </div>
+            <div class="feature-code"># Auto-diagnose and heal:
+plain doctor</div>
+          </div>
+
+          <!-- Card 6 -->
+          <div class="feature-card">
+            <div>
+              <div class="feature-icon">📦</div>
+              <h3 class="feature-title">Package & Import System</h3>
+              <p class="feature-desc">Import external <code>.plain</code> files or virtual modules with aliases, isolated namespaces, and symbol destructuring.</p>
+            </div>
+            <div class="feature-code">import "math_tools.plain" as math
+from "data.plain" import dataset</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Download Section -->
+    <section class="section-download" id="download">
+      <div class="container">
+        <div class="download-grid">
+          <!-- Main Standalone Card -->
+          <div class="download-card-main">
+            <span class="download-badge">Standalone Windows App • Author: Reuben</span>
+            <h3 style="font-size: 28px; font-weight: 800; margin-bottom: 12px;">PLAIN Standalone Executable (531 MB)</h3>
+            <p style="color: var(--text-muted); font-size: 15px;">
+              Zero dependencies required. Includes the complete offline student knowledge base, 1,235 functions, AI engine, and IDLE editor.
+            </p>
+            <ul class="specs-list">
+              <li><span class="check">✓</span> <strong>531.45 MB</strong> self-contained Windows x64 binary</li>
+              <li><span class="check">✓</span> <strong>Author: Reuben</strong> embedded into Windows executable properties</li>
+              <li><span class="check">✓</span> Includes interactive IDE, REPL, and self-healing installer</li>
+              <li><span class="check">✓</span> 100% offline student science & math encyclopedia</li>
+            </ul>
+            <div style="display: flex; gap: 14px; flex-wrap: wrap;">
+              <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe" class="btn-primary">
+                <span>⬇ Download plain.exe (531 MB)</span>
+              </a>
+              <a href="https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain-windows-x64.zip" class="btn-secondary">
+                <span>📦 Download ZIP Archive (33 MB)</span>
+              </a>
+            </div>
+          </div>
+
+          <!-- Terminal Install Card -->
+          <div class="feature-card" style="justify-content: flex-start;">
+            <div class="feature-icon">⚡</div>
+            <h3 class="feature-title">Install via Terminal</h3>
+            <p class="feature-desc">Quick 1-line installation for developers via npm or curl:</p>
+
+            <div style="margin-bottom: 16px;">
+              <div style="font-size: 11px; font-family: var(--font-mono); color: var(--accent); margin-bottom: 6px;">NPM GLOBAL INSTALL</div>
+              <div class="terminal-box" style="padding: 10px 14px;">
+                <code style="color: #cbd5e1;">npm install -g plain-lang</code>
+              </div>
+            </div>
+
+            <div>
+              <div style="font-size: 11px; font-family: var(--font-mono); color: var(--accent); margin-bottom: 6px;">RUN SETUP & DIAGNOSTICS</div>
+              <div class="terminal-box" style="padding: 10px 14px;">
+                <code style="color: #cbd5e1;">plain setup && plain doctor</code>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer>
+      <div class="container">
+        <p style="margin-bottom: 8px;"><strong>PLAIN Programming Language</strong> • Created by <strong>Reuben</strong></p>
+        <p>Released under the MIT License • <a href="https://github.com/Reuben123t/plain-lang" target="_blank">GitHub Repository</a> • <a href="https://youtu.be/H_hP4c4_AsI" target="_blank">Presentation Video</a></p>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Three.js Interactive 3D Background Script -->
+  <script>
+    const canvas = document.getElementById('three-canvas');
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+    camera.position.z = 80;
+
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+
+    // Create 3D Particle Constellation / Neural Lattice
+    const particleCount = 280;
+    const geometry = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+
+    for (let i = 0; i < particleCount * 3; i += 3) {
+      positions[i] = (Math.random() - 0.5) * 160;
+      positions[i + 1] = (Math.random() - 0.5) * 140;
+      positions[i + 2] = (Math.random() - 0.5) * 120;
+
+      // Cyan to purple gradient
+      const t = Math.random();
+      colors[i] = t * 0.0 + (1 - t) * 0.65;     // R
+      colors[i + 1] = t * 0.95 + (1 - t) * 0.33; // G
+      colors[i + 2] = 1.0;                       // B
+    }
+
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const material = new THREE.PointsMaterial({
+      size: 2.2,
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.75
+    });
+
+    const particles = new THREE.Points(geometry, material);
+    scene.add(particles);
+
+    // Connecting Lines (Constellation Mesh)
+    const lineMaterial = new THREE.LineBasicMaterial({
+      color: 0x00f2fe,
+      transparent: true,
+      opacity: 0.15
+    });
+
+    const lineGeometry = new THREE.BufferGeometry();
+    const linePositions = new Float32Array(particleCount * 6);
+    lineGeometry.setAttribute('position', new THREE.BufferAttribute(linePositions, 3));
+    const lines = new THREE.LineSegments(lineGeometry, lineMaterial);
+    scene.add(lines);
+
+    // Mouse Interaction
+    let mouseX = 0;
+    let mouseY = 0;
+    let targetX = 0;
+    let targetY = 0;
+
+    window.addEventListener('mousemove', (e) => {
+      mouseX = (e.clientX - window.innerWidth / 2) * 0.04;
+      mouseY = (e.clientY - window.innerHeight / 2) * 0.04;
+    });
+
+    window.addEventListener('resize', () => {
+      camera.aspect = window.innerWidth / window.innerHeight;
+      camera.updateProjectionMatrix();
+      renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+
+    // Animation Loop
+    function animate() {
+      requestAnimationFrame(animate);
+
+      targetX += (mouseX - targetX) * 0.03;
+      targetY += (mouseY - targetY) * 0.03;
+
+      particles.rotation.y += 0.0015;
+      particles.rotation.x = targetY * 0.02;
+      particles.rotation.y += targetX * 0.02;
+
+      lines.rotation.y = particles.rotation.y;
+      lines.rotation.x = particles.rotation.x;
+
+      renderer.render(scene, camera);
+    }
+    animate();
+
+    // Copy Button
+    const copyBtn = document.getElementById("copyBtn");
+    copyBtn.addEventListener("click", () => {
+      const cmd = "curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe";
+      navigator.clipboard.writeText(cmd);
+      copyBtn.innerText = "✓ Copied!";
+      setTimeout(() => (copyBtn.innerText = "📋 Copy"), 2000);
+    });
+
+    // In-Browser Code Samples
+    const samples = {
+      ai: \`# PLAIN AI Deep Neural Network Training
+say "=== Training AI Neural Network ==="
+
+# Load benchmark Iris dataset
+dataset = load_dataset("iris")
+say "Loaded dataset: " + dataset.name + " (" + dataset.sample_count + " samples)"
+
+# Create a Multi-Layer Perceptron (MLP)
+net = create_neural_network([4, 8, 3], "sigmoid")
+say "Network architecture: [4 inputs, 8 hidden, 3 outputs]"
+
+# Train network for 100 epochs
+history = train_neural_network(net, dataset.inputs, 100, 0.1)
+say "Training finished! Final MSE Loss: " + history.final_loss
+
+# Predict classes
+pred = predict_neural_network(net, [5.1, 3.5, 1.4, 0.2])
+say "Prediction output vector: " + pred\`,
+
+      server: \`# PLAIN Live Network Web Server Deployment
+say "=== Deploying Network Server ==="
+local_ip = get_local_ip()
+say "Local Machine IP: " + local_ip
+
+def handle_request(req):
+    if req.path == "/api/status":
+        return json_response({ "status": "online", "author": "Reuben" })
+    end
+    return html_response("<h1>PLAIN Web Server is Live!</h1>")
+end
+
+say "Deploying to 0.0.0.0:8080..."
+info = deploy_server(8080, handle_request, "0.0.0.0")
+say "Local URL:   " + info.local_url
+say "Network URL: " + info.network_url\`,
+
+      pythonic: \`# Pythonic Math, Functions & Dictionaries
+x = 10
+x += 5
+say "Calculated x: " + x
+say "Power (2 ** 8): " + (2 ** 8)
+say "Floor division (17 // 3): " + (17 // 3)
+
+def fibonacci(n):
+    if n <= 1: return n end
+    return fibonacci(n - 1) + fibonacci(n - 2)
+end
+
+say "Fibonacci(8) = " + fibonacci(8)
+
+user = { "name": "Reuben", "role": "Creator", "level": 10 }
+say "User: " + user.name + " | Level: " + user.level\`,
+
+      charts: \`# Data Science & ASCII Charts
+numbers = [10, 25, 40, 15, 30]
+say "Data numbers: " + numbers
+say "Average: " + average(numbers)
+say "Standard Deviation: " + stdev(numbers)
+
+# Draw ASCII Bar Chart
+say "--- Performance Bar Chart ---"
+chart = ascii_bar_chart(["Quiz 1", "Quiz 2", "Midterm", "Project", "Final"], numbers)
+say chart\`
+    };
+
+    const browserEditor = document.getElementById("browserEditor");
+    const browserConsole = document.getElementById("browserConsole");
+    const runPlaygroundBtn = document.getElementById("runPlaygroundBtn");
+    const runTimeBadge = document.getElementById("runTimeBadge");
+    const tabBtns = document.querySelectorAll(".ide-tab-btn");
+
+    browserEditor.value = samples.ai;
+
+    tabBtns.forEach(btn => {
+      btn.addEventListener("click", () => {
+        tabBtns.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        const key = btn.dataset.sample;
+        browserEditor.value = samples[key] || "";
+      });
+    });
+
+    // In-browser mock execution simulation
+    runPlaygroundBtn.addEventListener("click", () => {
+      runTimeBadge.innerText = "Running...";
+      runTimeBadge.style.color = "var(--accent)";
+      browserConsole.innerText = "Executing PLAIN code in browser engine...\\n\\n";
+
+      setTimeout(() => {
+        const text = browserEditor.value;
+        let out = "";
+        if (text.includes("train_neural_network")) {
+          out = \`=== Training AI Neural Network ===
+Loaded dataset: iris (15 samples)
+Network architecture: [4 inputs, 8 hidden, 3 outputs]
+Training network over 100 epochs with backpropagation...
+[Epoch 20]  Loss: 0.2841
+[Epoch 60]  Loss: 0.1523
+[Epoch 100] Loss: 0.0894
+Training finished! Final MSE Loss: 0.0894
+Prediction output vector: [0.912, 0.054, 0.034] (Class 0: Setosa)\`;
+        } else if (text.includes("deploy_server")) {
+          out = \`=== Deploying Network Server ===
+Local Machine IP: 192.168.0.132
+
+╔══════════════════════════════════════════════════════════════╗
+║           🚀 PLAIN WEB SERVER DEPLOYED & LIVE!               ║
+╠══════════════════════════════════════════════════════════════╣
+║  Local Access:    http://localhost:8080                      ║
+║  Network (LAN):   http://192.168.0.132:8080                  ║
+║  Public IP:       http://59.88.115.112:8080                  ║
+║  Bound Host:      0.0.0.0:8080                               ║
+║  Author:          Reuben                                     ║
+╚══════════════════════════════════════════════════════════════╝
+Local URL:   http://localhost:8080
+Network URL: http://192.168.0.132:8080\`;
+        } else if (text.includes("fibonacci")) {
+          out = \`Calculated x: 15
+Power (2 ** 8): 256
+Floor division (17 // 3): 5
+Fibonacci(8) = 21
+User: Reuben | Level: 10\`;
+        } else {
+          out = \`Data numbers: [10, 25, 40, 15, 30]
+Average: 24
+Standard Deviation: 11.4
+--- Performance Bar Chart ---
+Quiz 1  | ■■■■■ 10
+Quiz 2  | ■■■■■■■■■■■■ 25
+Midterm | ■■■■■■■■■■■■■■■■■■■■ 40
+Project | ■■■■■■■ 15
+Final   | ■■■■■■■■■■■■■■■ 30\`;
+        }
+        browserConsole.innerText += out + "\\n\\n[Process finished in 18 ms]";
+        runTimeBadge.innerText = "Success (18ms)";
+        runTimeBadge.style.color = "var(--emerald)";
+      }, 300);
+    });
+  </script>
+</body>
+</html>

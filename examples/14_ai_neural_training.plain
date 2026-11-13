@@ -38,3 +38,4 @@ say "Prediction for [0, 1] (Target: 1): " + pred_01[0]
 say "Prediction for [1, 1] (Target: 0): " + pred_11[0]
 
 say "AI Training demo completed successfully!"
+

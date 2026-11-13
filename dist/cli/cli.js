@@ -44,6 +44,8 @@ const help_1 = require("./help");
 const server_1 = require("../playground/server");
 const updater_1 = require("../builtins/updater");
 const server_deploy_1 = require("../builtins/server_deploy");
+const server_2 = require("../ide/server");
+const installer_1 = require("../setup/installer");
 async function main() {
     const args = process.argv.slice(2);
     if (args.length === 0) {
@@ -56,6 +58,29 @@ async function main() {
         console.log(`PLAIN Language version ${updater_1.CURRENT_PLAIN_VERSION}`);
         console.log("Author: Reuben");
         console.log("Copyright (C) 2026 Reuben. All rights reserved.");
+        return;
+    }
+    if (command === "ide" || command === "idle") {
+        const fileArg = args[1] && args[1].endsWith(".plain") ? path.resolve(process.cwd(), args[1]) : undefined;
+        const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 4200;
+        await (0, server_2.startPlainIde)(portArg, fileArg);
+        return;
+    }
+    if (command === "setup" || command === "install") {
+        const manager = new installer_1.PlainSystemManager();
+        await manager.runInteractiveSetup();
+        return;
+    }
+    if (command === "doctor" || command === "diagnose" || command === "health") {
+        const manager = new installer_1.PlainSystemManager();
+        const healthy = await manager.runDoctor(true);
+        if (!healthy)
+            process.exit(1);
+        return;
+    }
+    if (command === "uninstall" || command === "remove") {
+        const manager = new installer_1.PlainSystemManager();
+        manager.cleanUninstall();
         return;
     }
     if (command === "update" || command === "upgrade") {

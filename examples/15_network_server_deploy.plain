@@ -35,3 +35,4 @@ say "Network URL: " + info.network_url
 # Stop server cleanly for demo
 stop_server = stop_deployed_server()
 say "Server demonstration finished successfully."
+

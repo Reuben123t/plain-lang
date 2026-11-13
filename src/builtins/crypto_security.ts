@@ -170,3 +170,4 @@ export const cryptoSecurityBuiltins = {
     return crypto.timingSafeEqual(bufA, bufB);
   }
 };
+

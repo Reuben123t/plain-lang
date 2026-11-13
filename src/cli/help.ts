@@ -128,10 +128,14 @@ Supports both English and Pythonic syntax with 1,200+ built-in functions.
 COMMANDS:
   plain <file.plain>         Run a .plain script
   plain run <file.plain>     Run a .plain script
-  plain deploy [port]        Deploy a live network web server accessible via IP
+  plain ide [file.plain]     Launch the PLAIN IDE (Python IDLE Equivalent)
+  plain setup                Interactive setup wizard & permissions configurator
+  plain doctor               Run diagnostics and auto-repair any errors
   plain update               Check for software updates and upgrade
-  plain check <file.plain>   Check syntax without executing
+  plain deploy [port]        Deploy a live network web server accessible via IP
   plain repl                 Start the interactive shell
+  plain uninstall            Cleanly uninstall PLAIN and remove shortcuts
+  plain check <file.plain>   Check syntax without executing
   plain playground           Launch the visual web playground
   plain help <topic>         Detailed help (topics: variables, conditions,
                              loops, functions, lists)

@@ -8,6 +8,8 @@ import { getHelp } from "./help";
 import { startPlayground } from "../playground/server";
 import { promptUpdateIfAvailable, performUpdate, CURRENT_PLAIN_VERSION } from "../builtins/updater";
 import { createServerDeployer } from "../builtins/server_deploy";
+import { startPlainIde } from "../ide/server";
+import { PlainSystemManager } from "../setup/installer";
 
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
@@ -24,6 +26,32 @@ export async function main(): Promise<void> {
     console.log(`PLAIN Language version ${CURRENT_PLAIN_VERSION}`);
     console.log("Author: Reuben");
     console.log("Copyright (C) 2026 Reuben. All rights reserved.");
+    return;
+  }
+
+  if (command === "ide" || command === "idle") {
+    const fileArg = args[1] && args[1].endsWith(".plain") ? path.resolve(process.cwd(), args[1]) : undefined;
+    const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 4200;
+    await startPlainIde(portArg, fileArg);
+    return;
+  }
+
+  if (command === "setup" || command === "install") {
+    const manager = new PlainSystemManager();
+    await manager.runInteractiveSetup();
+    return;
+  }
+
+  if (command === "doctor" || command === "diagnose" || command === "health") {
+    const manager = new PlainSystemManager();
+    const healthy = await manager.runDoctor(true);
+    if (!healthy) process.exit(1);
+    return;
+  }
+
+  if (command === "uninstall" || command === "remove") {
+    const manager = new PlainSystemManager();
+    manager.cleanUninstall();
     return;
   }
 

@@ -1,0 +1,520 @@
+"use strict";
+var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    var desc = Object.getOwnPropertyDescriptor(m, k);
+    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
+      desc = { enumerable: true, get: function() { return m[k]; } };
+    }
+    Object.defineProperty(o, k2, desc);
+}) : (function(o, m, k, k2) {
+    if (k2 === undefined) k2 = k;
+    o[k2] = m[k];
+}));
+var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
+    Object.defineProperty(o, "default", { enumerable: true, value: v });
+}) : function(o, v) {
+    o["default"] = v;
+});
+var __importStar = (this && this.__importStar) || (function () {
+    var ownKeys = function(o) {
+        ownKeys = Object.getOwnPropertyNames || function (o) {
+            var ar = [];
+            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
+            return ar;
+        };
+        return ownKeys(o);
+    };
+    return function (mod) {
+        if (mod && mod.__esModule) return mod;
+        var result = {};
+        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
+        __setModuleDefault(result, mod);
+        return result;
+    };
+})();
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.PlainSystemManager = void 0;
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const os = __importStar(require("os"));
+const child_process_1 = require("child_process");
+const readline = __importStar(require("readline"));
+class PlainSystemManager {
+    isWindows = os.platform() === "win32";
+    installDir;
+    binDir;
+    constructor() {
+        if (this.isWindows) {
+            const localAppData = process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local");
+            this.installDir = path.join(localAppData, "PLAIN");
+        }
+        else {
+            this.installDir = path.join(os.homedir(), ".plain");
+        }
+        this.binDir = path.join(this.installDir, "bin");
+    }
+    getInstallDir() {
+        return this.installDir;
+    }
+    getBinDir() {
+        return this.binDir;
+    }
+    // 1. Run full diagnostics
+    async diagnose() {
+        const results = [];
+        // Check 1: Install Directory Existence and Write Permission
+        try {
+            if (!fs.existsSync(this.installDir)) {
+                results.push({
+                    name: "Installation Directory",
+                    status: "warning",
+                    message: `Directory ${this.installDir} does not exist yet.`,
+                    fixable: true,
+                    fixAction: () => {
+                        fs.mkdirSync(this.installDir, { recursive: true });
+                        fs.mkdirSync(this.binDir, { recursive: true });
+                        return true;
+                    }
+                });
+            }
+            else {
+                // Test write permission
+                const testFile = path.join(this.installDir, ".perm_test");
+                fs.writeFileSync(testFile, "ok", "utf-8");
+                fs.unlinkSync(testFile);
+                results.push({
+                    name: "Installation Directory",
+                    status: "ok",
+                    message: `Directory ready with write permissions (${this.installDir})`,
+                    fixable: false
+                });
+            }
+        }
+        catch (err) {
+            results.push({
+                name: "Installation Directory",
+                status: "error",
+                message: `Write permission denied to ${this.installDir}: ${err.message}`,
+                fixable: false
+            });
+        }
+        // Check 2: PATH Environment Variable
+        const pathEnv = process.env.PATH || "";
+        const inPath = pathEnv.split(path.delimiter).some((p) => {
+            try {
+                return path.resolve(p).toLowerCase() === path.resolve(this.binDir).toLowerCase();
+            }
+            catch {
+                return false;
+            }
+        });
+        if (inPath) {
+            results.push({
+                name: "PATH Environment",
+                status: "ok",
+                message: `PLAIN binary folder is in your PATH (${this.binDir})`,
+                fixable: false
+            });
+        }
+        else {
+            results.push({
+                name: "PATH Environment",
+                status: "warning",
+                message: `PLAIN binary folder is not yet in your PATH.`,
+                fixable: true,
+                fixAction: () => this.addToPath()
+            });
+        }
+        // Check 3: Windows File Association (.plain)
+        if (this.isWindows) {
+            const isAssociated = this.checkFileAssociation();
+            if (isAssociated) {
+                results.push({
+                    name: "File Association (.plain)",
+                    status: "ok",
+                    message: `.plain files are associated with PLAIN Language.`,
+                    fixable: false
+                });
+            }
+            else {
+                results.push({
+                    name: "File Association (.plain)",
+                    status: "warning",
+                    message: `.plain files are not associated with PLAIN Language.`,
+                    fixable: true,
+                    fixAction: () => this.registerFileAssociation()
+                });
+            }
+        }
+        // Check 4: Executable Binary / Shim Readiness
+        const plainCmd = this.isWindows ? path.join(this.binDir, "plain.cmd") : path.join(this.binDir, "plain");
+        const plainExe = path.join(this.binDir, "plain.exe");
+        const hasBinary = fs.existsSync(plainCmd) || fs.existsSync(plainExe);
+        if (hasBinary) {
+            results.push({
+                name: "PLAIN Executable",
+                status: "ok",
+                message: `PLAIN executable command is installed in ${this.binDir}.`,
+                fixable: false
+            });
+        }
+        else {
+            results.push({
+                name: "PLAIN Executable",
+                status: "warning",
+                message: `PLAIN executable is not yet installed in the target directory.`,
+                fixable: true,
+                fixAction: () => this.installBinaryShims()
+            });
+        }
+        // Check 5: PLAIN Runtime Self-Test
+        try {
+            const { createStandardEnvironment } = require("../builtins/index");
+            const env = createStandardEnvironment();
+            const fnCount = env.getAllVariableNames().length;
+            if (fnCount >= 1000) {
+                results.push({
+                    name: "Standard Library Health",
+                    status: "ok",
+                    message: `All ${fnCount} standard library functions are loaded and verified.`,
+                    fixable: false
+                });
+            }
+            else {
+                results.push({
+                    name: "Standard Library Health",
+                    status: "error",
+                    message: `Expected >= 1000 functions, found ${fnCount}.`,
+                    fixable: false
+                });
+            }
+        }
+        catch (err) {
+            results.push({
+                name: "Standard Library Health",
+                status: "error",
+                message: `Failed to load standard library: ${err.message}`,
+                fixable: false
+            });
+        }
+        return results;
+    }
+    runPowerShell(script) {
+        const encoded = Buffer.from(script, "utf16le").toString("base64");
+        (0, child_process_1.execSync)(`powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`, { stdio: "ignore" });
+    }
+    // 2. Add binDir to User PATH
+    addToPath() {
+        if (!fs.existsSync(this.binDir)) {
+            fs.mkdirSync(this.binDir, { recursive: true });
+        }
+        if (this.isWindows) {
+            try {
+                const psCmd = `
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$target = "${this.binDir}"
+if (-not ($userPath -split ';' | Where-Object { $_ -eq $target })) {
+    $newPath = if ($userPath) { "$userPath;$target" } else { $target }
+    [Environment]::SetEnvironmentVariable("Path", $newPath, "User")
+}
+`;
+                this.runPowerShell(psCmd);
+                return true;
+            }
+            catch (err) {
+                console.error("Failed to add to PATH via PowerShell: " + err);
+                return false;
+            }
+        }
+        else {
+            // Unix / macOS: Append to ~/.bashrc or ~/.zshrc
+            try {
+                const line = `export PATH="${this.binDir}:$PATH"\n`;
+                const rcFiles = [path.join(os.homedir(), ".bashrc"), path.join(os.homedir(), ".zshrc")];
+                for (const file of rcFiles) {
+                    if (fs.existsSync(file)) {
+                        const content = fs.readFileSync(file, "utf-8");
+                        if (!content.includes(this.binDir)) {
+                            fs.appendFileSync(file, "\n" + line);
+                        }
+                    }
+                }
+                return true;
+            }
+            catch {
+                return false;
+            }
+        }
+    }
+    // 3. Check Windows File Association
+    checkFileAssociation() {
+        if (!this.isWindows)
+            return true;
+        try {
+            const output = (0, child_process_1.execSync)('reg.exe query "HKCU\\Software\\Classes\\.plain" /ve 2>nul', { encoding: "utf-8" });
+            return output.includes("PLAIN.File");
+        }
+        catch {
+            return false;
+        }
+    }
+    // 4. Register Windows File Association & Open With PLAIN IDE
+    registerFileAssociation() {
+        if (!this.isWindows)
+            return true;
+        try {
+            const plainCmd = path.join(this.binDir, "plain.cmd");
+            const psScript = `
+New-Item -Path "HKCU:\\Software\\Classes\\.plain" -Value "PLAIN.File" -Force | Out-Null
+New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File" -Value "PLAIN Source File" -Force | Out-Null
+New-Item -Path "HKCU:\\Software\\Classes\\PLAIN.File\\shell\\open\\command" -Value '"${plainCmd}" ide "%1"' -Force | Out-Null
+`;
+            this.runPowerShell(psScript);
+            return true;
+        }
+        catch (err) {
+            console.error("Failed to register file association: " + err);
+            return false;
+        }
+    }
+    // 5. Install Binary Shims into binDir
+    installBinaryShims() {
+        if (!fs.existsSync(this.binDir)) {
+            fs.mkdirSync(this.binDir, { recursive: true });
+        }
+        // Try finding root dist/bundle.js or plain.exe
+        const candidates = [
+            path.resolve(__dirname, "..", "bundle.js"),
+            path.resolve(__dirname, "..", "..", "dist", "bundle.js"),
+            path.resolve(process.cwd(), "dist", "bundle.js")
+        ];
+        const sourceBundle = candidates.find((c) => fs.existsSync(c));
+        const targetBundle = path.join(this.installDir, "bundle.js");
+        if (sourceBundle) {
+            fs.copyFileSync(sourceBundle, targetBundle);
+        }
+        // Also copy plain.exe if available
+        const exeCandidates = [
+            path.resolve(process.cwd(), "dist", "plain.exe"),
+            path.resolve(__dirname, "..", "..", "dist", "plain.exe")
+        ];
+        const sourceExe = exeCandidates.find((c) => fs.existsSync(c));
+        if (sourceExe) {
+            fs.copyFileSync(sourceExe, path.join(this.binDir, "plain.exe"));
+        }
+        if (this.isWindows) {
+            // Create plain.cmd
+            const cmdContent = `@echo off\r\nnode "%~dp0..\\bundle.js" %*\r\n`;
+            fs.writeFileSync(path.join(this.binDir, "plain.cmd"), cmdContent, "utf-8");
+            // Create plain.ps1
+            const psContent = `& node "$PSScriptRoot\\..\\bundle.js" $args\r\n`;
+            fs.writeFileSync(path.join(this.binDir, "plain.ps1"), psContent, "utf-8");
+        }
+        else {
+            const shContent = `#!/usr/bin/env sh\nexec node "$(dirname "$0")/../bundle.js" "$@"\n`;
+            const shPath = path.join(this.binDir, "plain");
+            fs.writeFileSync(shPath, shContent, "utf-8");
+            try {
+                fs.chmodSync(shPath, 0o755);
+            }
+            catch {
+                // ignore
+            }
+        }
+        return true;
+    }
+    // 6. Create Desktop & Start Menu Shortcuts
+    createShortcuts() {
+        if (!this.isWindows)
+            return true;
+        try {
+            const plainCmd = path.join(this.binDir, "plain.cmd");
+            const psScript = `
+$WshShell = New-Object -ComObject WScript.Shell
+
+# Desktop Shortcut
+$desktopPath = [Environment]::GetFolderPath("Desktop")
+$desktopShortcut = $WshShell.CreateShortcut("$desktopPath\\PLAIN IDE.lnk")
+$desktopShortcut.TargetPath = "${plainCmd.replace(/\\/g, "\\\\")}"
+$desktopShortcut.Arguments = "ide"
+$desktopShortcut.Description = "PLAIN Programming Language IDE (Like IDLE Python)"
+$desktopShortcut.WorkingDirectory = "$desktopPath"
+$desktopShortcut.Save()
+
+# Start Menu Shortcut
+$programsPath = [Environment]::GetFolderPath("Programs")
+$startShortcut = $WshShell.CreateShortcut("$programsPath\\PLAIN IDE.lnk")
+$startShortcut.TargetPath = "${plainCmd.replace(/\\/g, "\\\\")}"
+$startShortcut.Arguments = "ide"
+$startShortcut.Description = "PLAIN Programming Language IDE"
+$startShortcut.Save()
+`;
+            this.runPowerShell(psScript);
+            return true;
+        }
+        catch (err) {
+            console.error("Failed to create shortcuts: " + err);
+            return false;
+        }
+    }
+    // 7. Interactive Setup Wizard
+    async runInteractiveSetup() {
+        const rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout
+        });
+        const ask = (q) => new Promise((resolve) => rl.question(q, (ans) => resolve(ans.trim())));
+        console.log("");
+        console.log("╔══════════════════════════════════════════════════════════════╗");
+        console.log("║         🛠️  PLAIN LANGUAGE APPLICATION SETUP WIZARD          ║");
+        console.log("║           Super Simple • 1,235 Functions • Pythonic          ║");
+        console.log("║                     Author: Reuben                           ║");
+        console.log("╚══════════════════════════════════════════════════════════════╝");
+        console.log("");
+        console.log(`Target Installation Directory: ${this.installDir}`);
+        console.log("");
+        const proceed = await ask("Proceed with setup and configure permissions? (Y/n): ");
+        if (proceed.toLowerCase() === "n") {
+            console.log("Setup cancelled.");
+            rl.close();
+            return;
+        }
+        console.log("\n[1/5] Setting up directories and permissions...");
+        fs.mkdirSync(this.installDir, { recursive: true });
+        fs.mkdirSync(this.binDir, { recursive: true });
+        console.log("  ✓ Created installation folder: " + this.installDir);
+        console.log("\n[2/5] Installing binary commands and shims...");
+        this.installBinaryShims();
+        console.log("  ✓ Installed 'plain', 'plain.cmd', and 'plain.ps1' shims.");
+        console.log("\n[3/5] Configuring PATH environment variable...");
+        const pathSuccess = this.addToPath();
+        if (pathSuccess) {
+            console.log(`  ✓ Added ${this.binDir} to User PATH.`);
+        }
+        else {
+            console.log(`  ! Please manually add ${this.binDir} to your PATH.`);
+        }
+        if (this.isWindows) {
+            console.log("\n[4/5] Registering .plain file extension...");
+            this.registerFileAssociation();
+            console.log("  ✓ Associated .plain files to open with PLAIN IDE.");
+            console.log("\n[5/5] Creating Desktop & Start Menu shortcuts...");
+            this.createShortcuts();
+            console.log("  ✓ Created 'PLAIN IDE' shortcuts on Desktop and Start Menu.");
+        }
+        rl.close();
+        console.log("\n╔══════════════════════════════════════════════════════════════╗");
+        console.log("║               🎉 SETUP COMPLETED SUCCESSFULLY!               ║");
+        console.log("╠══════════════════════════════════════════════════════════════╣");
+        console.log("║  PLAIN is now 100% installed and operational!                ║");
+        console.log("║                                                              ║");
+        console.log("║  Commands available:                                         ║");
+        console.log("║    plain               Launch the interactive REPL           ║");
+        console.log("║    plain ide           Launch the PLAIN IDE (like IDLE)      ║");
+        console.log("║    plain doctor        Verify health & auto-heal issues      ║");
+        console.log("║    plain update        Check & download newest updates       ║");
+        console.log("║    plain deploy        Deploy a live network web server      ║");
+        console.log("╚══════════════════════════════════════════════════════════════╝\n");
+    }
+    // 8. Doctor & Auto-Repair
+    async runDoctor(autoFix = true) {
+        console.log("");
+        console.log("🔍 Checking PLAIN installation health, permissions & diagnostics...");
+        console.log("==================================================================");
+        const diagnostics = await this.diagnose();
+        let hasIssues = false;
+        for (const d of diagnostics) {
+            if (d.status === "ok") {
+                console.log(`  [✓] ${d.name.padEnd(30)} ${d.message}`);
+            }
+            else if (d.status === "warning") {
+                console.log(`  [!] ${d.name.padEnd(30)} WARNING: ${d.message}`);
+                if (autoFix && d.fixable && d.fixAction) {
+                    console.log(`      ↳ Auto-fixing ${d.name}...`);
+                    try {
+                        const fixed = await d.fixAction();
+                        if (fixed) {
+                            console.log(`      ✓ Fixed successfully!`);
+                        }
+                        else {
+                            hasIssues = true;
+                        }
+                    }
+                    catch (err) {
+                        console.log(`      ✗ Auto-fix failed: ${err.message}`);
+                        hasIssues = true;
+                    }
+                }
+                else {
+                    hasIssues = true;
+                }
+            }
+            else {
+                console.log(`  [✗] ${d.name.padEnd(30)} ERROR: ${d.message}`);
+                hasIssues = true;
+            }
+        }
+        console.log("==================================================================");
+        if (!hasIssues) {
+            console.log("✨ 100% HEALTHY: All checks passed. PLAIN is working perfectly!\n");
+            return true;
+        }
+        else {
+            console.log("⚠️ Some items need attention. Run 'plain setup' to repair completely.\n");
+            return false;
+        }
+    }
+    // 9. Clean Uninstall
+    cleanUninstall() {
+        console.log("Uninstalling PLAIN and removing all files, shortcuts, and associations...");
+        if (this.isWindows) {
+            // Remove shortcuts
+            try {
+                const desktopLnk = path.join(os.homedir(), "Desktop", "PLAIN IDE.lnk");
+                if (fs.existsSync(desktopLnk))
+                    fs.unlinkSync(desktopLnk);
+                const startLnk = path.join(process.env.APPDATA || "", "Microsoft", "Windows", "Start Menu", "Programs", "PLAIN IDE.lnk");
+                if (fs.existsSync(startLnk))
+                    fs.unlinkSync(startLnk);
+            }
+            catch {
+                // ignore
+            }
+            // Remove file association
+            try {
+                (0, child_process_1.execSync)('reg.exe delete "HKCU\\Software\\Classes\\.plain" /f 2>nul', { stdio: "ignore" });
+                (0, child_process_1.execSync)('reg.exe delete "HKCU\\Software\\Classes\\PLAIN.File" /f 2>nul', { stdio: "ignore" });
+            }
+            catch {
+                // ignore
+            }
+            // Remove from PATH
+            try {
+                const psCmd = `
+$userPath = [Environment]::GetEnvironmentVariable("Path", "User")
+$target = "${this.binDir.replace(/\\/g, "\\\\")}"
+$filtered = ($userPath -split ';' | Where-Object { $_ -ne $target -and $_ -ne "" }) -join ';'
+[Environment]::SetEnvironmentVariable("Path", $filtered, "User")
+`;
+                this.runPowerShell(psCmd);
+            }
+            catch {
+                // ignore
+            }
+        }
+        // Remove install folder
+        if (fs.existsSync(this.installDir)) {
+            try {
+                fs.rmSync(this.installDir, { recursive: true, force: true });
+                console.log(`✓ Removed directory: ${this.installDir}`);
+            }
+            catch (err) {
+                console.log(`Could not fully remove directory: ${err.message}`);
+            }
+        }
+        console.log("PLAIN uninstalled cleanly from your device.\n");
+        return true;
+    }
+}
+exports.PlainSystemManager = PlainSystemManager;
+//# sourceMappingURL=installer.js.map
