@@ -6,11 +6,14 @@ import { Parser } from "../parser/parser";
 import { startRepl } from "./repl";
 import { getHelp } from "./help";
 import { startPlayground } from "../playground/server";
+import { promptUpdateIfAvailable, performUpdate, CURRENT_PLAIN_VERSION } from "../builtins/updater";
+import { createServerDeployer } from "../builtins/server_deploy";
 
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
+    await promptUpdateIfAvailable();
     startRepl();
     return;
   }
@@ -18,7 +21,21 @@ export async function main(): Promise<void> {
   const command = args[0];
 
   if (command === "--version" || command === "-v" || command === "version") {
-    console.log("PLAIN Language version 1.0.0");
+    console.log(`PLAIN Language version ${CURRENT_PLAIN_VERSION}`);
+    console.log("Author: Reuben");
+    console.log("Copyright (C) 2026 Reuben. All rights reserved.");
+    return;
+  }
+
+  if (command === "update" || command === "upgrade") {
+    await performUpdate();
+    return;
+  }
+
+  if (command === "deploy") {
+    const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
+    const deployer = createServerDeployer();
+    await deployer.deploy_server(portArg, undefined, "0.0.0.0");
     return;
   }
 

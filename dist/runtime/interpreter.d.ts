@@ -16,6 +16,7 @@ export declare class Interpreter {
     private currentEnv;
     private sourceCode?;
     private sourceFile?;
+    private baseDir;
     private onSay;
     private onShow;
     private onAsk;
@@ -25,6 +26,8 @@ export declare class Interpreter {
     run(program: Program): Promise<void>;
     executeStatement(statement: Statement): Promise<void>;
     private executeSet;
+    private executeAssignment;
+    private executeImport;
     private executeSay;
     private executeShow;
     private executeAsk;

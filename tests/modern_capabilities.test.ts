@@ -39,7 +39,7 @@ describe("Modern Capabilities: Web, Data Science, AI & Automation", () => {
     assert.equal(rendered, "Hello, Reuben! You have 5 messages.");
 
     const query = parseQuery.nativeFn("?search=plain&limit=10");
-    assert.deepEqual(query, ["search: plain", "limit: 10"]);
+    assert.deepEqual(query, { search: "plain", limit: "10" });
   });
 
   it("evaluates Data Science functions (CSV, tables, statistics & charts)", () => {
@@ -169,3 +169,4 @@ say "Review Sentiment: " + item 1 of sent
     assert.equal(outputs[1], "Review Sentiment: positive");
   });
 });
+

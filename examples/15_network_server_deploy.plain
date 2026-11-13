@@ -1,0 +1,37 @@
+# ==========================================================
+# Example 15: Network Web Server Deployment
+# PLAIN Language v1.1.0 • Author: Reuben
+# ==========================================================
+
+say "=== PLAIN Network Server Deployment ==="
+
+# 1. Inspect network configuration
+local_ip_addr = get_local_ip()
+all_ips = get_all_ips()
+say "Local machine IP: " + local_ip_addr
+say "Host system name: " + get_hostname()
+
+# 2. Deploy web server accessible on local LAN and internet
+# Binds to 0.0.0.0 on port 8080
+say "Deploying web server to 0.0.0.0:8080..."
+
+def handle_request(req):
+    path = req.path
+    if path == "/api/status":
+        return json_response({ "status": "online", "author": "Reuben", "engine": "PLAIN" })
+    end
+
+    html = "<h1>Welcome to PLAIN Web Server</h1><p>Created by Reuben</p>"
+    return html_response(html)
+end
+
+# Deploy the server (this opens network port accessible by any device on Wi-Fi)
+info = deploy_server(8080, handle_request, "0.0.0.0")
+
+say "Server deployed successfully!"
+say "Local URL:   " + info.local_url
+say "Network URL: " + info.network_url
+
+# Stop server cleanly for demo
+stop_server = stop_deployed_server()
+say "Server demonstration finished successfully."

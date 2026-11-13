@@ -1,9 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.isPlainObject = isPlainObject;
 exports.isPlainFunction = isPlainFunction;
 exports.plainToString = plainToString;
 exports.plainToBoolean = plainToBoolean;
 exports.getPlainTypeName = getPlainTypeName;
+function isPlainObject(val) {
+    return typeof val === "object" && val !== null && !Array.isArray(val) && val.type !== "function";
+}
 function isPlainFunction(val) {
     return typeof val === "object" && val !== null && val.type === "function";
 }
@@ -30,6 +34,13 @@ function plainToString(value) {
             return plainToString(v);
         });
         return `[${items.join(", ")}]`;
+    }
+    if (isPlainObject(value)) {
+        const entries = Object.entries(value).map(([k, v]) => {
+            const vStr = typeof v === "string" ? `"${v}"` : plainToString(v);
+            return `"${k}": ${vStr}`;
+        });
+        return `{${entries.join(", ")}}`;
     }
     if (isPlainFunction(value)) {
         return `<function ${value.name}>`;
@@ -60,6 +71,8 @@ function getPlainTypeName(value) {
         return "boolean";
     if (Array.isArray(value))
         return "list";
+    if (isPlainObject(value))
+        return "dictionary";
     if (isPlainFunction(value))
         return "function";
     return typeof value;

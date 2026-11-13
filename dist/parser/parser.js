@@ -39,6 +39,16 @@ class Parser {
         switch (token.type) {
             case token_1.TokenType.Set:
                 return this.parseSetStatement();
+            case token_1.TokenType.Import:
+                return this.parseImportStatement();
+            case token_1.TokenType.From:
+                return this.parseFromImportStatement();
+            case token_1.TokenType.Def:
+                return this.parseFunctionDefStatement();
+            case token_1.TokenType.Return:
+                return this.parseReturnStatement();
+            case token_1.TokenType.While:
+                return this.parseWhileStatement();
             case token_1.TokenType.Say:
                 return this.parseSayStatement();
             case token_1.TokenType.Show:
@@ -63,6 +73,18 @@ class Parser {
                 return this.parseListRemoveStatement();
             case token_1.TokenType.Wait:
                 return this.parseWaitStatement();
+            case token_1.TokenType.Identifier: {
+                const next = this.peekNext();
+                if (next &&
+                    (next.type === token_1.TokenType.Equal ||
+                        next.type === token_1.TokenType.PlusEqual ||
+                        next.type === token_1.TokenType.MinusEqual ||
+                        next.type === token_1.TokenType.StarEqual ||
+                        next.type === token_1.TokenType.SlashEqual)) {
+                    return this.parseAssignmentStatement();
+                }
+                return this.parseExpressionStatement();
+            }
             default:
                 // Could be an expression statement or unparenthesized function call like `greet "Alex"`
                 return this.parseExpressionStatement();
@@ -100,6 +122,124 @@ class Parser {
             name: varName,
             value,
             location: setToken.location
+        };
+    }
+    parseAssignmentStatement() {
+        const nameToken = this.advance(); // consume identifier
+        const opToken = this.advance(); // consume =, +=, -=, *=, /=
+        let operator = "=";
+        switch (opToken.type) {
+            case token_1.TokenType.Equal:
+                operator = "=";
+                break;
+            case token_1.TokenType.PlusEqual:
+                operator = "+=";
+                break;
+            case token_1.TokenType.MinusEqual:
+                operator = "-=";
+                break;
+            case token_1.TokenType.StarEqual:
+                operator = "*=";
+                break;
+            case token_1.TokenType.SlashEqual:
+                operator = "/=";
+                break;
+            default:
+                operator = "=";
+                break;
+        }
+        const value = this.parseExpression();
+        this.expectStatementEnd();
+        return {
+            type: "AssignmentStatement",
+            name: nameToken.raw || nameToken.value,
+            operator,
+            value,
+            location: nameToken.location
+        };
+    }
+    parseImportStatement() {
+        const importToken = this.advance(); // consume 'import'
+        let source = "";
+        if (this.check(token_1.TokenType.String)) {
+            source = this.advance().value;
+        }
+        else if (this.isWord(this.peek())) {
+            source = this.advance().raw || this.previous().value;
+        }
+        else {
+            throw new plain_error_1.PlainError("Expected module name or file path after 'import'.", this.peek().location, {
+                kind: "ParserError",
+                sourceCode: this.source,
+                suggestion: "Example: import math or import \"./utils.plain\""
+            });
+        }
+        let alias;
+        if (this.match(token_1.TokenType.As)) {
+            if (this.isWord(this.peek())) {
+                alias = this.advance().raw;
+            }
+        }
+        this.expectStatementEnd();
+        return {
+            type: "ImportStatement",
+            source,
+            alias,
+            location: importToken.location
+        };
+    }
+    parseFromImportStatement() {
+        const fromToken = this.advance(); // consume 'from'
+        let source = "";
+        if (this.check(token_1.TokenType.String)) {
+            source = this.advance().value;
+        }
+        else if (this.isWord(this.peek())) {
+            source = this.advance().raw;
+        }
+        this.consume(token_1.TokenType.Import, "Expected 'import' after 'from <module>'.");
+        const symbols = [];
+        do {
+            if (this.isWord(this.peek())) {
+                symbols.push(this.advance().raw);
+            }
+        } while (this.match(token_1.TokenType.Comma));
+        this.expectStatementEnd();
+        return {
+            type: "ImportStatement",
+            source,
+            symbols,
+            location: fromToken.location
+        };
+    }
+    parseWhileStatement() {
+        const token = this.advance(); // consume 'while'
+        const condition = this.parseExpression();
+        if (this.check(token_1.TokenType.Colon) || this.check(token_1.TokenType.Then)) {
+            this.advance();
+        }
+        this.expectStatementEnd();
+        const body = [];
+        while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
+            this.skipNewlines();
+            if (this.check(token_1.TokenType.End))
+                break;
+            body.push(this.parseStatement());
+            this.skipNewlines();
+        }
+        if (!this.match(token_1.TokenType.End)) {
+            throw new plain_error_1.PlainError(`You started a 'while' loop on line ${token.location.line}, but didn't close it with 'end'.`, this.peek().location, {
+                kind: "ParserError",
+                sourceCode: this.source,
+                suggestion: "Add 'end' to close the while loop."
+            });
+        }
+        this.expectStatementEnd();
+        return {
+            type: "RepeatWhileStatement",
+            condition,
+            body,
+            location: token.location
         };
     }
     parseSayStatement() {
@@ -199,8 +339,10 @@ class Parser {
     parseIfStatement() {
         const token = this.advance(); // consume 'if'
         const condition = this.parseExpression();
-        // 'then' is optional for friendliness, but match if present
+        // 'then' or ':' is optional for friendliness, but match if present
         this.match(token_1.TokenType.Then);
+        if (this.check(token_1.TokenType.Colon))
+            this.advance();
         this.expectStatementEnd();
         const consequent = [];
         const otherwiseIfBranches = [];
@@ -217,6 +359,8 @@ class Parser {
                 const branchLoc = this.previous().location;
                 const branchCond = this.parseExpression();
                 this.match(token_1.TokenType.Then);
+                if (this.check(token_1.TokenType.Colon))
+                    this.advance();
                 this.expectStatementEnd();
                 const branchBody = [];
                 while (!this.isAtEnd() && !this.check(token_1.TokenType.Otherwise) && !this.check(token_1.TokenType.End)) {
@@ -233,7 +377,9 @@ class Parser {
                 });
             }
             else {
-                // Simple otherwise block
+                // Simple otherwise / else block
+                if (this.check(token_1.TokenType.Colon))
+                    this.advance();
                 this.expectStatementEnd();
                 alternate = [];
                 while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
@@ -334,18 +480,13 @@ class Parser {
     }
     parseForEachStatement() {
         const token = this.advance(); // consume 'for'
-        if (!this.match(token_1.TokenType.Each)) {
-            throw new plain_error_1.PlainError(`I expected 'each' after 'for'.`, this.peek().location, {
-                kind: "ParserError",
-                sourceCode: this.source,
-                suggestion: "Pattern: for each item in list\n    say item\nend"
-            });
-        }
+        // 'each' is optional so both 'for each x in list' and 'for x in list' work!
+        this.match(token_1.TokenType.Each);
         if (!this.check(token_1.TokenType.Identifier)) {
-            throw new plain_error_1.PlainError(`I expected an item variable name after 'for each'.`, this.peek().location, {
+            throw new plain_error_1.PlainError(`I expected an item variable name after 'for'.`, this.peek().location, {
                 kind: "ParserError",
                 sourceCode: this.source,
-                suggestion: "Example: for each score in scores"
+                suggestion: "Example: for item in items or for each score in scores"
             });
         }
         const itemVariable = this.advance().value;
@@ -357,6 +498,8 @@ class Parser {
             });
         }
         const list = this.parseExpression();
+        if (this.check(token_1.TokenType.Colon))
+            this.advance();
         this.expectStatementEnd();
         const body = [];
         while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
@@ -393,17 +536,17 @@ class Parser {
             token.type === token_1.TokenType.Clear);
     }
     parseFunctionDefStatement() {
-        const token = this.advance(); // consume 'to'
+        const token = this.advance(); // consume 'to' or 'def'
         if (!this.isWord(this.peek())) {
-            throw new plain_error_1.PlainError(`I expected a function name after 'to'.`, this.peek().location, {
+            throw new plain_error_1.PlainError(`I expected a function name after '${token.raw}'.`, this.peek().location, {
                 kind: "ParserError",
                 sourceCode: this.source,
-                suggestion: 'Example: to greet person\n    say "Hello " plus person\nend'
+                suggestion: 'Example: def greet(person): say "Hello " + person end or to greet person give back "Hello" end'
             });
         }
         const name = this.advance().raw;
         const parameters = [];
-        // Check if parameters are in parentheses: to foo(a, b)
+        // Check if parameters are in parentheses: def foo(a, b) or to foo(a, b)
         if (this.match(token_1.TokenType.LeftParen)) {
             if (!this.check(token_1.TokenType.RightParen)) {
                 do {
@@ -436,6 +579,9 @@ class Parser {
                 }
             }
         }
+        if (this.check(token_1.TokenType.Colon)) {
+            this.advance();
+        }
         this.expectStatementEnd();
         const body = [];
         while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
@@ -462,18 +608,24 @@ class Parser {
         };
     }
     parseReturnStatement() {
-        const token = this.advance(); // consume 'give'
-        if (!this.match(token_1.TokenType.Back)) {
-            throw new plain_error_1.PlainError(`I expected 'back' after 'give'.`, this.peek().location, {
-                kind: "ParserError",
-                sourceCode: this.source,
-                suggestion: "To return a value from a function, write: give back <value>"
-            });
+        const token = this.advance(); // consume 'give' or 'return'
+        if (token.type === token_1.TokenType.Give) {
+            if (!this.match(token_1.TokenType.Back)) {
+                throw new plain_error_1.PlainError(`I expected 'back' after 'give'.`, this.peek().location, {
+                    kind: "ParserError",
+                    sourceCode: this.source,
+                    suggestion: "Write 'give back <value>' or 'return <value>' to return a result."
+                });
+            }
         }
-        let value;
-        if (!this.isAtStatementEnd()) {
-            value = this.parseExpression();
+        if (this.isAtStatementEnd()) {
+            this.expectStatementEnd();
+            return {
+                type: "ReturnStatement",
+                location: token.location
+            };
         }
+        const value = this.parseExpression();
         this.expectStatementEnd();
         return {
             type: "ReturnStatement",
@@ -698,6 +850,16 @@ class Parser {
     parseMultiplicative() {
         let left = this.parseUnary();
         while (true) {
+            if (this.match(token_1.TokenType.StarStar)) {
+                const right = this.parseUnary();
+                left = { type: "BinaryExpression", operator: "**", left, right, location: left.location };
+                continue;
+            }
+            if (this.match(token_1.TokenType.SlashSlash)) {
+                const right = this.parseUnary();
+                left = { type: "BinaryExpression", operator: "//", left, right, location: left.location };
+                continue;
+            }
             if (this.match(token_1.TokenType.StarSign)) {
                 const right = this.parseUnary();
                 left = { type: "BinaryExpression", operator: "*", left, right, location: left.location };
@@ -755,7 +917,58 @@ class Parser {
                 location: token.location
             };
         }
-        return this.parsePrimary();
+        return this.parsePostfix();
+    }
+    parsePostfix() {
+        let expr = this.parsePrimary();
+        while (true) {
+            if (this.match(token_1.TokenType.LeftBracket)) {
+                const index = this.parseExpression();
+                this.consume(token_1.TokenType.RightBracket, "Expected ']' after index.");
+                expr = {
+                    type: "IndexExpression",
+                    object: expr,
+                    index,
+                    location: expr.location
+                };
+                continue;
+            }
+            if (this.match(token_1.TokenType.Dot)) {
+                if (!this.isWord(this.peek())) {
+                    throw new plain_error_1.PlainError("Expected property name after '.'.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
+                }
+                const prop = this.advance().raw;
+                expr = {
+                    type: "MemberAccessExpression",
+                    object: expr,
+                    property: prop,
+                    location: expr.location
+                };
+                continue;
+            }
+            if (this.match(token_1.TokenType.LeftParen)) {
+                const args = [];
+                if (!this.check(token_1.TokenType.RightParen)) {
+                    do {
+                        this.skipNewlines();
+                        if (this.check(token_1.TokenType.RightParen))
+                            break;
+                        args.push(this.parseExpression());
+                        this.skipNewlines();
+                    } while (this.match(token_1.TokenType.Comma));
+                }
+                this.consume(token_1.TokenType.RightParen, "Expected ')' after arguments.");
+                expr = {
+                    type: "CallExpression",
+                    callee: expr,
+                    arguments: args,
+                    location: expr.location
+                };
+                continue;
+            }
+            break;
+        }
+        return expr;
     }
     parsePrimary() {
         const token = this.peek();
@@ -812,6 +1025,36 @@ class Parser {
             return {
                 type: "ListLiteral",
                 elements,
+                location: token.location
+            };
+        }
+        // 6b. Dictionary literal: { "a": 1, b: 2 }
+        if (this.match(token_1.TokenType.LeftBrace)) {
+            const entries = [];
+            this.skipNewlines();
+            if (!this.check(token_1.TokenType.RightBrace)) {
+                do {
+                    this.skipNewlines();
+                    if (this.check(token_1.TokenType.RightBrace))
+                        break;
+                    let key = "";
+                    if (this.check(token_1.TokenType.String) || this.isWord(this.peek())) {
+                        key = String(this.advance().value);
+                    }
+                    else {
+                        throw new plain_error_1.PlainError("Expected key name in dictionary.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
+                    }
+                    this.consume(token_1.TokenType.Colon, "Expected ':' after dictionary key.");
+                    const value = this.parseExpression();
+                    entries.push({ key, value });
+                    this.skipNewlines();
+                } while (this.match(token_1.TokenType.Comma));
+            }
+            this.skipNewlines();
+            this.consume(token_1.TokenType.RightBrace, "Expected closing '}' for dictionary.");
+            return {
+                type: "DictionaryLiteral",
+                entries,
                 location: token.location
             };
         }
@@ -1018,7 +1261,6 @@ class Parser {
             type === token_1.TokenType.String ||
             type === token_1.TokenType.Boolean ||
             type === token_1.TokenType.Nothing ||
-            type === token_1.TokenType.LeftBracket ||
             type === token_1.TokenType.LeftParen ||
             type === token_1.TokenType.Identifier ||
             type === token_1.TokenType.Item);

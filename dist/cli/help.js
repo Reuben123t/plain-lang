@@ -116,28 +116,33 @@ Math with lists:
     return `
 ========================================================================
                       PLAIN Programming Language
+                 Super Simple • 1,200+ Functions • Pythonic
+                         Author: Reuben
 ========================================================================
-PLAIN is designed to be the simplest, most readable programming language.
-Code reads like everyday English instructions.
+PLAIN is designed to be the simplest, most powerful programming language.
+Supports both English and Pythonic syntax with 1,200+ built-in functions.
 
 COMMANDS:
   plain <file.plain>         Run a .plain script
   plain run <file.plain>     Run a .plain script
+  plain deploy [port]        Deploy a live network web server accessible via IP
+  plain update               Check for software updates and upgrade
   plain check <file.plain>   Check syntax without executing
   plain repl                 Start the interactive shell
   plain playground           Launch the visual web playground
   plain help <topic>         Detailed help (topics: variables, conditions,
                              loops, functions, lists)
 
-BASIC SYNTAX:
-  say "Hello, world!"                  Output text
-  set score to 100                     Save a variable
-  ask "Name?" and save as user         Get input from user
-  10 plus 5 times 2                    Math (+, -, *, /, remainder of)
-  item 1 of scores                     1-based list access
-  repeat 3 times ... end               Repeat loop
-  if age is at least 18 then ... end   Conditionals
-  to greet person ... end              Custom functions
+SYNTAX STYLES:
+  x = 100                              Python-style assignment
+  set x to 100                         English assignment
+  x += 5                               Compound assignment (+=, -=, *=, /=)
+  x ** 2,  10 // 3                     Power and floor division
+  def greet(name): say "Hi " + name end  Function definition
+  import "math_tools.plain" as math    Import local or virtual packages
+  user = { "name": "Reuben", "age": 20 } Dictionary syntax
+  deploy_server(8080)                  Deploy web server on 0.0.0.0
+  train_neural_network(net, data)      AI deep neural network training
 
 FILE EXTENSION:
   Save your code in files ending with .plain

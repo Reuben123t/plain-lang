@@ -1,0 +1,40 @@
+# ==========================================================
+# Example 14: Deep Learning & AI Neural Network Training
+# PLAIN Language v1.1.0 • Author: Reuben
+# ==========================================================
+
+say "=== PLAIN AI Neural Network Training ==="
+
+# 1. Load preloaded benchmark dataset
+dataset = load_dataset("iris")
+say "Loaded dataset: " + dataset.name
+say "Total samples: " + dataset.sample_count
+say "Features per sample: " + dataset.feature_count
+
+# 2. Create Multi-Layer Perceptron (MLP)
+# 2 input nodes, 4 hidden nodes, 1 output node
+net = create_neural_network([2, 4, 1], "sigmoid")
+say "Neural network initialized with architecture: [2, 4, 1]"
+
+# 3. Training data for nonlinear classification (XOR logic)
+training_data = [
+    { "input": [0, 0], "output": [0] },
+    { "input": [0, 1], "output": [1] },
+    { "input": [1, 0], "output": [1] },
+    { "input": [1, 1], "output": [0] }
+]
+
+# 4. Train the neural network with backpropagation
+say "Training neural network over 100 epochs..."
+history = train_neural_network(net, training_data, 100, 0.2)
+say "Training completed!"
+say "Final MSE loss: " + history.final_loss
+
+# 5. Make predictions
+pred_01 = predict_neural_network(net, [0, 1])
+pred_11 = predict_neural_network(net, [1, 1])
+
+say "Prediction for [0, 1] (Target: 1): " + pred_01[0]
+say "Prediction for [1, 1] (Target: 0): " + pred_11[0]
+
+say "AI Training demo completed successfully!"

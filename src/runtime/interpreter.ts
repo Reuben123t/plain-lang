@@ -1,11 +1,15 @@
 import * as readline from "readline";
+import * as fs from "fs";
+import * as path from "path";
 import {
+  AssignmentStatement,
   BinaryExpression,
   CallExpression,
   Expression,
   ForEachStatement,
   FunctionDefStatement,
   IfStatement,
+  ImportStatement,
   ItemOfExpression,
   ListAddStatement,
   ListRemoveStatement,
@@ -23,11 +27,15 @@ import {
 import { Environment } from "./environment";
 import {
   isPlainFunction,
+  isPlainObject,
   PlainFunction,
+  PlainObject,
   plainToBoolean,
   plainToString,
   PlainValue
 } from "./values";
+import { Lexer } from "../lexer/lexer";
+import { Parser } from "../parser/parser";
 import { PlainError, SourceLocation } from "../errors/plain-error";
 import { mathBuiltins } from "../builtins/math";
 import { listBuiltins } from "../builtins/list";
@@ -56,6 +64,7 @@ export class Interpreter {
   private currentEnv: Environment;
   private sourceCode?: string;
   private sourceFile?: string;
+  private baseDir: string;
   private onSay: (output: string) => void;
   private onShow: (output: string) => void;
   private onAsk: (prompt: string) => Promise<string>;
@@ -64,6 +73,7 @@ export class Interpreter {
   constructor(options?: InterpreterOptions) {
     this.sourceCode = options?.sourceCode;
     this.sourceFile = options?.sourceFile;
+    this.baseDir = options?.baseDir ? path.resolve(options.baseDir) : process.cwd();
     this.onSay = options?.onSay || ((s) => console.log(s));
     this.onShow = options?.onShow || ((s) => console.log(s));
     this.onAsk =
@@ -107,6 +117,12 @@ export class Interpreter {
     switch (statement.type) {
       case "SetStatement":
         await this.executeSet(statement);
+        break;
+      case "AssignmentStatement":
+        await this.executeAssignment(statement);
+        break;
+      case "ImportStatement":
+        await this.executeImport(statement);
         break;
       case "SayStatement":
         await this.executeSay(statement);
@@ -156,6 +172,98 @@ export class Interpreter {
   private async executeSet(stmt: SetStatement): Promise<void> {
     const value = await this.evaluate(stmt.value);
     this.currentEnv.assign(stmt.name, value);
+  }
+
+  private async executeAssignment(stmt: AssignmentStatement): Promise<void> {
+    const rhs = await this.evaluate(stmt.value);
+    if (stmt.operator === "=") {
+      this.currentEnv.assign(stmt.name, rhs);
+      return;
+    }
+
+    const current = this.currentEnv.lookup(stmt.name, stmt.location, this.sourceCode);
+    let finalVal: PlainValue = rhs;
+    if (stmt.operator === "+=") {
+      if (typeof current === "string" || typeof rhs === "string") {
+        finalVal = plainToString(current) + plainToString(rhs);
+      } else {
+        finalVal = mathBuiltins.to_number(current) + mathBuiltins.to_number(rhs);
+      }
+    } else if (stmt.operator === "-=") {
+      finalVal = mathBuiltins.to_number(current) - mathBuiltins.to_number(rhs);
+    } else if (stmt.operator === "*=") {
+      finalVal = mathBuiltins.to_number(current) * mathBuiltins.to_number(rhs);
+    } else if (stmt.operator === "/=") {
+      const divisor = mathBuiltins.to_number(rhs);
+      if (divisor === 0) {
+        throw new PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      }
+      finalVal = mathBuiltins.to_number(current) / divisor;
+    }
+    this.currentEnv.assign(stmt.name, finalVal);
+  }
+
+  private async executeImport(stmt: ImportStatement): Promise<void> {
+    const source = stmt.source.trim();
+    const alias = stmt.alias || source.replace(/\.plain$/, "").replace(/[^a-zA-Z0-9_]/g, "_");
+
+    // Check if source is a local .plain file
+    let localFilePath = path.resolve(this.baseDir, source);
+    if (!fs.existsSync(localFilePath) && !source.endsWith(".plain")) {
+      localFilePath = path.resolve(this.baseDir, source + ".plain");
+    }
+
+    if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
+      const code = fs.readFileSync(localFilePath, "utf-8");
+      const lexer = new Lexer(code, localFilePath);
+      const tokens = lexer.tokenize();
+      const parser = new Parser(tokens, code, localFilePath);
+      const ast = parser.parse();
+
+      const subInterpreter = new Interpreter({
+        baseDir: path.dirname(localFilePath),
+        onSay: this.onSay,
+        onShow: this.onShow,
+        onAsk: this.onAsk,
+        onClear: this.onClear
+      });
+      // Execute in submodule scope
+      for (const s of ast.body) {
+        await subInterpreter.executeStatement(s);
+      }
+
+      // Collect exported variables
+      const moduleExport: PlainObject = {};
+      const exportedNames = subInterpreter.getGlobalEnvironment().getAllVariableNames();
+      for (const name of exportedNames) {
+        const val = subInterpreter.getGlobalEnvironment().lookup(name);
+        moduleExport[name] = val;
+        if (stmt.symbols && stmt.symbols.includes(name)) {
+          this.currentEnv.assign(name, val);
+        }
+      }
+
+      if (!stmt.symbols || stmt.symbols.length === 0) {
+        this.currentEnv.assign(alias, moduleExport);
+      }
+      return;
+    }
+
+    // Built-in virtual packages
+    const allVars = this.globalEnv.getAllVariableNames();
+    const matchingModuleObj: PlainObject = {};
+
+    for (const name of allVars) {
+      const val = this.globalEnv.lookup(name);
+      matchingModuleObj[name] = val;
+      if (stmt.symbols && stmt.symbols.includes(name)) {
+        this.currentEnv.assign(name, val);
+      }
+    }
+
+    if (!stmt.symbols || stmt.symbols.length === 0) {
+      this.currentEnv.assign(alias, matchingModuleObj);
+    }
   }
 
   private async executeSay(stmt: SayStatement): Promise<void> {
@@ -337,6 +445,40 @@ export class Interpreter {
         }
         return elements;
       }
+      case "DictionaryLiteral": {
+        const obj: PlainObject = {};
+        for (const entry of expr.entries) {
+          obj[entry.key] = await this.evaluate(entry.value);
+        }
+        return obj;
+      }
+      case "IndexExpression": {
+        const target = await this.evaluate(expr.object);
+        const idxVal = await this.evaluate(expr.index);
+        if (Array.isArray(target)) {
+          const idx = Math.floor(mathBuiltins.to_number(idxVal));
+          if (idx < 0) {
+            const wrapped = target.length + idx;
+            return wrapped >= 0 && wrapped < target.length ? target[wrapped] : null;
+          }
+          if (idx < target.length) {
+            return target[idx];
+          }
+          return null;
+        }
+        if (isPlainObject(target)) {
+          const key = plainToString(idxVal);
+          return target[key] ?? null;
+        }
+        return null;
+      }
+      case "MemberAccessExpression": {
+        const target = await this.evaluate(expr.object);
+        if (isPlainObject(target)) {
+          return target[expr.property] ?? null;
+        }
+        return null;
+      }
       case "ItemOfExpression":
         return this.evaluateItemOf(expr);
       case "UnaryExpression":
@@ -433,6 +575,24 @@ export class Interpreter {
         }
         return mathBuiltins.to_number(left) % divisor;
       }
+      case "**": {
+        return Math.pow(mathBuiltins.to_number(left), mathBuiltins.to_number(right));
+      }
+      case "//": {
+        const divisor = mathBuiltins.to_number(right);
+        if (divisor === 0) {
+          throw new PlainError(
+            "Cannot divide by zero.",
+            expr.location,
+            {
+              kind: "RuntimeError",
+              sourceCode: this.sourceCode,
+              suggestion: "Make sure the divisor is not zero."
+            }
+          );
+        }
+        return Math.floor(mathBuiltins.to_number(left) / divisor);
+      }
       case "==":
         return this.valuesEqual(left, right);
       case "!=":
@@ -455,16 +615,27 @@ export class Interpreter {
   }
 
   private async evaluateCall(expr: CallExpression): Promise<PlainValue> {
-    const calleeVal = this.currentEnv.lookup(expr.callee, expr.location, this.sourceCode);
+    let calleeVal: PlainValue;
+    let calleeName = "function";
+
+    if (typeof expr.callee === "string") {
+      calleeName = expr.callee;
+      calleeVal = this.currentEnv.lookup(expr.callee, expr.location, this.sourceCode);
+    } else {
+      calleeVal = await this.evaluate(expr.callee);
+      if (expr.callee.type === "MemberAccessExpression") {
+        calleeName = expr.callee.property;
+      }
+    }
 
     if (!isPlainFunction(calleeVal)) {
       throw new PlainError(
-        `'${expr.callee}' is a ${typeof calleeVal}, not a function.`,
+        `'${calleeName}' is a ${typeof calleeVal}, not a function.`,
         expr.location,
         {
           kind: "TypeError",
           sourceCode: this.sourceCode,
-          suggestion: `Check the name or define it with: to ${expr.callee} ... end`
+          suggestion: `Check the name or define it with: to ${calleeName} ... end`
         }
       );
     }

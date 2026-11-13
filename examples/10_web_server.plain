@@ -32,3 +32,4 @@ write_file("student_portal.html", full_page)
 say "4. Complete HTML page exported to 'student_portal.html'!"
 
 say "=== Web Suite Completed Successfully! ==="
+

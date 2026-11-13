@@ -3,6 +3,15 @@ using System.IO;
 using System.Reflection;
 using System.Diagnostics;
 
+[assembly: AssemblyTitle("PLAIN Programming Language")]
+[assembly: AssemblyDescription("The simplest, most powerful programming language. 1200+ functions, Pythonic simplicity, AI & server deployment. Author: Reuben")]
+[assembly: AssemblyCompany("Reuben")]
+[assembly: AssemblyProduct("PLAIN")]
+[assembly: AssemblyCopyright("Copyright © 2026 Reuben. All rights reserved.")]
+[assembly: AssemblyTrademark("PLAIN")]
+[assembly: AssemblyVersion("1.1.0.0")]
+[assembly: AssemblyFileVersion("1.1.0.0")]
+
 namespace PlainLanguage
 {
     class Program

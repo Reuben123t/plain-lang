@@ -1,0 +1,30 @@
+import { PlainObject } from "../runtime/values";
+export declare const linearAlgebraBuiltins: {
+    matrix_create: (rows: number, cols: number, fillVal?: number) => number[][];
+    matrix_zeros: (rows: number, cols: number) => number[][];
+    matrix_ones: (rows: number, cols: number) => number[][];
+    matrix_eye: (size: number) => number[][];
+    matrix_random: (rows: number, cols: number, min?: number, max?: number) => number[][];
+    matrix_shape: (matrix: any) => number[];
+    matrix_reshape: (matrix: any, newRows: number, newCols: number) => number[][];
+    matrix_add: (a: any, b: any) => number[][];
+    matrix_sub: (a: any, b: any) => number[][];
+    matrix_scale: (matrix: any, scalar: number) => number[][];
+    matrix_mult: (a: any, b: any) => number[][];
+    matrix_elementwise_mult: (a: any, b: any) => number[][];
+    matrix_transpose: (matrix: any) => number[][];
+    matrix_trace: (matrix: any) => number;
+    matrix_determinant: (matrix: any) => number;
+    matrix_inverse_2x2: (matrix: any) => number[][];
+    matrix_vector_mult: (matrix: any, vector: any) => number[];
+    vector_dot: (a: any, b: any) => number;
+    vector_cross_3d: (a: any, b: any) => number[];
+    vector_magnitude: (v: any) => number;
+    vector_normalize: (v: any) => number[];
+    vector_distance: (a: any, b: any) => number;
+    vector_angle_rad: (a: any, b: any) => number;
+    vector_angle_deg: (a: any, b: any) => number;
+    vector_lerp: (a: any, b: any, t: number) => number[];
+    solve_system_2x2: (a: number, b: number, e: number, c: number, d: number, f: number) => PlainObject;
+};
+//# sourceMappingURL=linear_algebra.d.ts.map

@@ -54,7 +54,24 @@ var TokenType;
     TokenType["By"] = "By";
     TokenType["Remainder"] = "Remainder";
     TokenType["Or"] = "Or";
+    // Python & Package Keywords
+    TokenType["Import"] = "Import";
+    TokenType["Def"] = "Def";
+    TokenType["Return"] = "Return";
     // Symbols
+    TokenType["PlusEqual"] = "PlusEqual";
+    TokenType["MinusEqual"] = "MinusEqual";
+    TokenType["StarEqual"] = "StarEqual";
+    TokenType["SlashEqual"] = "SlashEqual";
+    TokenType["StarStar"] = "StarStar";
+    TokenType["SlashSlash"] = "SlashSlash";
+    TokenType["Colon"] = "Colon";
+    TokenType["LeftBrace"] = "LeftBrace";
+    TokenType["RightBrace"] = "RightBrace";
+    TokenType["Arrow"] = "Arrow";
+    TokenType["FatArrow"] = "FatArrow";
+    TokenType["Pipe"] = "Pipe";
+    TokenType["Dot"] = "Dot";
     TokenType["PlusSign"] = "PlusSign";
     TokenType["MinusSign"] = "MinusSign";
     TokenType["StarSign"] = "StarSign";

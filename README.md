@@ -1,56 +1,94 @@
-# PLAIN — The Simple, English-Like Programming Language
+# PLAIN — The Simple, Python-Like Programming Language
 
-> **Programming should be as simple as writing instructions in everyday English.**
+> **Created by Author: Reuben**  
+> **Programming should be as simple as Python, but even easier, with 1,200+ built-in functions, AI training, network web server deployment, and package management.**
 
-**PLAIN** is a beginner-friendly interpreted programming language designed so that anyone can read and write code without memorizing strange punctuation, cryptic symbols, or confusing terminology.
+**PLAIN** is a powerful yet super simple interpreted programming language designed for students, developers, and AI researchers. It supports both Pythonic syntax (`x = 10`, `x += 5`, `def func: ... end`, `while`, `for`, `**`, `//`, `{}`) and everyday English instructions (`set x to 10`, `say "Hello"`).
 
-It comes with its own `.plain` file extension, an interactive shell (REPL), an in-browser visual playground, full standard library, friendly error messages, and a Visual Studio Code extension.
+It comes with its own `.plain` file extension, a standalone 530MB+ Windows executable, an interactive shell (REPL), package imports, deep learning AI training, a live network web server deployer, and 1,235 built-in functions!
 
 ---
 
 ## What Does PLAIN Look Like?
 
-A complete, working program in PLAIN:
-
+### 🐍 Pythonic Simplicity (Variables, Loops, Functions & Math)
 ```plain
-say "Hello, world!"
+# Simple and familiar math operators (+, -, *, /, **, //)
+x = 10
+x += 5
+power_val = 2 ** 8       # 256
+floor_val = 17 // 3      # 5
 
-set name to "Alex"
-set age to 16
-
-say "Welcome, " plus name
-
-if age is at least 18 then
-    say "You are an adult."
-otherwise
-    say "You are under 18."
+# Python-style functions with return
+def calculate_area(width, height):
+    return width * height
 end
 
-repeat 3 times
-    say "Learning PLAIN is fun!"
-end
+say "Calculated area: " + calculate_area(12, 5)
+
+# Python-style dictionaries
+student = { "name": "Reuben", "role": "Creator", "level": 10 }
+say "Student Name: " + student.name
+say "Student Role: " + student["role"]
 ```
 
-No semicolons. No curly braces. Just clear English instructions.
+### 🧠 AI Deep Neural Network Training (Built-in)
+```plain
+# Load benchmark dataset and build an MLP neural network
+dataset = load_dataset("iris")
+net = create_neural_network([4, 8, 3], "sigmoid")
+
+# Train with backpropagation and loss optimization
+training_result = train_neural_network(net, dataset.inputs, 100, 0.1)
+say "Training finished with MSE loss: " + training_result.final_loss
+
+# Predict classes directly
+prediction = predict_neural_network(net, [5.1, 3.5, 1.4, 0.2])
+say "Model prediction: " + prediction
+```
+
+### 🌐 Live Network Web Server Deployment
+```plain
+# Deploy a web server accessible across Wi-Fi, LAN, and public IP!
+def handle_web(req):
+    if req.path == "/api/status":
+        return json_response({ "status": "online", "author": "Reuben", "version": "1.1.0" })
+    end
+    return html_response("<h1>PLAIN Web Server is Live!</h1><p>Created by Reuben</p>")
+end
+
+# Binds to 0.0.0.0 on port 8080 and displays active IP connection banner
+deploy_server(8080, handle_web, "0.0.0.0")
+```
 
 ---
 
 ## Quick Installation & Downloading
 
-### 💻 Standalone Windows Executable (`plain.exe`) — No Setup Required!
-You can download and run PLAIN as a standalone `.exe` without installing Node.js, npm, or any other tools:
+### 💻 Standalone Windows Executable (`plain.exe`) — Author: Reuben
+Download and run PLAIN as a standalone 530MB+ executable without needing Node.js, Python, or npm:
 
 1. **Direct Download**:
-   - [**Download plain.exe (Direct)**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe)
-   - [**Download plain-windows-x64.zip**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain-windows-x64.zip)
+   - [**Download plain.exe v1.1.0 (Direct)**](https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe)
+   - [**Download plain-windows-x64.zip**](https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain-windows-x64.zip)
 
-2. **Or Download in Terminal (PowerShell)**:
+2. **Terminal Quick Download (PowerShell)**:
    ```powershell
-   curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe
+   curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.1.0/plain.exe
    .\plain.exe
    ```
 
-*Double-click `plain.exe` to launch the interactive English REPL, or run `plain.exe my_script.plain` from the command prompt!*
+3. **Install as a Global Application via npm**:
+   ```bash
+   npm install -g plain-lang
+   plain
+   ```
+
+4. **Terminal Software Updater**:
+   ```bash
+   plain update
+   ```
+   PLAIN will check GitHub releases and notify you if an update is available!
 
 ---
 

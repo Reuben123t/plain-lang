@@ -42,15 +42,30 @@ const parser_1 = require("../parser/parser");
 const repl_1 = require("./repl");
 const help_1 = require("./help");
 const server_1 = require("../playground/server");
+const updater_1 = require("../builtins/updater");
+const server_deploy_1 = require("../builtins/server_deploy");
 async function main() {
     const args = process.argv.slice(2);
     if (args.length === 0) {
+        await (0, updater_1.promptUpdateIfAvailable)();
         (0, repl_1.startRepl)();
         return;
     }
     const command = args[0];
     if (command === "--version" || command === "-v" || command === "version") {
-        console.log("PLAIN Language version 1.0.0");
+        console.log(`PLAIN Language version ${updater_1.CURRENT_PLAIN_VERSION}`);
+        console.log("Author: Reuben");
+        console.log("Copyright (C) 2026 Reuben. All rights reserved.");
+        return;
+    }
+    if (command === "update" || command === "upgrade") {
+        await (0, updater_1.performUpdate)();
+        return;
+    }
+    if (command === "deploy") {
+        const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
+        const deployer = (0, server_deploy_1.createServerDeployer)();
+        await deployer.deploy_server(portArg, undefined, "0.0.0.0");
         return;
     }
     if (command === "help" || command === "--help" || command === "-h") {

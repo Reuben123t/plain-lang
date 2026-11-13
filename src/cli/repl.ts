@@ -9,6 +9,8 @@ import { getHelp } from "./help";
 export function startRepl(): void {
   console.log("==========================================================");
   console.log("             PLAIN Programming Language REPL              ");
+  console.log("          Super Simple • 1,200+ Functions • Pythonic      ");
+  console.log("               Created by Author: Reuben                  ");
   console.log("      Type instructions in simple English, or 'exit'.     ");
   console.log("==========================================================\n");
 
@@ -56,6 +58,9 @@ export function startRepl(): void {
       lower.startsWith("if ") ||
       lower.startsWith("repeat ") ||
       lower.startsWith("for each ") ||
+      lower.startsWith("for ") ||
+      lower.startsWith("while ") ||
+      lower.startsWith("def ") ||
       lower.startsWith("to ")
     ) {
       blockDepth++;

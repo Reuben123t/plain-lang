@@ -49,6 +49,11 @@ const KEYWORDS = {
     by: token_1.TokenType.By,
     remainder: token_1.TokenType.Remainder,
     or: token_1.TokenType.Or,
+    import: token_1.TokenType.Import,
+    def: token_1.TokenType.Def,
+    fn: token_1.TokenType.Def,
+    function: token_1.TokenType.Def,
+    return: token_1.TokenType.Return,
 };
 class Lexer {
     source;
@@ -89,8 +94,8 @@ class Lexer {
                 }
                 continue;
             }
-            // Comments (# or //)
-            if (char === "#" || (char === "/" && this.peekNext() === "/")) {
+            // Comments (#)
+            if (char === "#") {
                 this.skipComment();
                 continue;
             }
@@ -117,6 +122,12 @@ class Lexer {
                 tokens.push({ type: token_1.TokenType.EqualEqual, value: "==", raw: "==", location: loc });
                 continue;
             }
+            if (char === "=" && this.peekNext() === ">") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.FatArrow, value: "=>", raw: "=>", location: loc });
+                continue;
+            }
             if (char === "!" && this.peekNext() === "=") {
                 this.advance();
                 this.advance();
@@ -135,8 +146,74 @@ class Lexer {
                 tokens.push({ type: token_1.TokenType.GreaterEqual, value: ">=", raw: ">=", location: loc });
                 continue;
             }
+            if (char === "+" && this.peekNext() === "=") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.PlusEqual, value: "+=", raw: "+=", location: loc });
+                continue;
+            }
+            if (char === "-" && this.peekNext() === "=") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.MinusEqual, value: "-=", raw: "-=", location: loc });
+                continue;
+            }
+            if (char === "*" && this.peekNext() === "=") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.StarEqual, value: "*=", raw: "*=", location: loc });
+                continue;
+            }
+            if (char === "/" && this.peekNext() === "=") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.SlashEqual, value: "/=", raw: "/=", location: loc });
+                continue;
+            }
+            if (char === "/" && this.peekNext() === "/") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.SlashSlash, value: "//", raw: "//", location: loc });
+                continue;
+            }
+            if (char === "*" && this.peekNext() === "*") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.StarStar, value: "**", raw: "**", location: loc });
+                continue;
+            }
+            if (char === "-" && this.peekNext() === ">") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.Arrow, value: "->", raw: "->", location: loc });
+                continue;
+            }
             // Single-character symbols
             switch (char) {
+                case "=":
+                    this.advance();
+                    tokens.push({ type: token_1.TokenType.Equal, value: "=", raw: "=", location: loc });
+                    break;
+                case ":":
+                    this.advance();
+                    tokens.push({ type: token_1.TokenType.Colon, value: ":", raw: ":", location: loc });
+                    break;
+                case "{":
+                    this.advance();
+                    tokens.push({ type: token_1.TokenType.LeftBrace, value: "{", raw: "{", location: loc });
+                    break;
+                case "}":
+                    this.advance();
+                    tokens.push({ type: token_1.TokenType.RightBrace, value: "}", raw: "}", location: loc });
+                    break;
+                case "|":
+                    this.advance();
+                    tokens.push({ type: token_1.TokenType.Pipe, value: "|", raw: "|", location: loc });
+                    break;
+                case ".":
+                    this.advance();
+                    tokens.push({ type: token_1.TokenType.Dot, value: ".", raw: ".", location: loc });
+                    break;
                 case "+":
                     this.advance();
                     tokens.push({ type: token_1.TokenType.PlusSign, value: "+", raw: "+", location: loc });

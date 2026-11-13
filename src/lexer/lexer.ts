@@ -47,6 +47,11 @@ const KEYWORDS: Record<string, TokenType> = {
   by: TokenType.By,
   remainder: TokenType.Remainder,
   or: TokenType.Or,
+  import: TokenType.Import,
+  def: TokenType.Def,
+  fn: TokenType.Def,
+  function: TokenType.Def,
+  return: TokenType.Return,
 };
 
 export class Lexer {
@@ -94,8 +99,8 @@ export class Lexer {
         continue;
       }
 
-      // Comments (# or //)
-      if (char === "#" || (char === "/" && this.peekNext() === "/")) {
+      // Comments (#)
+      if (char === "#") {
         this.skipComment();
         continue;
       }
@@ -126,6 +131,12 @@ export class Lexer {
         tokens.push({ type: TokenType.EqualEqual, value: "==", raw: "==", location: loc });
         continue;
       }
+      if (char === "=" && this.peekNext() === ">") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.FatArrow, value: "=>", raw: "=>", location: loc });
+        continue;
+      }
       if (char === "!" && this.peekNext() === "=") {
         this.advance();
         this.advance();
@@ -144,9 +155,75 @@ export class Lexer {
         tokens.push({ type: TokenType.GreaterEqual, value: ">=", raw: ">=", location: loc });
         continue;
       }
+      if (char === "+" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.PlusEqual, value: "+=", raw: "+=", location: loc });
+        continue;
+      }
+      if (char === "-" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.MinusEqual, value: "-=", raw: "-=", location: loc });
+        continue;
+      }
+      if (char === "*" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.StarEqual, value: "*=", raw: "*=", location: loc });
+        continue;
+      }
+      if (char === "/" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.SlashEqual, value: "/=", raw: "/=", location: loc });
+        continue;
+      }
+      if (char === "/" && this.peekNext() === "/") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.SlashSlash, value: "//", raw: "//", location: loc });
+        continue;
+      }
+      if (char === "*" && this.peekNext() === "*") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.StarStar, value: "**", raw: "**", location: loc });
+        continue;
+      }
+      if (char === "-" && this.peekNext() === ">") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.Arrow, value: "->", raw: "->", location: loc });
+        continue;
+      }
 
       // Single-character symbols
       switch (char) {
+        case "=":
+          this.advance();
+          tokens.push({ type: TokenType.Equal, value: "=", raw: "=", location: loc });
+          break;
+        case ":":
+          this.advance();
+          tokens.push({ type: TokenType.Colon, value: ":", raw: ":", location: loc });
+          break;
+        case "{":
+          this.advance();
+          tokens.push({ type: TokenType.LeftBrace, value: "{", raw: "{", location: loc });
+          break;
+        case "}":
+          this.advance();
+          tokens.push({ type: TokenType.RightBrace, value: "}", raw: "}", location: loc });
+          break;
+        case "|":
+          this.advance();
+          tokens.push({ type: TokenType.Pipe, value: "|", raw: "|", location: loc });
+          break;
+        case ".":
+          this.advance();
+          tokens.push({ type: TokenType.Dot, value: ".", raw: ".", location: loc });
+          break;
         case "+":
           this.advance();
           tokens.push({ type: TokenType.PlusSign, value: "+", raw: "+", location: loc });

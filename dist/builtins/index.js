@@ -17,6 +17,14 @@ const datascience_1 = require("./datascience");
 const ai_1 = require("./ai");
 const automation_1 = require("./automation");
 const file_1 = require("./file");
+const ai_training_1 = require("./ai_training");
+const server_deploy_1 = require("./server_deploy");
+const linear_algebra_1 = require("./linear_algebra");
+const crypto_security_1 = require("./crypto_security");
+const data_processing_1 = require("./data_processing");
+const engineering_physics_1 = require("./engineering_physics");
+const algorithms_1 = require("./algorithms");
+const updater_1 = require("./updater");
 const values_1 = require("../runtime/values");
 function createStandardEnvironment(options) {
     const env = new environment_1.Environment();
@@ -30,76 +38,83 @@ function createStandardEnvironment(options) {
         };
         env.define(name, plainFn);
     };
-    // 1. Math Builtins (46 functions)
-    for (const [name, fn] of Object.entries(math_1.mathBuiltins)) {
-        register(name, fn);
-    }
-    // 2. Geometry Builtins (15 functions)
-    for (const [name, fn] of Object.entries(geometry_1.geometryBuiltins)) {
-        register(name, fn);
-    }
-    // 3. Statistics Builtins (16 functions)
-    for (const [name, fn] of Object.entries(stats_1.statsBuiltins)) {
-        register(name, fn);
-    }
-    // 4. Science & Physics Builtins (18 functions)
-    for (const [name, fn] of Object.entries(science_1.scienceBuiltins)) {
-        register(name, fn);
-    }
-    // 5. Student & Units Builtins (22 functions)
-    for (const [name, fn] of Object.entries(student_1.studentBuiltins)) {
-        register(name, fn);
-    }
-    // 6. Text Builtins (36 functions)
-    for (const [name, fn] of Object.entries(text_1.textBuiltins)) {
-        register(name, fn);
-    }
-    // 7. List Builtins (28 functions)
-    for (const [name, fn] of Object.entries(list_1.listBuiltins)) {
-        register(name, fn);
-    }
-    // 8. Time Builtins (17 functions)
-    for (const [name, fn] of Object.entries(time_1.timeBuiltins)) {
-        register(name, fn);
-    }
-    // 9. System & Utilities Builtins (18 functions)
-    for (const [name, fn] of Object.entries(system_1.systemBuiltins)) {
-        register(name, fn);
-    }
-    // 10. Network Builtins (5 functions)
-    for (const [name, fn] of Object.entries(network_1.networkBuiltins)) {
-        register(name, fn);
-    }
-    // 11. Web Development Builtins (11 functions)
+    // Helper to register canonical, natural English space alias, and optional camelCase
+    const registerModule = (moduleObj) => {
+        for (const [name, fn] of Object.entries(moduleObj)) {
+            register(name, fn);
+            // Register space alias: "matrix_add" -> "matrix add"
+            if (name.includes("_")) {
+                const spaceAlias = name.replace(/_/g, " ");
+                register(spaceAlias, fn);
+                // Register camelCase: "matrix_add" -> "matrixAdd"
+                const camelCase = name.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+                register(camelCase, fn);
+            }
+        }
+    };
+    // 1. Math Builtins
+    registerModule(math_1.mathBuiltins);
+    // 2. Geometry Builtins
+    registerModule(geometry_1.geometryBuiltins);
+    // 3. Statistics Builtins
+    registerModule(stats_1.statsBuiltins);
+    // 4. Science Builtins
+    registerModule(science_1.scienceBuiltins);
+    // 5. Student & Units Builtins
+    registerModule(student_1.studentBuiltins);
+    // 6. Text Builtins
+    registerModule(text_1.textBuiltins);
+    // 7. List Builtins
+    registerModule(list_1.listBuiltins);
+    // 8. Time Builtins
+    registerModule(time_1.timeBuiltins);
+    // 9. System & Game Builtins
+    registerModule(system_1.systemBuiltins);
+    // 10. Network Builtins
+    registerModule(network_1.networkBuiltins);
+    // 11. Web Development Builtins
     const webBuiltins = (0, web_1.createWebBuiltins)({ invokeFunction: options?.invokeFunction });
-    for (const [name, fn] of Object.entries(webBuiltins)) {
-        register(name, fn);
-    }
-    // 12. Data Science Builtins (18 functions)
-    for (const [name, fn] of Object.entries(datascience_1.datascienceBuiltins)) {
-        register(name, fn);
-    }
-    // 13. Artificial Intelligence & Machine Learning Builtins (17 functions)
-    for (const [name, fn] of Object.entries(ai_1.aiBuiltins)) {
-        register(name, fn);
-    }
-    // 14. Task Automation Builtins (14 functions)
-    for (const [name, fn] of Object.entries(automation_1.automationBuiltins)) {
-        register(name, fn);
-    }
-    // 15. File System Sandboxed Operations (9 functions)
-    register("read_file", (path) => fileSandbox.readFile(path));
-    register("write_file", (path, content) => fileSandbox.writeFile(path, content));
-    register("append_file", (path, content) => fileSandbox.appendFile(path, content));
-    register("file_exists", (path) => fileSandbox.fileExists(path));
-    register("delete_file", (path) => fileSandbox.deleteFile(path));
-    register("list_files", (dir) => fileSandbox.listFiles(dir));
-    register("file_size", (path) => fileSandbox.fileSize(path));
-    register("create_folder", (dir) => fileSandbox.createFolder(dir));
-    register("folder_exists", (dir) => fileSandbox.folderExists(dir));
-    // 16. Student & Developer Aliases
+    registerModule(webBuiltins);
+    // 12. Data Science Builtins
+    registerModule(datascience_1.datascienceBuiltins);
+    // 13. Artificial Intelligence & Machine Learning
+    registerModule(ai_1.aiBuiltins);
+    // 14. Task Automation Builtins
+    registerModule(automation_1.automationBuiltins);
+    // 15. AI Training & Deep Learning
+    registerModule(ai_training_1.aiTrainingBuiltins);
+    // 16. Server Deployment & Network Discovery
+    const serverDeployer = (0, server_deploy_1.createServerDeployer)({ invokeFunction: options?.invokeFunction });
+    registerModule(serverDeployer);
+    // 17. Linear Algebra & Matrices
+    registerModule(linear_algebra_1.linearAlgebraBuiltins);
+    // 18. Crypto & Security
+    registerModule(crypto_security_1.cryptoSecurityBuiltins);
+    // 19. Data Processing & DataFrames
+    registerModule(data_processing_1.dataProcessingBuiltins);
+    // 20. Engineering, Physics & Relativity
+    registerModule(engineering_physics_1.engineeringPhysicsBuiltins);
+    // 21. Computer Science Algorithms
+    registerModule(algorithms_1.algorithmsBuiltins);
+    // 22. Updater & Software Maintenance
+    registerModule(updater_1.updaterBuiltins);
+    // 23. File System Operations
+    const fileOperations = {
+        read_file: (path) => fileSandbox.readFile(path),
+        write_file: (path, content) => fileSandbox.writeFile(path, content),
+        append_file: (path, content) => fileSandbox.appendFile(path, content),
+        file_exists: (path) => fileSandbox.fileExists(path),
+        delete_file: (path) => fileSandbox.deleteFile(path),
+        list_files: (dir) => fileSandbox.listFiles(dir),
+        file_size: (path) => fileSandbox.fileSize(path),
+        create_folder: (dir) => fileSandbox.createFolder(dir),
+        folder_exists: (dir) => fileSandbox.folderExists(dir)
+    };
+    registerModule(fileOperations);
+    // 24. Python, NumPy, SciPy & PyTorch Shorthand Aliases
     register("print", (val) => (options?.onSay ? options.onSay((0, values_1.plainToString)(val)) : console.log((0, values_1.plainToString)(val))));
     register("wait", (sec) => time_1.timeBuiltins.sleep(sec));
+    register("sleep", (sec) => time_1.timeBuiltins.sleep(sec));
     register("sqrt", math_1.mathBuiltins.square_root);
     register("cbrt", math_1.mathBuiltins.cube_root);
     register("pow", math_1.mathBuiltins.power);
@@ -108,6 +123,9 @@ function createStandardEnvironment(options) {
     register("min", math_1.mathBuiltins.minimum);
     register("max", math_1.mathBuiltins.maximum);
     register("avg", list_1.listBuiltins.average);
+    register("mean", list_1.listBuiltins.average);
+    register("median", stats_1.statsBuiltins.median);
+    register("mode", stats_1.statsBuiltins.mode);
     register("len", text_1.textBuiltins.length);
     register("size", list_1.listBuiltins.count);
     register("upper", text_1.textBuiltins.uppercase);
@@ -121,43 +139,59 @@ function createStandardEnvironment(options) {
     register("shell", automation_1.automationBuiltins.run_command);
     register("knn", ai_1.aiBuiltins.knn_classify);
     register("kmeans", ai_1.aiBuiltins.kmeans_cluster);
-    // 17. Space Aliases for natural English syntax
-    register("square root", math_1.mathBuiltins.square_root);
-    register("cube root", math_1.mathBuiltins.cube_root);
-    register("starts with", text_1.textBuiltins.starts_with);
-    register("ends with", text_1.textBuiltins.ends_with);
-    register("random between", math_1.mathBuiltins.random_between);
-    register("days between", (d1, d2) => time_1.timeBuiltins.days_between(d1, d2));
-    register("current time", () => time_1.timeBuiltins.current_time());
-    register("read file", (path) => fileSandbox.readFile(path));
-    register("write file", (path, content) => fileSandbox.writeFile(path, content));
-    register("append file", (path, content) => fileSandbox.appendFile(path, content));
-    register("file exists", (path) => fileSandbox.fileExists(path));
-    register("delete file", (path) => fileSandbox.deleteFile(path));
-    register("list files", (dir) => fileSandbox.listFiles(dir));
-    register("file size", (path) => fileSandbox.fileSize(path));
-    register("create folder", (dir) => fileSandbox.createFolder(dir));
-    register("roll dice", (sides, count) => system_1.systemBuiltins.roll_dice(sides, count));
-    register("flip coin", () => system_1.systemBuiltins.flip_coin());
-    register("pick card", () => system_1.systemBuiltins.pick_card());
-    register("letter grade", (pct) => student_1.studentBuiltins.letter_grade(pct));
-    register("atomic mass", (elem) => science_1.scienceBuiltins.atomic_mass(elem));
-    register("element name", (elem) => science_1.scienceBuiltins.element_name(elem));
-    register("read csv", (p) => datascience_1.datascienceBuiltins.read_csv(p));
-    register("write csv", (p, t) => datascience_1.datascienceBuiltins.write_csv(p, t));
-    register("filter table", (t, c, op, v) => datascience_1.datascienceBuiltins.filter_table(t, c, op, v));
-    register("sort table", (t, c, a) => datascience_1.datascienceBuiltins.sort_table(t, c, a));
-    register("start server", (p, h) => webBuiltins.start_server(p, h));
-    register("stop server", () => webBuiltins.stop_server());
-    register("serve static", (p, f) => webBuiltins.serve_static_files(p, f));
-    register("run command", (cmd) => automation_1.automationBuiltins.run_command(cmd));
-    register("find files", (d, p) => automation_1.automationBuiltins.find_files(d, p));
-    register("copy file", (s, d) => automation_1.automationBuiltins.copy_file(s, d));
-    register("move file", (s, d) => automation_1.automationBuiltins.move_file(s, d));
-    register("batch rename", (d, f, r) => automation_1.automationBuiltins.batch_rename(d, f, r));
-    register("log info", (m) => automation_1.automationBuiltins.log_info(m));
-    register("log error", (m) => automation_1.automationBuiltins.log_error(m));
-    register("log warn", (m) => automation_1.automationBuiltins.log_warn(m));
+    // NumPy & Matrix shortcuts
+    register("np_zeros", linear_algebra_1.linearAlgebraBuiltins.matrix_zeros);
+    register("zeros", linear_algebra_1.linearAlgebraBuiltins.matrix_zeros);
+    register("np_ones", linear_algebra_1.linearAlgebraBuiltins.matrix_ones);
+    register("ones", linear_algebra_1.linearAlgebraBuiltins.matrix_ones);
+    register("np_eye", linear_algebra_1.linearAlgebraBuiltins.matrix_eye);
+    register("eye", linear_algebra_1.linearAlgebraBuiltins.matrix_eye);
+    register("np_dot", linear_algebra_1.linearAlgebraBuiltins.vector_dot);
+    register("dot", linear_algebra_1.linearAlgebraBuiltins.vector_dot);
+    register("matmul", linear_algebra_1.linearAlgebraBuiltins.matrix_mult);
+    register("np_matmul", linear_algebra_1.linearAlgebraBuiltins.matrix_mult);
+    register("transpose", linear_algebra_1.linearAlgebraBuiltins.matrix_transpose);
+    register("det", linear_algebra_1.linearAlgebraBuiltins.matrix_determinant);
+    register("inv", linear_algebra_1.linearAlgebraBuiltins.matrix_inverse_2x2);
+    register("shape", linear_algebra_1.linearAlgebraBuiltins.matrix_shape);
+    register("reshape", linear_algebra_1.linearAlgebraBuiltins.matrix_reshape);
+    // Pandas shortcuts
+    register("head", data_processing_1.dataProcessingBuiltins.table_head);
+    register("tail", data_processing_1.dataProcessingBuiltins.table_tail);
+    register("columns", data_processing_1.dataProcessingBuiltins.table_column_names);
+    register("drop_nulls", data_processing_1.dataProcessingBuiltins.table_drop_nulls);
+    register("fill_nulls", data_processing_1.dataProcessingBuiltins.table_fill_nulls);
+    register("inner_join", data_processing_1.dataProcessingBuiltins.table_join_inner);
+    // PyTorch & Neural Network shortcuts
+    register("nn_create", ai_training_1.aiTrainingBuiltins.create_neural_network);
+    register("nn_train", ai_training_1.aiTrainingBuiltins.train_neural_network);
+    register("nn_predict", ai_training_1.aiTrainingBuiltins.predict_neural_network);
+    register("load_dataset", ai_training_1.aiTrainingBuiltins.load_ai_dataset);
+    register("mse", ai_training_1.aiTrainingBuiltins.mean_squared_error_loss);
+    register("mae", ai_training_1.aiTrainingBuiltins.mean_absolute_error_loss);
+    register("cross_entropy", ai_training_1.aiTrainingBuiltins.binary_cross_entropy_loss);
+    register("log_reg", ai_training_1.aiTrainingBuiltins.train_logistic_regression);
+    // Server & Deploy shortcuts
+    register("deploy", serverDeployer.deploy_server);
+    register("local_ip", serverDeployer.get_local_ip);
+    register("public_ip", serverDeployer.get_public_ip);
+    // Security shortcuts
+    register("hash_sha256", crypto_security_1.cryptoSecurityBuiltins.sha256);
+    register("hash_md5", crypto_security_1.cryptoSecurityBuiltins.md5);
+    register("uuid", crypto_security_1.cryptoSecurityBuiltins.generate_uuid);
+    register("jwt_sign", crypto_security_1.cryptoSecurityBuiltins.create_jwt);
+    register("jwt_verify", crypto_security_1.cryptoSecurityBuiltins.verify_jwt);
+    // CS Algorithms
+    register("sort", algorithms_1.algorithmsBuiltins.quick_sort);
+    register("binary_search", algorithms_1.algorithmsBuiltins.binary_search);
+    register("bfs", algorithms_1.algorithmsBuiltins.graph_bfs);
+    register("dfs", algorithms_1.algorithmsBuiltins.graph_dfs);
+    register("dijkstra", algorithms_1.algorithmsBuiltins.graph_dijkstra);
+    register("fib", algorithms_1.algorithmsBuiltins.fibonacci_nth);
+    // Updater shortcuts
+    register("update", updater_1.updaterBuiltins.update_software);
+    register("upgrade", updater_1.updaterBuiltins.update_software);
+    register("version", updater_1.updaterBuiltins.plain_version);
     return env;
 }
 //# sourceMappingURL=index.js.map

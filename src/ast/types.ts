@@ -4,6 +4,8 @@ export type ASTNode = Statement | Expression;
 
 export type Statement =
   | SetStatement
+  | AssignmentStatement
+  | ImportStatement
   | SayStatement
   | ShowStatement
   | AskStatement
@@ -27,6 +29,20 @@ export interface SetStatement extends BaseNode {
   type: "SetStatement";
   name: string;
   value: Expression;
+}
+
+export interface AssignmentStatement extends BaseNode {
+  type: "AssignmentStatement";
+  name: string;
+  operator: "=" | "+=" | "-=" | "*=" | "/=";
+  value: Expression;
+}
+
+export interface ImportStatement extends BaseNode {
+  type: "ImportStatement";
+  source: string;
+  symbols?: string[];
+  alias?: string;
 }
 
 export interface SayStatement extends BaseNode {
@@ -122,11 +138,14 @@ export type Expression =
   | BooleanLiteral
   | NothingLiteral
   | ListLiteral
+  | DictionaryLiteral
   | Identifier
   | BinaryExpression
   | UnaryExpression
   | CallExpression
-  | ItemOfExpression;
+  | ItemOfExpression
+  | MemberAccessExpression
+  | IndexExpression;
 
 export interface NumberLiteral extends BaseNode {
   type: "NumberLiteral";
@@ -157,12 +176,36 @@ export interface Identifier extends BaseNode {
   name: string;
 }
 
+export interface DictionaryEntry {
+  key: string;
+  value: Expression;
+}
+
+export interface DictionaryLiteral extends BaseNode {
+  type: "DictionaryLiteral";
+  entries: DictionaryEntry[];
+}
+
+export interface MemberAccessExpression extends BaseNode {
+  type: "MemberAccessExpression";
+  object: Expression;
+  property: string;
+}
+
+export interface IndexExpression extends BaseNode {
+  type: "IndexExpression";
+  object: Expression;
+  index: Expression;
+}
+
 export type BinaryOperator =
   | "+"
   | "-"
   | "*"
   | "/"
   | "%"
+  | "**"
+  | "//"
   | "=="
   | "!="
   | ">"
@@ -189,7 +232,7 @@ export interface UnaryExpression extends BaseNode {
 
 export interface CallExpression extends BaseNode {
   type: "CallExpression";
-  callee: string;
+  callee: string | Expression;
   arguments: Expression[];
 }
 

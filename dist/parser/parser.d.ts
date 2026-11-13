@@ -9,6 +9,10 @@ export declare class Parser {
     parse(): Program;
     private parseStatement;
     private parseSetStatement;
+    private parseAssignmentStatement;
+    private parseImportStatement;
+    private parseFromImportStatement;
+    private parseWhileStatement;
     private parseSayStatement;
     private parseShowStatement;
     private parseAskStatement;
@@ -31,6 +35,7 @@ export declare class Parser {
     private parseAdditive;
     private parseMultiplicative;
     private parseUnary;
+    private parsePostfix;
     private parsePrimary;
     private parseFunctionCallArgs;
     private canStartArgument;

@@ -33,8 +33,8 @@ __export(cli_exports, {
   main: () => main
 });
 module.exports = __toCommonJS(cli_exports);
-var fs5 = __toESM(require("fs"));
-var path5 = __toESM(require("path"));
+var fs6 = __toESM(require("fs"));
+var path6 = __toESM(require("path"));
 
 // src/errors/plain-error.ts
 var PlainError = class _PlainError extends Error {
@@ -99,7 +99,12 @@ var KEYWORDS = {
   divided: "Divided" /* Divided */,
   by: "By" /* By */,
   remainder: "Remainder" /* Remainder */,
-  or: "Or" /* Or */
+  or: "Or" /* Or */,
+  import: "Import" /* Import */,
+  def: "Def" /* Def */,
+  fn: "Def" /* Def */,
+  function: "Def" /* Def */,
+  return: "Return" /* Return */
 };
 var Lexer = class {
   source;
@@ -136,7 +141,7 @@ var Lexer = class {
         }
         continue;
       }
-      if (char === "#" || char === "/" && this.peekNext() === "/") {
+      if (char === "#") {
         this.skipComment();
         continue;
       }
@@ -159,6 +164,12 @@ var Lexer = class {
         tokens.push({ type: "EqualEqual" /* EqualEqual */, value: "==", raw: "==", location: loc });
         continue;
       }
+      if (char === "=" && this.peekNext() === ">") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "FatArrow" /* FatArrow */, value: "=>", raw: "=>", location: loc });
+        continue;
+      }
       if (char === "!" && this.peekNext() === "=") {
         this.advance();
         this.advance();
@@ -177,7 +188,73 @@ var Lexer = class {
         tokens.push({ type: "GreaterEqual" /* GreaterEqual */, value: ">=", raw: ">=", location: loc });
         continue;
       }
+      if (char === "+" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "PlusEqual" /* PlusEqual */, value: "+=", raw: "+=", location: loc });
+        continue;
+      }
+      if (char === "-" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "MinusEqual" /* MinusEqual */, value: "-=", raw: "-=", location: loc });
+        continue;
+      }
+      if (char === "*" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "StarEqual" /* StarEqual */, value: "*=", raw: "*=", location: loc });
+        continue;
+      }
+      if (char === "/" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "SlashEqual" /* SlashEqual */, value: "/=", raw: "/=", location: loc });
+        continue;
+      }
+      if (char === "/" && this.peekNext() === "/") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "SlashSlash" /* SlashSlash */, value: "//", raw: "//", location: loc });
+        continue;
+      }
+      if (char === "*" && this.peekNext() === "*") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "StarStar" /* StarStar */, value: "**", raw: "**", location: loc });
+        continue;
+      }
+      if (char === "-" && this.peekNext() === ">") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "Arrow" /* Arrow */, value: "->", raw: "->", location: loc });
+        continue;
+      }
       switch (char) {
+        case "=":
+          this.advance();
+          tokens.push({ type: "Equal" /* Equal */, value: "=", raw: "=", location: loc });
+          break;
+        case ":":
+          this.advance();
+          tokens.push({ type: "Colon" /* Colon */, value: ":", raw: ":", location: loc });
+          break;
+        case "{":
+          this.advance();
+          tokens.push({ type: "LeftBrace" /* LeftBrace */, value: "{", raw: "{", location: loc });
+          break;
+        case "}":
+          this.advance();
+          tokens.push({ type: "RightBrace" /* RightBrace */, value: "}", raw: "}", location: loc });
+          break;
+        case "|":
+          this.advance();
+          tokens.push({ type: "Pipe" /* Pipe */, value: "|", raw: "|", location: loc });
+          break;
+        case ".":
+          this.advance();
+          tokens.push({ type: "Dot" /* Dot */, value: ".", raw: ".", location: loc });
+          break;
         case "+":
           this.advance();
           tokens.push({ type: "PlusSign" /* PlusSign */, value: "+", raw: "+", location: loc });
@@ -444,6 +521,16 @@ var Parser = class {
     switch (token.type) {
       case "Set" /* Set */:
         return this.parseSetStatement();
+      case "Import" /* Import */:
+        return this.parseImportStatement();
+      case "From" /* From */:
+        return this.parseFromImportStatement();
+      case "Def" /* Def */:
+        return this.parseFunctionDefStatement();
+      case "Return" /* Return */:
+        return this.parseReturnStatement();
+      case "While" /* While */:
+        return this.parseWhileStatement();
       case "Say" /* Say */:
         return this.parseSayStatement();
       case "Show" /* Show */:
@@ -468,6 +555,13 @@ var Parser = class {
         return this.parseListRemoveStatement();
       case "Wait" /* Wait */:
         return this.parseWaitStatement();
+      case "Identifier" /* Identifier */: {
+        const next = this.peekNext();
+        if (next && (next.type === "Equal" /* Equal */ || next.type === "PlusEqual" /* PlusEqual */ || next.type === "MinusEqual" /* MinusEqual */ || next.type === "StarEqual" /* StarEqual */ || next.type === "SlashEqual" /* SlashEqual */)) {
+          return this.parseAssignmentStatement();
+        }
+        return this.parseExpressionStatement();
+      }
       default:
         return this.parseExpressionStatement();
     }
@@ -516,6 +610,128 @@ var Parser = class {
       name: varName,
       value,
       location: setToken.location
+    };
+  }
+  parseAssignmentStatement() {
+    const nameToken = this.advance();
+    const opToken = this.advance();
+    let operator = "=";
+    switch (opToken.type) {
+      case "Equal" /* Equal */:
+        operator = "=";
+        break;
+      case "PlusEqual" /* PlusEqual */:
+        operator = "+=";
+        break;
+      case "MinusEqual" /* MinusEqual */:
+        operator = "-=";
+        break;
+      case "StarEqual" /* StarEqual */:
+        operator = "*=";
+        break;
+      case "SlashEqual" /* SlashEqual */:
+        operator = "/=";
+        break;
+      default:
+        operator = "=";
+        break;
+    }
+    const value = this.parseExpression();
+    this.expectStatementEnd();
+    return {
+      type: "AssignmentStatement",
+      name: nameToken.raw || nameToken.value,
+      operator,
+      value,
+      location: nameToken.location
+    };
+  }
+  parseImportStatement() {
+    const importToken = this.advance();
+    let source = "";
+    if (this.check("String" /* String */)) {
+      source = this.advance().value;
+    } else if (this.isWord(this.peek())) {
+      source = this.advance().raw || this.previous().value;
+    } else {
+      throw new PlainError(
+        "Expected module name or file path after 'import'.",
+        this.peek().location,
+        {
+          kind: "ParserError",
+          sourceCode: this.source,
+          suggestion: 'Example: import math or import "./utils.plain"'
+        }
+      );
+    }
+    let alias;
+    if (this.match("As" /* As */)) {
+      if (this.isWord(this.peek())) {
+        alias = this.advance().raw;
+      }
+    }
+    this.expectStatementEnd();
+    return {
+      type: "ImportStatement",
+      source,
+      alias,
+      location: importToken.location
+    };
+  }
+  parseFromImportStatement() {
+    const fromToken = this.advance();
+    let source = "";
+    if (this.check("String" /* String */)) {
+      source = this.advance().value;
+    } else if (this.isWord(this.peek())) {
+      source = this.advance().raw;
+    }
+    this.consume("Import" /* Import */, "Expected 'import' after 'from <module>'.");
+    const symbols = [];
+    do {
+      if (this.isWord(this.peek())) {
+        symbols.push(this.advance().raw);
+      }
+    } while (this.match("Comma" /* Comma */));
+    this.expectStatementEnd();
+    return {
+      type: "ImportStatement",
+      source,
+      symbols,
+      location: fromToken.location
+    };
+  }
+  parseWhileStatement() {
+    const token = this.advance();
+    const condition = this.parseExpression();
+    if (this.check("Colon" /* Colon */) || this.check("Then" /* Then */)) {
+      this.advance();
+    }
+    this.expectStatementEnd();
+    const body = [];
+    while (!this.isAtEnd() && !this.check("End" /* End */)) {
+      this.skipNewlines();
+      if (this.check("End" /* End */)) break;
+      body.push(this.parseStatement());
+      this.skipNewlines();
+    }
+    if (!this.match("End" /* End */)) {
+      throw new PlainError(
+        `You started a 'while' loop on line ${token.location.line}, but didn't close it with 'end'.`,
+        this.peek().location,
+        {
+          kind: "ParserError",
+          sourceCode: this.source,
+          suggestion: "Add 'end' to close the while loop."
+        }
+      );
+    }
+    this.expectStatementEnd();
+    return {
+      type: "RepeatWhileStatement",
+      condition,
+      body,
+      location: token.location
     };
   }
   parseSayStatement() {
@@ -643,6 +859,7 @@ var Parser = class {
     const token = this.advance();
     const condition = this.parseExpression();
     this.match("Then" /* Then */);
+    if (this.check("Colon" /* Colon */)) this.advance();
     this.expectStatementEnd();
     const consequent = [];
     const otherwiseIfBranches = [];
@@ -658,6 +875,7 @@ var Parser = class {
         const branchLoc = this.previous().location;
         const branchCond = this.parseExpression();
         this.match("Then" /* Then */);
+        if (this.check("Colon" /* Colon */)) this.advance();
         this.expectStatementEnd();
         const branchBody = [];
         while (!this.isAtEnd() && !this.check("Otherwise" /* Otherwise */) && !this.check("End" /* End */)) {
@@ -672,6 +890,7 @@ var Parser = class {
           location: branchLoc
         });
       } else {
+        if (this.check("Colon" /* Colon */)) this.advance();
         this.expectStatementEnd();
         alternate = [];
         while (!this.isAtEnd() && !this.check("End" /* End */)) {
@@ -783,25 +1002,15 @@ var Parser = class {
   }
   parseForEachStatement() {
     const token = this.advance();
-    if (!this.match("Each" /* Each */)) {
-      throw new PlainError(
-        `I expected 'each' after 'for'.`,
-        this.peek().location,
-        {
-          kind: "ParserError",
-          sourceCode: this.source,
-          suggestion: "Pattern: for each item in list\n    say item\nend"
-        }
-      );
-    }
+    this.match("Each" /* Each */);
     if (!this.check("Identifier" /* Identifier */)) {
       throw new PlainError(
-        `I expected an item variable name after 'for each'.`,
+        `I expected an item variable name after 'for'.`,
         this.peek().location,
         {
           kind: "ParserError",
           sourceCode: this.source,
-          suggestion: "Example: for each score in scores"
+          suggestion: "Example: for item in items or for each score in scores"
         }
       );
     }
@@ -818,6 +1027,7 @@ var Parser = class {
       );
     }
     const list = this.parseExpression();
+    if (this.check("Colon" /* Colon */)) this.advance();
     this.expectStatementEnd();
     const body = [];
     while (!this.isAtEnd() && !this.check("End" /* End */)) {
@@ -853,12 +1063,12 @@ var Parser = class {
     const token = this.advance();
     if (!this.isWord(this.peek())) {
       throw new PlainError(
-        `I expected a function name after 'to'.`,
+        `I expected a function name after '${token.raw}'.`,
         this.peek().location,
         {
           kind: "ParserError",
           sourceCode: this.source,
-          suggestion: 'Example: to greet person\n    say "Hello " plus person\nend'
+          suggestion: 'Example: def greet(person): say "Hello " + person end or to greet person give back "Hello" end'
         }
       );
     }
@@ -892,6 +1102,9 @@ var Parser = class {
         }
       }
     }
+    if (this.check("Colon" /* Colon */)) {
+      this.advance();
+    }
     this.expectStatementEnd();
     const body = [];
     while (!this.isAtEnd() && !this.check("End" /* End */)) {
@@ -922,21 +1135,27 @@ var Parser = class {
   }
   parseReturnStatement() {
     const token = this.advance();
-    if (!this.match("Back" /* Back */)) {
-      throw new PlainError(
-        `I expected 'back' after 'give'.`,
-        this.peek().location,
-        {
-          kind: "ParserError",
-          sourceCode: this.source,
-          suggestion: "To return a value from a function, write: give back <value>"
-        }
-      );
+    if (token.type === "Give" /* Give */) {
+      if (!this.match("Back" /* Back */)) {
+        throw new PlainError(
+          `I expected 'back' after 'give'.`,
+          this.peek().location,
+          {
+            kind: "ParserError",
+            sourceCode: this.source,
+            suggestion: "Write 'give back <value>' or 'return <value>' to return a result."
+          }
+        );
+      }
     }
-    let value;
-    if (!this.isAtStatementEnd()) {
-      value = this.parseExpression();
+    if (this.isAtStatementEnd()) {
+      this.expectStatementEnd();
+      return {
+        type: "ReturnStatement",
+        location: token.location
+      };
     }
+    const value = this.parseExpression();
     this.expectStatementEnd();
     return {
       type: "ReturnStatement",
@@ -1177,6 +1396,16 @@ var Parser = class {
   parseMultiplicative() {
     let left = this.parseUnary();
     while (true) {
+      if (this.match("StarStar" /* StarStar */)) {
+        const right = this.parseUnary();
+        left = { type: "BinaryExpression", operator: "**", left, right, location: left.location };
+        continue;
+      }
+      if (this.match("SlashSlash" /* SlashSlash */)) {
+        const right = this.parseUnary();
+        left = { type: "BinaryExpression", operator: "//", left, right, location: left.location };
+        continue;
+      }
       if (this.match("StarSign" /* StarSign */)) {
         const right = this.parseUnary();
         left = { type: "BinaryExpression", operator: "*", left, right, location: left.location };
@@ -1234,7 +1463,57 @@ var Parser = class {
         location: token.location
       };
     }
-    return this.parsePrimary();
+    return this.parsePostfix();
+  }
+  parsePostfix() {
+    let expr = this.parsePrimary();
+    while (true) {
+      if (this.match("LeftBracket" /* LeftBracket */)) {
+        const index = this.parseExpression();
+        this.consume("RightBracket" /* RightBracket */, "Expected ']' after index.");
+        expr = {
+          type: "IndexExpression",
+          object: expr,
+          index,
+          location: expr.location
+        };
+        continue;
+      }
+      if (this.match("Dot" /* Dot */)) {
+        if (!this.isWord(this.peek())) {
+          throw new PlainError("Expected property name after '.'.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
+        }
+        const prop = this.advance().raw;
+        expr = {
+          type: "MemberAccessExpression",
+          object: expr,
+          property: prop,
+          location: expr.location
+        };
+        continue;
+      }
+      if (this.match("LeftParen" /* LeftParen */)) {
+        const args = [];
+        if (!this.check("RightParen" /* RightParen */)) {
+          do {
+            this.skipNewlines();
+            if (this.check("RightParen" /* RightParen */)) break;
+            args.push(this.parseExpression());
+            this.skipNewlines();
+          } while (this.match("Comma" /* Comma */));
+        }
+        this.consume("RightParen" /* RightParen */, "Expected ')' after arguments.");
+        expr = {
+          type: "CallExpression",
+          callee: expr,
+          arguments: args,
+          location: expr.location
+        };
+        continue;
+      }
+      break;
+    }
+    return expr;
   }
   parsePrimary() {
     const token = this.peek();
@@ -1284,6 +1563,33 @@ var Parser = class {
       return {
         type: "ListLiteral",
         elements,
+        location: token.location
+      };
+    }
+    if (this.match("LeftBrace" /* LeftBrace */)) {
+      const entries = [];
+      this.skipNewlines();
+      if (!this.check("RightBrace" /* RightBrace */)) {
+        do {
+          this.skipNewlines();
+          if (this.check("RightBrace" /* RightBrace */)) break;
+          let key = "";
+          if (this.check("String" /* String */) || this.isWord(this.peek())) {
+            key = String(this.advance().value);
+          } else {
+            throw new PlainError("Expected key name in dictionary.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
+          }
+          this.consume("Colon" /* Colon */, "Expected ':' after dictionary key.");
+          const value = this.parseExpression();
+          entries.push({ key, value });
+          this.skipNewlines();
+        } while (this.match("Comma" /* Comma */));
+      }
+      this.skipNewlines();
+      this.consume("RightBrace" /* RightBrace */, "Expected closing '}' for dictionary.");
+      return {
+        type: "DictionaryLiteral",
+        entries,
         location: token.location
       };
     }
@@ -1465,7 +1771,7 @@ var Parser = class {
   canStartArgument() {
     if (this.isAtStatementEnd()) return false;
     const type = this.peek().type;
-    return type === "Number" /* Number */ || type === "String" /* String */ || type === "Boolean" /* Boolean */ || type === "Nothing" /* Nothing */ || type === "LeftBracket" /* LeftBracket */ || type === "LeftParen" /* LeftParen */ || type === "Identifier" /* Identifier */ || type === "Item" /* Item */;
+    return type === "Number" /* Number */ || type === "String" /* String */ || type === "Boolean" /* Boolean */ || type === "Nothing" /* Nothing */ || type === "LeftParen" /* LeftParen */ || type === "Identifier" /* Identifier */ || type === "Item" /* Item */;
   }
   checkWord(word) {
     const tok = this.peek();
@@ -1547,6 +1853,8 @@ var Parser = class {
 
 // src/runtime/interpreter.ts
 var readline = __toESM(require("readline"));
+var fs5 = __toESM(require("fs"));
+var path5 = __toESM(require("path"));
 
 // src/runtime/environment.ts
 var Environment = class {
@@ -1643,6 +1951,9 @@ var Environment = class {
 };
 
 // src/runtime/values.ts
+function isPlainObject(val) {
+  return typeof val === "object" && val !== null && !Array.isArray(val) && val.type !== "function";
+}
 function isPlainFunction(val) {
   return typeof val === "object" && val !== null && val.type === "function";
 }
@@ -1666,6 +1977,13 @@ function plainToString(value) {
       return plainToString(v);
     });
     return `[${items.join(", ")}]`;
+  }
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value).map(([k, v]) => {
+      const vStr = typeof v === "string" ? `"${v}"` : plainToString(v);
+      return `"${k}": ${vStr}`;
+    });
+    return `{${entries.join(", ")}}`;
   }
   if (isPlainFunction(value)) {
     return `<function ${value.name}>`;
@@ -2286,7 +2604,7 @@ var timeBuiltins = {
   sleep: async (secondsVal) => {
     const sec = mathBuiltins.to_number(secondsVal);
     const ms = Math.max(0, sec * 1e3);
-    return new Promise((resolve6) => setTimeout(resolve6, ms));
+    return new Promise((resolve7) => setTimeout(resolve7, ms));
   }
 };
 
@@ -3224,7 +3542,7 @@ function createWebBuiltins(context) {
         }
         activeServer = null;
       }
-      return new Promise((resolve6, reject) => {
+      return new Promise((resolve7, reject) => {
         const server = http.createServer(async (req, res) => {
           const parsedUrl = url.parse(req.url || "/", true);
           const reqPath = parsedUrl.pathname || "/";
@@ -3275,7 +3593,7 @@ function createWebBuiltins(context) {
         });
         server.listen(port, () => {
           activeServer = server;
-          resolve6(`Server running at http://localhost:${port}/`);
+          resolve7(`Server running at http://localhost:${port}/`);
         });
       });
     },
@@ -3294,7 +3612,7 @@ function createWebBuiltins(context) {
         activeServer.close();
         activeServer = null;
       }
-      return new Promise((resolve6, reject) => {
+      return new Promise((resolve7, reject) => {
         const server = http.createServer((req, res) => {
           const parsed = url.parse(req.url || "/", true);
           let safePath = path.normalize(parsed.pathname || "/").replace(/^(\.\.[\/\\])+/, "");
@@ -3313,7 +3631,7 @@ function createWebBuiltins(context) {
         server.on("error", (err) => reject(new PlainError(err.message, { line: 1, column: 1 }, { kind: "RuntimeError" })));
         server.listen(port, () => {
           activeServer = server;
-          resolve6(`Static server hosting "${baseDir}" at http://localhost:${port}/`);
+          resolve7(`Static server hosting "${baseDir}" at http://localhost:${port}/`);
         });
       });
     },
@@ -4341,7 +4659,7 @@ var automationBuiltins = {
   delay: async (secondsVal) => {
     const sec = mathBuiltins.to_number(secondsVal);
     const ms = Math.max(0, sec * 1e3);
-    return new Promise((resolve6) => setTimeout(resolve6, ms));
+    return new Promise((resolve7) => setTimeout(resolve7, ms));
   }
 };
 
@@ -4511,6 +4829,2104 @@ var FileSystemSandbox = class {
   }
 };
 
+// src/builtins/ai_training.ts
+var NeuralNetwork = class {
+  layerSizes;
+  weights;
+  // weights[layer][toNode][fromNode]
+  biases;
+  // biases[layer][toNode]
+  activation;
+  constructor(layerSizes, activation = "sigmoid") {
+    this.layerSizes = layerSizes;
+    this.activation = activation;
+    this.weights = [];
+    this.biases = [];
+    for (let l = 0; l < layerSizes.length - 1; l++) {
+      const fanIn = layerSizes[l];
+      const fanOut = layerSizes[l + 1];
+      const scale = Math.sqrt(2 / (fanIn + fanOut));
+      const layerWeights = [];
+      const layerBiases = [];
+      for (let j = 0; j < fanOut; j++) {
+        const nodeWeights = [];
+        for (let k = 0; k < fanIn; k++) {
+          nodeWeights.push((Math.random() * 2 - 1) * scale);
+        }
+        layerWeights.push(nodeWeights);
+        layerBiases.push(0.01 * (Math.random() * 2 - 1));
+      }
+      this.weights.push(layerWeights);
+      this.biases.push(layerBiases);
+    }
+  }
+  activate(x) {
+    switch (this.activation) {
+      case "relu":
+        return Math.max(0, x);
+      case "leaky_relu":
+        return x > 0 ? x : 0.01 * x;
+      case "tanh":
+        return Math.tanh(x);
+      case "sigmoid":
+      default:
+        return 1 / (1 + Math.exp(-Math.max(-45, Math.min(45, x))));
+    }
+  }
+  activatePrime(y) {
+    switch (this.activation) {
+      case "relu":
+        return y > 0 ? 1 : 0;
+      case "leaky_relu":
+        return y > 0 ? 1 : 0.01;
+      case "tanh":
+        return 1 - y * y;
+      case "sigmoid":
+      default:
+        return y * (1 - y);
+    }
+  }
+  forward(input) {
+    let current = [...input];
+    const activations = [current];
+    const zValues = [];
+    for (let l = 0; l < this.weights.length; l++) {
+      const next = [];
+      const zLayer = [];
+      const isOutput = l === this.weights.length - 1;
+      for (let j = 0; j < this.weights[l].length; j++) {
+        let z = this.biases[l][j];
+        for (let k = 0; k < current.length; k++) {
+          z += this.weights[l][j][k] * current[k];
+        }
+        zLayer.push(z);
+        next.push(this.activate(z));
+      }
+      if (isOutput && next.length > 1 && this.activation === "softmax") {
+        const maxZ = Math.max(...zLayer);
+        const exp = zLayer.map((z) => Math.exp(z - maxZ));
+        const sumExp = exp.reduce((a, b) => a + b, 0);
+        for (let i = 0; i < next.length; i++) {
+          next[i] = exp[i] / sumExp;
+        }
+      }
+      zValues.push(zLayer);
+      activations.push(next);
+      current = next;
+    }
+    return { activations, zValues };
+  }
+  predict(input) {
+    return this.forward(input).activations[this.weights.length];
+  }
+  train(dataset, epochs = 100, learningRate = 0.1, batchSize = 16) {
+    const lossHistory = [];
+    for (let epoch = 0; epoch < epochs; epoch++) {
+      let epochLoss = 0;
+      const shuffled = [...dataset].sort(() => Math.random() - 0.5);
+      for (const sample of shuffled) {
+        const { activations } = this.forward(sample.input);
+        const L = this.weights.length;
+        const output = activations[L];
+        const deltas = [];
+        const outputDeltas = [];
+        for (let j = 0; j < output.length; j++) {
+          const target = sample.output[j] ?? 0;
+          const diff = output[j] - target;
+          epochLoss += 0.5 * diff * diff;
+          outputDeltas.push(diff * this.activatePrime(output[j]));
+        }
+        deltas[L - 1] = outputDeltas;
+        for (let l = L - 2; l >= 0; l--) {
+          const layerDeltas = [];
+          for (let j = 0; j < this.layerSizes[l + 1]; j++) {
+            let error = 0;
+            for (let k = 0; k < this.weights[l + 1].length; k++) {
+              error += this.weights[l + 1][k][j] * deltas[l + 1][k];
+            }
+            layerDeltas.push(error * this.activatePrime(activations[l + 1][j]));
+          }
+          deltas[l] = layerDeltas;
+        }
+        for (let l = 0; l < L; l++) {
+          for (let j = 0; j < this.weights[l].length; j++) {
+            for (let k = 0; k < this.weights[l][j].length; k++) {
+              this.weights[l][j][k] -= learningRate * deltas[l][j] * activations[l][k];
+            }
+            this.biases[l][j] -= learningRate * deltas[l][j];
+          }
+        }
+      }
+      const meanLoss = epochLoss / Math.max(1, dataset.length);
+      if (epoch % Math.max(1, Math.floor(epochs / 10)) === 0 || epoch === epochs - 1) {
+        lossHistory.push(parseFloat(meanLoss.toFixed(6)));
+      }
+    }
+    return {
+      finalLoss: lossHistory[lossHistory.length - 1] || 0,
+      lossHistory,
+      epochs
+    };
+  }
+};
+var PRELOADED_DATASETS = {
+  iris: {
+    labels: ["setosa", "versicolor", "virginica"],
+    inputs: [
+      [5.1, 3.5, 1.4, 0.2],
+      [4.9, 3, 1.4, 0.2],
+      [4.7, 3.2, 1.3, 0.2],
+      [4.6, 3.1, 1.5, 0.2],
+      [5, 3.6, 1.4, 0.2],
+      [7, 3.2, 4.7, 1.4],
+      [6.4, 3.2, 4.5, 1.5],
+      [6.9, 3.1, 4.9, 1.5],
+      [5.5, 2.3, 4, 1.3],
+      [6.5, 2.8, 4.6, 1.5],
+      [6.3, 3.3, 6, 2.5],
+      [5.8, 2.7, 5.1, 1.9],
+      [7.1, 3, 5.9, 2.1],
+      [6.3, 2.9, 5.6, 1.8],
+      [6.5, 3, 5.8, 2.2]
+    ],
+    targets: [
+      [1, 0, 0],
+      [1, 0, 0],
+      [1, 0, 0],
+      [1, 0, 0],
+      [1, 0, 0],
+      [0, 1, 0],
+      [0, 1, 0],
+      [0, 1, 0],
+      [0, 1, 0],
+      [0, 1, 0],
+      [0, 0, 1],
+      [0, 0, 1],
+      [0, 0, 1],
+      [0, 0, 1],
+      [0, 0, 1]
+    ]
+  },
+  mnist_mini: {
+    inputs: [
+      [0, 1, 1, 0, 0, 1, 1, 0],
+      // '0' pattern
+      [0, 1, 1, 0, 0, 1, 1, 0],
+      [0, 0, 1, 0, 0, 0, 1, 0],
+      // '1' pattern
+      [0, 0, 1, 0, 0, 0, 1, 0]
+    ],
+    targets: [
+      [1, 0],
+      [1, 0],
+      [0, 1],
+      [0, 1]
+    ]
+  },
+  housing: {
+    inputs: [
+      [1200, 2, 1],
+      [1500, 3, 2],
+      [1800, 3, 2],
+      [2200, 4, 3],
+      [2600, 4, 3],
+      [3e3, 5, 4]
+    ],
+    targets: [
+      [25e4],
+      [31e4],
+      [36e4],
+      [44e4],
+      [51e4],
+      [6e5]
+    ]
+  },
+  sentiment: {
+    inputs: [
+      [1, 0, 1],
+      // great, good
+      [1, 1, 1],
+      // awesome, love, best
+      [0, 0, 0],
+      // bad, terrible, worst
+      [0, 0, 0]
+    ],
+    targets: [[1], [1], [0], [0]]
+  }
+};
+var aiTrainingBuiltins = {
+  // 1. Neural Networks & Deep Learning
+  create_neural_network: (layers, activationVal = "sigmoid") => {
+    const layerSizes = Array.isArray(layers) ? layers.map((n) => typeof n === "number" ? n : parseInt(String(n), 10) || 1) : [2, 4, 1];
+    const act = typeof activationVal === "string" ? activationVal : "sigmoid";
+    const net = new NeuralNetwork(layerSizes, act);
+    return {
+      _type: "NeuralNetwork",
+      layers: layerSizes,
+      activation: act,
+      net
+    };
+  },
+  train_neural_network: (netObj, datasetVal, epochsVal = 100, lrVal = 0.1) => {
+    if (!netObj || !netObj.net || !(netObj.net instanceof NeuralNetwork)) {
+      throw new Error("Invalid neural network object. Use create_neural_network() first.");
+    }
+    const epochs = typeof epochsVal === "number" ? epochsVal : 100;
+    const lr = typeof lrVal === "number" ? lrVal : 0.1;
+    let dataset = [];
+    if (Array.isArray(datasetVal)) {
+      dataset = datasetVal.map((item) => ({
+        input: Array.isArray(item.input) ? item.input.map(Number) : [],
+        output: Array.isArray(item.output) ? item.output.map(Number) : [Number(item.output)]
+      }));
+    }
+    const trainingResult = netObj.net.train(dataset, epochs, lr);
+    return {
+      epochs: trainingResult.epochs,
+      final_loss: trainingResult.finalLoss,
+      loss_history: trainingResult.lossHistory,
+      message: `Trained network for ${epochs} epochs. Final loss: ${trainingResult.finalLoss}`
+    };
+  },
+  predict_neural_network: (netObj, inputVal) => {
+    if (!netObj || !netObj.net || !(netObj.net instanceof NeuralNetwork)) {
+      throw new Error("Invalid neural network object.");
+    }
+    const input = Array.isArray(inputVal) ? inputVal.map(Number) : [Number(inputVal)];
+    return netObj.net.predict(input);
+  },
+  get_network_weights: (netObj) => {
+    if (!netObj || !netObj.net) return [];
+    return netObj.net.weights;
+  },
+  get_network_biases: (netObj) => {
+    if (!netObj || !netObj.net) return [];
+    return netObj.net.biases;
+  },
+  // 2. Activations & Math
+  sigmoid: (x) => 1 / (1 + Math.exp(-Math.max(-45, Math.min(45, Number(x))))),
+  sigmoid_derivative: (y) => Number(y) * (1 - Number(y)),
+  relu: (x) => Math.max(0, Number(x)),
+  relu_derivative: (x) => Number(x) > 0 ? 1 : 0,
+  leaky_relu: (x, alpha = 0.01) => Number(x) > 0 ? Number(x) : Number(alpha) * Number(x),
+  tanh_activation: (x) => Math.tanh(Number(x)),
+  tanh_derivative: (y) => 1 - Math.pow(Number(y), 2),
+  softmax: (vec) => {
+    const arr = Array.isArray(vec) ? vec.map(Number) : [Number(vec)];
+    const maxVal = Math.max(...arr);
+    const exps = arr.map((v) => Math.exp(v - maxVal));
+    const sum = exps.reduce((a, b) => a + b, 0);
+    return exps.map((e) => e / sum);
+  },
+  gelu: (x) => {
+    const num = Number(x);
+    return 0.5 * num * (1 + Math.tanh(Math.sqrt(2 / Math.PI) * (num + 0.044715 * Math.pow(num, 3))));
+  },
+  swish: (x) => {
+    const num = Number(x);
+    return num / (1 + Math.exp(-num));
+  },
+  // 3. Loss Functions
+  mean_squared_error_loss: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue.map(Number) : [Number(yTrue)];
+    const predicted = Array.isArray(yPred) ? yPred.map(Number) : [Number(yPred)];
+    const n = Math.min(actual.length, predicted.length);
+    if (n === 0) return 0;
+    const sum = actual.slice(0, n).reduce((acc, y, i) => acc + Math.pow(y - predicted[i], 2), 0);
+    return sum / n;
+  },
+  mean_absolute_error_loss: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue.map(Number) : [Number(yTrue)];
+    const predicted = Array.isArray(yPred) ? yPred.map(Number) : [Number(yPred)];
+    const n = Math.min(actual.length, predicted.length);
+    if (n === 0) return 0;
+    const sum = actual.slice(0, n).reduce((acc, y, i) => acc + Math.abs(y - predicted[i]), 0);
+    return sum / n;
+  },
+  binary_cross_entropy_loss: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue.map(Number) : [Number(yTrue)];
+    const predicted = Array.isArray(yPred) ? yPred.map(Number) : [Number(yPred)];
+    const n = Math.min(actual.length, predicted.length);
+    if (n === 0) return 0;
+    const eps = 1e-15;
+    const sum = actual.slice(0, n).reduce((acc, y, i) => {
+      const p = Math.max(eps, Math.min(1 - eps, predicted[i]));
+      return acc - (y * Math.log(p) + (1 - y) * Math.log(1 - p));
+    }, 0);
+    return sum / n;
+  },
+  categorical_cross_entropy_loss: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue.map(Number) : [Number(yTrue)];
+    const predicted = Array.isArray(yPred) ? yPred.map(Number) : [Number(yPred)];
+    const eps = 1e-15;
+    return -actual.reduce((acc, y, i) => acc + y * Math.log(Math.max(eps, predicted[i] ?? eps)), 0);
+  },
+  // 4. Preloaded Datasets
+  load_ai_dataset: (nameVal) => {
+    const key = String(nameVal).toLowerCase().trim();
+    const data = PRELOADED_DATASETS[key];
+    if (!data) {
+      const available = Object.keys(PRELOADED_DATASETS).join(", ");
+      throw new Error(`Dataset '${key}' not found. Available datasets: ${available}`);
+    }
+    return {
+      name: key,
+      sample_count: data.inputs.length,
+      feature_count: data.inputs[0]?.length || 0,
+      inputs: data.inputs,
+      targets: data.targets,
+      labels: data.labels || []
+    };
+  },
+  // 5. Preprocessing & Data Wrangling
+  train_test_split: (inputs, targets, testRatioVal = 0.2) => {
+    const x = Array.isArray(inputs) ? inputs : [];
+    const y = Array.isArray(targets) ? targets : [];
+    const ratio = typeof testRatioVal === "number" ? testRatioVal : 0.2;
+    const testSize = Math.max(1, Math.floor(x.length * ratio));
+    const trainSize = x.length - testSize;
+    const indices = Array.from({ length: x.length }, (_, i) => i).sort(() => Math.random() - 0.5);
+    const xTrain = [];
+    const xTest = [];
+    const yTrain = [];
+    const yTest = [];
+    indices.forEach((idx, i) => {
+      if (i < trainSize) {
+        xTrain.push(x[idx]);
+        yTrain.push(y[idx]);
+      } else {
+        xTest.push(x[idx]);
+        yTest.push(y[idx]);
+      }
+    });
+    return {
+      x_train: xTrain,
+      x_test: xTest,
+      y_train: yTrain,
+      y_test: yTest
+    };
+  },
+  standard_scale: (matrixVal) => {
+    const mat = Array.isArray(matrixVal) ? matrixVal.map((row) => Array.isArray(row) ? row.map(Number) : [Number(row)]) : [];
+    if (mat.length === 0) return { scaled: [], means: [], stds: [] };
+    const numCols = mat[0].length;
+    const means = [];
+    const stds = [];
+    for (let c = 0; c < numCols; c++) {
+      const col = mat.map((row) => row[c]);
+      const mean = col.reduce((a, b) => a + b, 0) / col.length;
+      const variance = col.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / col.length;
+      const std = Math.sqrt(variance) || 1e-7;
+      means.push(mean);
+      stds.push(std);
+    }
+    const scaled = mat.map((row) => row.map((val, c) => (val - means[c]) / stds[c]));
+    return { scaled, means, stds };
+  },
+  min_max_scale: (matrixVal, minVal = 0, maxVal = 1) => {
+    const mat = Array.isArray(matrixVal) ? matrixVal.map((row) => Array.isArray(row) ? row.map(Number) : [Number(row)]) : [];
+    if (mat.length === 0) return { scaled: [], mins: [], maxs: [] };
+    const numCols = mat[0].length;
+    const mins = [];
+    const maxs = [];
+    for (let c = 0; c < numCols; c++) {
+      const col = mat.map((row) => row[c]);
+      mins.push(Math.min(...col));
+      maxs.push(Math.max(...col));
+    }
+    const scaled = mat.map(
+      (row) => row.map((val, c) => {
+        const range = maxs[c] - mins[c] || 1e-7;
+        return minVal + (val - mins[c]) / range * (maxVal - minVal);
+      })
+    );
+    return { scaled, mins, maxs };
+  },
+  one_hot_encode: (labelsVal) => {
+    const labels = Array.isArray(labelsVal) ? labelsVal.map(String) : [String(labelsVal)];
+    const unique = Array.from(new Set(labels)).sort();
+    const encoded = labels.map((item) => unique.map((u) => u === item ? 1 : 0));
+    return {
+      encoded,
+      classes: unique
+    };
+  },
+  label_encode: (labelsVal) => {
+    const labels = Array.isArray(labelsVal) ? labelsVal.map(String) : [String(labelsVal)];
+    const unique = Array.from(new Set(labels)).sort();
+    const mapping = {};
+    unique.forEach((u, i) => mapping[u] = i);
+    const encoded = labels.map((item) => mapping[item]);
+    return {
+      encoded,
+      classes: unique,
+      mapping
+    };
+  },
+  // 6. Classical ML: Logistic Regression
+  train_logistic_regression: (featuresVal, labelsVal, epochs = 200, lr = 0.1) => {
+    const x = Array.isArray(featuresVal) ? featuresVal.map((r) => Array.isArray(r) ? r.map(Number) : [Number(r)]) : [];
+    const y = Array.isArray(labelsVal) ? labelsVal.map(Number) : [];
+    const numFeatures = x[0]?.length || 1;
+    const weights = new Array(numFeatures).fill(0).map(() => (Math.random() - 0.5) * 0.1);
+    let bias = 0;
+    for (let ep = 0; ep < epochs; ep++) {
+      for (let i = 0; i < x.length; i++) {
+        let z = bias;
+        for (let j = 0; j < numFeatures; j++) {
+          z += weights[j] * x[i][j];
+        }
+        const pred = 1 / (1 + Math.exp(-Math.max(-45, Math.min(45, z))));
+        const error = pred - y[i];
+        for (let j = 0; j < numFeatures; j++) {
+          weights[j] -= lr * error * x[i][j];
+        }
+        bias -= lr * error;
+      }
+    }
+    return {
+      _type: "LogisticRegressionModel",
+      weights,
+      bias
+    };
+  },
+  predict_logistic_regression: (model, sampleVal) => {
+    if (!model || !model.weights) return 0;
+    const sample = Array.isArray(sampleVal) ? sampleVal.map(Number) : [Number(sampleVal)];
+    let z = model.bias;
+    for (let j = 0; j < model.weights.length; j++) {
+      z += model.weights[j] * (sample[j] ?? 0);
+    }
+    const prob = 1 / (1 + Math.exp(-Math.max(-45, Math.min(45, z))));
+    return prob >= 0.5 ? 1 : 0;
+  },
+  // 7. Classical ML: Decision Tree (simple stump/depth-1 classifier)
+  train_decision_tree_stump: (featuresVal, labelsVal) => {
+    const x = Array.isArray(featuresVal) ? featuresVal : [];
+    const y = Array.isArray(labelsVal) ? labelsVal.map(Number) : [];
+    const numFeatures = x[0]?.length || 1;
+    let bestFeature = 0;
+    let bestThreshold = 0;
+    let bestAccuracy = -1;
+    let bestPolarity = 1;
+    for (let f = 0; f < numFeatures; f++) {
+      const values = x.map((r) => r[f]);
+      const thresholds = Array.from(new Set(values)).sort((a, b) => a - b);
+      for (const th of thresholds) {
+        for (const polarity of [1, -1]) {
+          let correct = 0;
+          for (let i = 0; i < x.length; i++) {
+            const pred = polarity * x[i][f] >= polarity * th ? 1 : 0;
+            if (pred === y[i]) correct++;
+          }
+          const acc = correct / x.length;
+          if (acc > bestAccuracy) {
+            bestAccuracy = acc;
+            bestFeature = f;
+            bestThreshold = th;
+            bestPolarity = polarity;
+          }
+        }
+      }
+    }
+    return {
+      _type: "DecisionTreeStump",
+      feature_index: bestFeature,
+      threshold: bestThreshold,
+      polarity: bestPolarity,
+      train_accuracy: bestAccuracy
+    };
+  },
+  predict_decision_tree_stump: (model, sampleVal) => {
+    if (!model) return 0;
+    const sample = Array.isArray(sampleVal) ? sampleVal.map(Number) : [Number(sampleVal)];
+    const val = sample[model.feature_index] ?? 0;
+    return model.polarity * val >= model.polarity * model.threshold ? 1 : 0;
+  },
+  // 8. Model Evaluation Metrics
+  accuracy_score: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue : [];
+    const predicted = Array.isArray(yPred) ? yPred : [];
+    const n = Math.min(actual.length, predicted.length);
+    if (n === 0) return 0;
+    let correct = 0;
+    for (let i = 0; i < n; i++) {
+      if (actual[i] === predicted[i]) correct++;
+    }
+    return correct / n;
+  },
+  confusion_matrix: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue.map(Number) : [];
+    const predicted = Array.isArray(yPred) ? yPred.map(Number) : [];
+    let tp = 0, fp = 0, fn = 0, tn = 0;
+    for (let i = 0; i < Math.min(actual.length, predicted.length); i++) {
+      const a = actual[i];
+      const p = predicted[i];
+      if (a === 1 && p === 1) tp++;
+      else if (a === 0 && p === 1) fp++;
+      else if (a === 1 && p === 0) fn++;
+      else if (a === 0 && p === 0) tn++;
+    }
+    return {
+      true_positives: tp,
+      false_positives: fp,
+      false_negatives: fn,
+      true_negatives: tn,
+      accuracy: (tp + tn) / Math.max(1, tp + fp + fn + tn),
+      precision: tp / Math.max(1, tp + fp),
+      recall: tp / Math.max(1, tp + fn),
+      f1_score: 2 * tp / Math.max(1, 2 * tp + fp + fn)
+    };
+  },
+  r2_score: (yTrue, yPred) => {
+    const actual = Array.isArray(yTrue) ? yTrue.map(Number) : [];
+    const predicted = Array.isArray(yPred) ? yPred.map(Number) : [];
+    const n = Math.min(actual.length, predicted.length);
+    if (n === 0) return 0;
+    const mean = actual.reduce((a, b) => a + b, 0) / n;
+    const ssTotal = actual.reduce((a, b) => a + Math.pow(b - mean, 2), 0);
+    const ssRes = actual.slice(0, n).reduce((a, b, i) => a + Math.pow(b - predicted[i], 2), 0);
+    return ssTotal === 0 ? 1 : 1 - ssRes / ssTotal;
+  },
+  // 9. NLP Tools
+  tokenize_words: (textVal) => {
+    return String(textVal).toLowerCase().replace(/[^\w\s]/g, " ").trim().split(/\s+/).filter((w) => w.length > 0);
+  },
+  tokenize_sentences: (textVal) => {
+    return String(textVal).split(/(?<=[.?!])\s+/).map((s) => s.trim()).filter((s) => s.length > 0);
+  },
+  remove_stopwords: (wordsVal) => {
+    const stopwords = /* @__PURE__ */ new Set([
+      "a",
+      "about",
+      "above",
+      "after",
+      "again",
+      "against",
+      "all",
+      "am",
+      "an",
+      "and",
+      "any",
+      "are",
+      "aren't",
+      "as",
+      "at",
+      "be",
+      "because",
+      "been",
+      "before",
+      "being",
+      "below",
+      "between",
+      "both",
+      "but",
+      "by",
+      "can",
+      "can't",
+      "cannot",
+      "could",
+      "did",
+      "do",
+      "does",
+      "doing",
+      "don't",
+      "down",
+      "during",
+      "each",
+      "few",
+      "for",
+      "from",
+      "further",
+      "had",
+      "has",
+      "have",
+      "having",
+      "he",
+      "her",
+      "here",
+      "hers",
+      "herself",
+      "him",
+      "himself",
+      "his",
+      "how",
+      "i",
+      "if",
+      "in",
+      "into",
+      "is",
+      "isn't",
+      "it",
+      "its",
+      "itself",
+      "me",
+      "more",
+      "most",
+      "my",
+      "myself",
+      "no",
+      "nor",
+      "not",
+      "of",
+      "off",
+      "on",
+      "once",
+      "only",
+      "or",
+      "other",
+      "ought",
+      "our",
+      "ours",
+      "out",
+      "over",
+      "own",
+      "same",
+      "she",
+      "should",
+      "so",
+      "some",
+      "such",
+      "than",
+      "that",
+      "the",
+      "their",
+      "theirs",
+      "them",
+      "themselves",
+      "then",
+      "there",
+      "these",
+      "they",
+      "this",
+      "those",
+      "through",
+      "to",
+      "too",
+      "under",
+      "until",
+      "up",
+      "very",
+      "was",
+      "wasn't",
+      "we",
+      "were",
+      "what",
+      "when",
+      "where",
+      "which",
+      "while",
+      "who",
+      "whom",
+      "why",
+      "with",
+      "would",
+      "you",
+      "your",
+      "yours",
+      "yourself"
+    ]);
+    const words = Array.isArray(wordsVal) ? wordsVal.map(String) : [String(wordsVal)];
+    return words.filter((w) => !stopwords.has(w.toLowerCase()));
+  },
+  cosine_similarity_text: (doc1, doc2) => {
+    const words1 = String(doc1).toLowerCase().match(/\w+/g) || [];
+    const words2 = String(doc2).toLowerCase().match(/\w+/g) || [];
+    const vocab = Array.from(/* @__PURE__ */ new Set([...words1, ...words2]));
+    const vec1 = vocab.map((w) => words1.filter((x) => x === w).length);
+    const vec2 = vocab.map((w) => words2.filter((x) => x === w).length);
+    let dot = 0;
+    let norm1 = 0;
+    let norm2 = 0;
+    for (let i = 0; i < vocab.length; i++) {
+      dot += vec1[i] * vec2[i];
+      norm1 += vec1[i] * vec1[i];
+      norm2 += vec2[i] * vec2[i];
+    }
+    const denom = Math.sqrt(norm1) * Math.sqrt(norm2);
+    return denom === 0 ? 0 : dot / denom;
+  },
+  levenshtein_distance: (a, b) => {
+    const s1 = String(a);
+    const s2 = String(b);
+    const m = s1.length;
+    const n = s2.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 0; i <= m; i++) dp[i][0] = i;
+    for (let j = 0; j <= n; j++) dp[0][j] = j;
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (s1[i - 1] === s2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1];
+        } else {
+          dp[i][j] = 1 + Math.min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1]);
+        }
+      }
+    }
+    return dp[m][n];
+  }
+};
+
+// src/builtins/server_deploy.ts
+var http2 = __toESM(require("http"));
+var os3 = __toESM(require("os"));
+var https = __toESM(require("https"));
+var activeDeployedServer = null;
+var activeDeployedPort = null;
+function getLocalIpAddress() {
+  const nets = os3.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    const interfaces = nets[name];
+    if (!interfaces) continue;
+    for (const net of interfaces) {
+      if (net.family === "IPv4" && !net.internal) {
+        return net.address;
+      }
+    }
+  }
+  return "127.0.0.1";
+}
+function getAllIpAddresses() {
+  const ips = ["127.0.0.1"];
+  const nets = os3.networkInterfaces();
+  for (const name of Object.keys(nets)) {
+    const interfaces = nets[name];
+    if (!interfaces) continue;
+    for (const net of interfaces) {
+      if (net.family === "IPv4") {
+        ips.push(net.address);
+      }
+    }
+  }
+  return Array.from(new Set(ips));
+}
+async function fetchPublicIp() {
+  return new Promise((resolve7) => {
+    const req = https.get("https://api.ipify.org?format=json", { timeout: 3e3 }, (res) => {
+      let data = "";
+      res.on("data", (c) => data += c);
+      res.on("end", () => {
+        try {
+          const parsed = JSON.parse(data);
+          resolve7(parsed.ip || "unavailable");
+        } catch {
+          resolve7("unavailable");
+        }
+      });
+    });
+    req.on("error", () => resolve7("unavailable"));
+    req.on("timeout", () => {
+      req.destroy();
+      resolve7("unavailable");
+    });
+  });
+}
+function createServerDeployer(options) {
+  return {
+    get_local_ip: () => getLocalIpAddress(),
+    get_all_ips: () => getAllIpAddresses(),
+    get_public_ip: async () => await fetchPublicIp(),
+    get_hostname: () => os3.hostname(),
+    deploy_server: async (portVal, handlerOrRouter, hostVal) => {
+      const port = typeof portVal === "number" ? portVal : parseInt(String(portVal), 10) || 8080;
+      const host = typeof hostVal === "string" ? hostVal : "0.0.0.0";
+      if (activeDeployedServer) {
+        try {
+          activeDeployedServer.close();
+        } catch {
+        }
+      }
+      const server = http2.createServer(async (req, res) => {
+        res.setHeader("Access-Control-Allow-Origin", "*");
+        res.setHeader("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+        res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+        if (req.method === "OPTIONS") {
+          res.writeHead(204);
+          res.end();
+          return;
+        }
+        let body = "";
+        req.on("data", (chunk) => body += chunk);
+        req.on("end", async () => {
+          let parsedJson = null;
+          try {
+            parsedJson = JSON.parse(body);
+          } catch {
+            parsedJson = body;
+          }
+          const reqData = {
+            method: req.method || "GET",
+            url: req.url || "/",
+            path: (req.url || "/").split("?")[0],
+            query: (req.url || "").includes("?") ? (req.url || "").split("?")[1] : "",
+            body: parsedJson,
+            raw_body: body,
+            headers: req.headers,
+            client_ip: req.socket.remoteAddress || "unknown"
+          };
+          if (handlerOrRouter && typeof handlerOrRouter === "object" && handlerOrRouter.type === "function") {
+            try {
+              if (options?.invokeFunction) {
+                const result = await options.invokeFunction(handlerOrRouter, [reqData]);
+                if (result && typeof result === "object" && result.status) {
+                  const resObj = result;
+                  res.writeHead(resObj.status || 200, resObj.headers || { "Content-Type": "application/json" });
+                  res.end(typeof resObj.body === "string" ? resObj.body : JSON.stringify(resObj.body));
+                  return;
+                } else if (typeof result === "string") {
+                  res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+                  res.end(result);
+                  return;
+                } else {
+                  res.writeHead(200, { "Content-Type": "application/json" });
+                  res.end(JSON.stringify(result));
+                  return;
+                }
+              }
+            } catch (err) {
+              res.writeHead(500, { "Content-Type": "application/json" });
+              res.end(JSON.stringify({ error: err.message || "Internal server error" }));
+              return;
+            }
+          }
+          res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+          res.end(`<!DOCTYPE html>
+<html>
+<head>
+  <title>PLAIN Web Server</title>
+  <style>
+    body { font-family: system-ui, sans-serif; background: #0f172a; color: #f8fafc; padding: 40px; text-align: center; }
+    .card { background: #1e293b; border-radius: 12px; padding: 32px; max-width: 600px; margin: 0 auto; box-shadow: 0 10px 25px rgba(0,0,0,0.5); }
+    h1 { color: #38bdf8; margin-top: 0; }
+    .badge { display: inline-block; background: #22c55e; color: #022c22; font-weight: bold; padding: 4px 12px; border-radius: 999px; }
+    p { color: #94a3b8; font-size: 16px; line-height: 1.6; }
+    code { background: #334155; padding: 2px 6px; border-radius: 4px; color: #f1f5f9; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="badge">LIVE & ONLINE</div>
+    <h1>PLAIN Network Server</h1>
+    <p>Powered by <strong>PLAIN Language</strong> &bull; Author: <strong>Reuben</strong></p>
+    <p>Connected to <code>${req.url}</code> via <code>${req.method}</code></p>
+    <p>Access this server from any device on your Wi-Fi / Local Area Network!</p>
+  </div>
+</body>
+</html>`);
+        });
+      });
+      return new Promise((resolve7) => {
+        server.listen(port, host, async () => {
+          activeDeployedServer = server;
+          activeDeployedPort = port;
+          const localIp = getLocalIpAddress();
+          const publicIp = await fetchPublicIp();
+          const localUrl = `http://localhost:${port}`;
+          const networkUrl = `http://${localIp}:${port}`;
+          const publicUrl = publicIp !== "unavailable" ? `http://${publicIp}:${port}` : "N/A (check firewall/router)";
+          console.log("");
+          console.log("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557");
+          console.log("\u2551           \u{1F680} PLAIN WEB SERVER DEPLOYED & LIVE!               \u2551");
+          console.log("\u2560\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2563");
+          console.log(`\u2551  Local Access:    ${localUrl.padEnd(43)}\u2551`);
+          console.log(`\u2551  Network (LAN):   ${networkUrl.padEnd(43)}\u2551`);
+          console.log(`\u2551  Public IP:       ${publicUrl.padEnd(43)}\u2551`);
+          console.log(`\u2551  Bound Host:      ${(host + ":" + port).padEnd(43)}\u2551`);
+          console.log("\u2551  Author:          Reuben                                     \u2551");
+          console.log("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D");
+          console.log("Ready to accept incoming connections across your local network and internet.");
+          console.log("");
+          resolve7({
+            port,
+            host,
+            local_url: localUrl,
+            network_url: networkUrl,
+            public_url: publicUrl,
+            local_ip: localIp,
+            public_ip: publicIp,
+            status: "running"
+          });
+        });
+      });
+    },
+    stop_deployed_server: () => {
+      if (activeDeployedServer) {
+        activeDeployedServer.close();
+        activeDeployedServer = null;
+        activeDeployedPort = null;
+        return true;
+      }
+      return false;
+    },
+    // HTTP Responses
+    json_response: (data, statusVal = 200) => ({
+      status: typeof statusVal === "number" ? statusVal : 200,
+      headers: { "Content-Type": "application/json" },
+      body: typeof data === "string" ? data : JSON.stringify(data)
+    }),
+    html_response: (html, statusVal = 200) => ({
+      status: typeof statusVal === "number" ? statusVal : 200,
+      headers: { "Content-Type": "text/html; charset=utf-8" },
+      body: String(html)
+    }),
+    text_response: (text, statusVal = 200) => ({
+      status: typeof statusVal === "number" ? statusVal : 200,
+      headers: { "Content-Type": "text/plain; charset=utf-8" },
+      body: String(text)
+    }),
+    redirect_response: (url2, statusVal = 302) => ({
+      status: typeof statusVal === "number" ? statusVal : 302,
+      headers: { Location: String(url2) },
+      body: ""
+    }),
+    cors_headers: (originVal = "*") => ({
+      "Access-Control-Allow-Origin": originVal,
+      "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS, PATCH",
+      "Access-Control-Allow-Headers": "Content-Type, Authorization, X-Requested-With"
+    }),
+    parse_query_string: (query) => {
+      const res = {};
+      const search = query.startsWith("?") ? query.slice(1) : query;
+      for (const pair of search.split("&")) {
+        if (!pair) continue;
+        const [k, v] = pair.split("=");
+        res[decodeURIComponent(k)] = v ? decodeURIComponent(v) : "";
+      }
+      return res;
+    },
+    parse_cookies: (cookieHeader) => {
+      const res = {};
+      const headerStr = typeof cookieHeader === "string" ? cookieHeader : "";
+      for (const item of headerStr.split(";")) {
+        const parts = item.trim().split("=");
+        if (parts.length >= 2) {
+          res[parts[0].trim()] = decodeURIComponent(parts.slice(1).join("=").trim());
+        }
+      }
+      return res;
+    },
+    status_code_text: (code) => {
+      return http2.STATUS_CODES[code] || "Unknown";
+    },
+    server_uptime: () => process.uptime(),
+    server_memory_usage: () => {
+      const mem = process.memoryUsage();
+      return {
+        rss_mb: Math.round(mem.rss / 1024 / 1024 * 100) / 100,
+        heap_used_mb: Math.round(mem.heapUsed / 1024 / 1024 * 100) / 100,
+        heap_total_mb: Math.round(mem.heapTotal / 1024 / 1024 * 100) / 100
+      };
+    }
+  };
+}
+
+// src/builtins/linear_algebra.ts
+var linearAlgebraBuiltins = {
+  // 1. Matrix Creation & Inspection
+  matrix_create: (rows, cols, fillVal = 0) => {
+    const r = Math.max(1, Math.floor(Number(rows)));
+    const c = Math.max(1, Math.floor(Number(cols)));
+    const v = Number(fillVal);
+    return Array.from({ length: r }, () => new Array(c).fill(v));
+  },
+  matrix_zeros: (rows, cols) => {
+    const r = Math.max(1, Math.floor(Number(rows)));
+    const c = Math.max(1, Math.floor(Number(cols)));
+    return Array.from({ length: r }, () => new Array(c).fill(0));
+  },
+  matrix_ones: (rows, cols) => {
+    const r = Math.max(1, Math.floor(Number(rows)));
+    const c = Math.max(1, Math.floor(Number(cols)));
+    return Array.from({ length: r }, () => new Array(c).fill(1));
+  },
+  matrix_eye: (size) => {
+    const n = Math.max(1, Math.floor(Number(size)));
+    return Array.from(
+      { length: n },
+      (_, i) => Array.from({ length: n }, (_2, j) => i === j ? 1 : 0)
+    );
+  },
+  matrix_random: (rows, cols, min = 0, max = 1) => {
+    const r = Math.max(1, Math.floor(Number(rows)));
+    const c = Math.max(1, Math.floor(Number(cols)));
+    return Array.from(
+      { length: r },
+      () => Array.from({ length: c }, () => min + Math.random() * (max - min))
+    );
+  },
+  matrix_shape: (matrix) => {
+    if (!Array.isArray(matrix) || matrix.length === 0) return [0, 0];
+    const r = matrix.length;
+    const c = Array.isArray(matrix[0]) ? matrix[0].length : 1;
+    return [r, c];
+  },
+  matrix_reshape: (matrix, newRows, newCols) => {
+    const flat = Array.isArray(matrix) ? matrix.flat(Infinity).map(Number) : [Number(matrix)];
+    const r = Math.max(1, Math.floor(Number(newRows)));
+    const c = Math.max(1, Math.floor(Number(newCols)));
+    const result = [];
+    for (let i = 0; i < r; i++) {
+      result.push(flat.slice(i * c, (i + 1) * c));
+    }
+    return result;
+  },
+  // 2. Matrix Arithmetic
+  matrix_add: (a, b) => {
+    const matA = Array.isArray(a) ? a : [];
+    const matB = Array.isArray(b) ? b : [];
+    return matA.map(
+      (row, i) => row.map((val, j) => Number(val) + Number(matB[i]?.[j] ?? 0))
+    );
+  },
+  matrix_sub: (a, b) => {
+    const matA = Array.isArray(a) ? a : [];
+    const matB = Array.isArray(b) ? b : [];
+    return matA.map(
+      (row, i) => row.map((val, j) => Number(val) - Number(matB[i]?.[j] ?? 0))
+    );
+  },
+  matrix_scale: (matrix, scalar) => {
+    const mat = Array.isArray(matrix) ? matrix : [];
+    const s = Number(scalar);
+    return mat.map((row) => row.map((val) => Number(val) * s));
+  },
+  matrix_mult: (a, b) => {
+    const matA = Array.isArray(a) ? a : [];
+    const matB = Array.isArray(b) ? b : [];
+    const rA = matA.length;
+    const cA = matA[0]?.length || 0;
+    const rB = matB.length;
+    const cB = matB[0]?.length || 0;
+    if (cA !== rB) {
+      throw new Error(`Matrix dimension mismatch for multiplication: (${rA}x${cA}) and (${rB}x${cB})`);
+    }
+    const result = Array.from({ length: rA }, () => new Array(cB).fill(0));
+    for (let i = 0; i < rA; i++) {
+      for (let j = 0; j < cB; j++) {
+        let sum = 0;
+        for (let k = 0; k < cA; k++) {
+          sum += Number(matA[i][k]) * Number(matB[k][j]);
+        }
+        result[i][j] = sum;
+      }
+    }
+    return result;
+  },
+  matrix_elementwise_mult: (a, b) => {
+    const matA = Array.isArray(a) ? a : [];
+    const matB = Array.isArray(b) ? b : [];
+    return matA.map(
+      (row, i) => row.map((val, j) => Number(val) * Number(matB[i]?.[j] ?? 1))
+    );
+  },
+  matrix_transpose: (matrix) => {
+    const mat = Array.isArray(matrix) ? matrix : [];
+    if (mat.length === 0) return [];
+    const r = mat.length;
+    const c = mat[0].length;
+    const res = Array.from({ length: c }, () => new Array(r).fill(0));
+    for (let i = 0; i < r; i++) {
+      for (let j = 0; j < c; j++) {
+        res[j][i] = mat[i][j];
+      }
+    }
+    return res;
+  },
+  matrix_trace: (matrix) => {
+    const mat = Array.isArray(matrix) ? matrix : [];
+    let sum = 0;
+    for (let i = 0; i < Math.min(mat.length, mat[0]?.length || 0); i++) {
+      sum += Number(mat[i][i]);
+    }
+    return sum;
+  },
+  matrix_determinant: (matrix) => {
+    const mat = Array.isArray(matrix) ? matrix.map((r) => r.map(Number)) : [];
+    const n = mat.length;
+    if (n === 1) return mat[0][0];
+    if (n === 2) return mat[0][0] * mat[1][1] - mat[0][1] * mat[1][0];
+    let det = 0;
+    for (let c = 0; c < n; c++) {
+      const sub = mat.slice(1).map((r) => r.filter((_, idx) => idx !== c));
+      const sign = c % 2 === 0 ? 1 : -1;
+      det += sign * mat[0][c] * linearAlgebraBuiltins.matrix_determinant(sub);
+    }
+    return det;
+  },
+  matrix_inverse_2x2: (matrix) => {
+    const m = Array.isArray(matrix) ? matrix : [];
+    const det = m[0][0] * m[1][1] - m[0][1] * m[1][0];
+    if (Math.abs(det) < 1e-12) {
+      throw new Error("Matrix is singular and cannot be inverted.");
+    }
+    const invDet = 1 / det;
+    return [
+      [m[1][1] * invDet, -m[0][1] * invDet],
+      [-m[1][0] * invDet, m[0][0] * invDet]
+    ];
+  },
+  matrix_vector_mult: (matrix, vector) => {
+    const mat = Array.isArray(matrix) ? matrix : [];
+    const vec = Array.isArray(vector) ? vector.map(Number) : [Number(vector)];
+    return mat.map(
+      (row) => row.reduce((acc, val, idx) => acc + Number(val) * (vec[idx] ?? 0), 0)
+    );
+  },
+  // 3. Vector Operations
+  vector_dot: (a, b) => {
+    const vecA = Array.isArray(a) ? a.map(Number) : [Number(a)];
+    const vecB = Array.isArray(b) ? b.map(Number) : [Number(b)];
+    let sum = 0;
+    for (let i = 0; i < Math.min(vecA.length, vecB.length); i++) {
+      sum += vecA[i] * vecB[i];
+    }
+    return sum;
+  },
+  vector_cross_3d: (a, b) => {
+    const v1 = Array.isArray(a) ? a.map(Number) : [];
+    const v2 = Array.isArray(b) ? b.map(Number) : [];
+    return [
+      (v1[1] ?? 0) * (v2[2] ?? 0) - (v1[2] ?? 0) * (v2[1] ?? 0),
+      (v1[2] ?? 0) * (v2[0] ?? 0) - (v1[0] ?? 0) * (v2[2] ?? 0),
+      (v1[0] ?? 0) * (v2[1] ?? 0) - (v1[1] ?? 0) * (v2[0] ?? 0)
+    ];
+  },
+  vector_magnitude: (v) => {
+    const vec = Array.isArray(v) ? v.map(Number) : [Number(v)];
+    return Math.sqrt(vec.reduce((acc, x) => acc + x * x, 0));
+  },
+  vector_normalize: (v) => {
+    const vec = Array.isArray(v) ? v.map(Number) : [Number(v)];
+    const mag = Math.sqrt(vec.reduce((acc, x) => acc + x * x, 0));
+    return mag === 0 ? vec : vec.map((x) => x / mag);
+  },
+  vector_distance: (a, b) => {
+    const vecA = Array.isArray(a) ? a.map(Number) : [];
+    const vecB = Array.isArray(b) ? b.map(Number) : [];
+    let sum = 0;
+    for (let i = 0; i < Math.min(vecA.length, vecB.length); i++) {
+      sum += Math.pow(vecA[i] - vecB[i], 2);
+    }
+    return Math.sqrt(sum);
+  },
+  vector_angle_rad: (a, b) => {
+    const dot = linearAlgebraBuiltins.vector_dot(a, b);
+    const magA = linearAlgebraBuiltins.vector_magnitude(a);
+    const magB = linearAlgebraBuiltins.vector_magnitude(b);
+    if (magA === 0 || magB === 0) return 0;
+    return Math.acos(Math.max(-1, Math.min(1, dot / (magA * magB))));
+  },
+  vector_angle_deg: (a, b) => {
+    return linearAlgebraBuiltins.vector_angle_rad(a, b) * 180 / Math.PI;
+  },
+  vector_lerp: (a, b, t) => {
+    const vecA = Array.isArray(a) ? a.map(Number) : [];
+    const vecB = Array.isArray(b) ? b.map(Number) : [];
+    const factor = Number(t);
+    return vecA.map((val, i) => val + factor * ((vecB[i] ?? val) - val));
+  },
+  // 4. Equation Solvers
+  solve_system_2x2: (a, b, e, c, d, f) => {
+    const det = a * d - b * c;
+    if (Math.abs(det) < 1e-12) {
+      throw new Error("System of equations has no unique solution (determinant is 0).");
+    }
+    const x = (e * d - b * f) / det;
+    const y = (a * f - e * c) / det;
+    return { x, y };
+  }
+};
+
+// src/builtins/crypto_security.ts
+var crypto3 = __toESM(require("crypto"));
+var cryptoSecurityBuiltins = {
+  // 1. Cryptographic Hashes
+  sha256: (text) => {
+    return crypto3.createHash("sha256").update(String(text)).digest("hex");
+  },
+  sha512: (text) => {
+    return crypto3.createHash("sha512").update(String(text)).digest("hex");
+  },
+  sha1: (text) => {
+    return crypto3.createHash("sha1").update(String(text)).digest("hex");
+  },
+  md5: (text) => {
+    return crypto3.createHash("md5").update(String(text)).digest("hex");
+  },
+  hmac_sha256: (text, secretKey) => {
+    return crypto3.createHmac("sha256", String(secretKey)).update(String(text)).digest("hex");
+  },
+  hmac_sha512: (text, secretKey) => {
+    return crypto3.createHmac("sha512", String(secretKey)).update(String(text)).digest("hex");
+  },
+  // 2. Symmetric Encryption & Decryption (AES-256)
+  aes_encrypt: (plainText, secretKey) => {
+    const key = crypto3.createHash("sha256").update(String(secretKey)).digest();
+    const iv = crypto3.randomBytes(16);
+    const cipher = crypto3.createCipheriv("aes-256-cbc", key, iv);
+    let encrypted = cipher.update(String(plainText), "utf8", "hex");
+    encrypted += cipher.final("hex");
+    return iv.toString("hex") + ":" + encrypted;
+  },
+  aes_decrypt: (encryptedPayload, secretKey) => {
+    const parts = String(encryptedPayload).split(":");
+    if (parts.length !== 2) throw new Error("Invalid encrypted payload format. Expected 'iv:cipher'.");
+    const iv = Buffer.from(parts[0], "hex");
+    const encryptedText = parts[1];
+    const key = crypto3.createHash("sha256").update(String(secretKey)).digest();
+    const decipher = crypto3.createDecipheriv("aes-256-cbc", key, iv);
+    let decrypted = decipher.update(encryptedText, "hex", "utf8");
+    decrypted += decipher.final("utf8");
+    return decrypted;
+  },
+  // 3. Encoding & Decoding
+  base64_encode: (text) => {
+    return Buffer.from(String(text), "utf8").toString("base64");
+  },
+  base64_decode: (encoded) => {
+    return Buffer.from(String(encoded), "base64").toString("utf8");
+  },
+  hex_encode: (text) => {
+    return Buffer.from(String(text), "utf8").toString("hex");
+  },
+  hex_decode: (hex) => {
+    return Buffer.from(String(hex), "hex").toString("utf8");
+  },
+  // 4. Random Tokens & UUIDs
+  generate_uuid: () => {
+    return crypto3.randomUUID ? crypto3.randomUUID() : "10000000-1000-4000-8000-100000000000".replace(
+      /[018]/g,
+      (c) => (c ^ crypto3.randomBytes(1)[0] & 15 >> c / 4).toString(16)
+    );
+  },
+  generate_random_token: (byteLength = 32) => {
+    const len = Math.max(8, Math.floor(Number(byteLength)));
+    return crypto3.randomBytes(len).toString("hex");
+  },
+  generate_api_key: (prefix = "pln") => {
+    const random = crypto3.randomBytes(24).toString("base64url");
+    return `${prefix}_${random}`;
+  },
+  generate_password: (length = 16, includeSymbols = true) => {
+    const len = Math.max(6, Math.floor(Number(length)));
+    const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
+    const symbols = "!@#$%^&*()_+-=[]{}|";
+    const chars = includeSymbols ? letters + symbols : letters;
+    let pwd = "";
+    for (let i = 0; i < len; i++) {
+      pwd += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return pwd;
+  },
+  // 5. Educational / Classical Ciphers
+  caesar_cipher: (text, shift = 3) => {
+    const s = (Number(shift) % 26 + 26) % 26;
+    return String(text).split("").map((c) => {
+      const code = c.charCodeAt(0);
+      if (code >= 65 && code <= 90) {
+        return String.fromCharCode((code - 65 + s) % 26 + 65);
+      }
+      if (code >= 97 && code <= 122) {
+        return String.fromCharCode((code - 97 + s) % 26 + 97);
+      }
+      return c;
+    }).join("");
+  },
+  rot13: (text) => {
+    return cryptoSecurityBuiltins.caesar_cipher(text, 13);
+  },
+  // 6. JSON Web Tokens (JWT)
+  create_jwt: (payload, secretKey, expiresInSeconds = 3600) => {
+    const header = { alg: "HS256", typ: "JWT" };
+    const now = Math.floor(Date.now() / 1e3);
+    const fullPayload = {
+      ...typeof payload === "object" ? payload : { data: payload },
+      iat: now,
+      exp: now + expiresInSeconds
+    };
+    const b64Header = Buffer.from(JSON.stringify(header)).toString("base64url");
+    const b64Payload = Buffer.from(JSON.stringify(fullPayload)).toString("base64url");
+    const signature = crypto3.createHmac("sha256", String(secretKey)).update(`${b64Header}.${b64Payload}`).digest("base64url");
+    return `${b64Header}.${b64Payload}.${signature}`;
+  },
+  verify_jwt: (token, secretKey) => {
+    const parts = String(token).split(".");
+    if (parts.length !== 3) {
+      return { valid: false, error: "Invalid token format." };
+    }
+    const [b64Header, b64Payload, signature] = parts;
+    const expectedSig = crypto3.createHmac("sha256", String(secretKey)).update(`${b64Header}.${b64Payload}`).digest("base64url");
+    if (signature !== expectedSig) {
+      return { valid: false, error: "Invalid signature." };
+    }
+    try {
+      const payload = JSON.parse(Buffer.from(b64Payload, "base64url").toString("utf8"));
+      const now = Math.floor(Date.now() / 1e3);
+      if (payload.exp && payload.exp < now) {
+        return { valid: false, error: "Token has expired." };
+      }
+      return { valid: true, payload };
+    } catch {
+      return { valid: false, error: "Corrupted token payload." };
+    }
+  },
+  // 7. Safe Comparison
+  secure_compare: (a, b) => {
+    const bufA = Buffer.from(String(a));
+    const bufB = Buffer.from(String(b));
+    if (bufA.length !== bufB.length) return false;
+    return crypto3.timingSafeEqual(bufA, bufB);
+  }
+};
+
+// src/builtins/data_processing.ts
+var dataProcessingBuiltins = {
+  // 1. Advanced Table / DataFrame Operations
+  table_head: (tableVal, n = 5) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const count = Math.max(1, Math.floor(Number(n)));
+    return [tableVal[0], ...tableVal.slice(1, count + 1)];
+  },
+  table_tail: (tableVal, n = 5) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const count = Math.max(1, Math.floor(Number(n)));
+    const rows = tableVal.slice(1);
+    return [tableVal[0], ...rows.slice(Math.max(0, rows.length - count))];
+  },
+  table_column_names: (tableVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    return tableVal[0].map(String);
+  },
+  table_add_column: (tableVal, colName, values) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const vals = Array.isArray(values) ? values : [values];
+    const newHeader = [...tableVal[0], String(colName)];
+    const newRows = tableVal.slice(1).map((row, i) => {
+      const rowArr = Array.isArray(row) ? [...row] : [row];
+      rowArr.push(vals[i] !== void 0 ? vals[i] : null);
+      return rowArr;
+    });
+    return [newHeader, ...newRows];
+  },
+  table_drop_column: (tableVal, colName) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const header = tableVal[0];
+    const idx = header.indexOf(String(colName));
+    if (idx === -1) return tableVal;
+    return tableVal.map((row) => {
+      const arr = Array.isArray(row) ? [...row] : [row];
+      arr.splice(idx, 1);
+      return arr;
+    });
+  },
+  table_select_columns: (tableVal, colNames) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const requested = Array.isArray(colNames) ? colNames.map(String) : [String(colNames)];
+    const header = tableVal[0];
+    const indices = requested.map((col) => header.indexOf(col)).filter((i) => i !== -1);
+    return tableVal.map((row) => indices.map((i) => row[i]));
+  },
+  table_deduplicate: (tableVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const header = tableVal[0];
+    const seen = /* @__PURE__ */ new Set();
+    const uniqueRows = [];
+    for (const row of tableVal.slice(1)) {
+      const key = JSON.stringify(row);
+      if (!seen.has(key)) {
+        seen.add(key);
+        uniqueRows.push(row);
+      }
+    }
+    return [header, ...uniqueRows];
+  },
+  table_drop_nulls: (tableVal) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const header = tableVal[0];
+    const cleanRows = tableVal.slice(1).filter(
+      (row) => Array.isArray(row) && row.every((val) => val !== null && val !== void 0 && val !== "")
+    );
+    return [header, ...cleanRows];
+  },
+  table_fill_nulls: (tableVal, fallbackVal = 0) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return [];
+    const header = tableVal[0];
+    const filledRows = tableVal.slice(1).map(
+      (row) => row.map((val) => val === null || val === void 0 || val === "" ? fallbackVal : val)
+    );
+    return [header, ...filledRows];
+  },
+  table_join_inner: (tableA, tableB, keyCol) => {
+    if (!Array.isArray(tableA) || !Array.isArray(tableB)) return [];
+    const headerA = tableA[0] || [];
+    const headerB = tableB[0] || [];
+    const keyA = headerA.indexOf(keyCol);
+    const keyB = headerB.indexOf(keyCol);
+    if (keyA === -1 || keyB === -1) return [];
+    const extraBIndices = headerB.map((_, i) => i).filter((i) => i !== keyB);
+    const joinedHeader = [...headerA, ...extraBIndices.map((i) => headerB[i])];
+    const bMap = /* @__PURE__ */ new Map();
+    for (const row of tableB.slice(1)) {
+      const k = String(row[keyB]);
+      bMap.set(k, row);
+    }
+    const resultRows = [];
+    for (const rowA of tableA.slice(1)) {
+      const k = String(rowA[keyA]);
+      const matchB = bMap.get(k);
+      if (matchB) {
+        resultRows.push([...rowA, ...extraBIndices.map((i) => matchB[i])]);
+      }
+    }
+    return [joinedHeader, ...resultRows];
+  },
+  table_group_by_sum: (tableVal, groupCol, sumCol) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return {};
+    const header = tableVal[0];
+    const gIdx = header.indexOf(groupCol);
+    const sIdx = header.indexOf(sumCol);
+    if (gIdx === -1 || sIdx === -1) return {};
+    const totals = {};
+    for (const row of tableVal.slice(1)) {
+      const groupKey = String(row[gIdx]);
+      const val = parseFloat(String(row[sIdx])) || 0;
+      totals[groupKey] = (totals[groupKey] || 0) + val;
+    }
+    return totals;
+  },
+  table_group_by_count: (tableVal, groupCol) => {
+    if (!Array.isArray(tableVal) || tableVal.length === 0) return {};
+    const header = tableVal[0];
+    const gIdx = header.indexOf(groupCol);
+    if (gIdx === -1) return {};
+    const counts = {};
+    for (const row of tableVal.slice(1)) {
+      const groupKey = String(row[gIdx]);
+      counts[groupKey] = (counts[groupKey] || 0) + 1;
+    }
+    return counts;
+  },
+  // 2. Series / Array Processing
+  series_rolling_mean: (seriesVal, windowSize = 3) => {
+    const arr = Array.isArray(seriesVal) ? seriesVal.map(Number) : [];
+    const w = Math.max(1, Math.floor(Number(windowSize)));
+    const result = [];
+    for (let i = 0; i < arr.length; i++) {
+      const start = Math.max(0, i - w + 1);
+      const window = arr.slice(start, i + 1);
+      const mean = window.reduce((a, b) => a + b, 0) / window.length;
+      result.push(parseFloat(mean.toFixed(4)));
+    }
+    return result;
+  },
+  series_rolling_sum: (seriesVal, windowSize = 3) => {
+    const arr = Array.isArray(seriesVal) ? seriesVal.map(Number) : [];
+    const w = Math.max(1, Math.floor(Number(windowSize)));
+    const result = [];
+    for (let i = 0; i < arr.length; i++) {
+      const start = Math.max(0, i - w + 1);
+      const sum = arr.slice(start, i + 1).reduce((a, b) => a + b, 0);
+      result.push(sum);
+    }
+    return result;
+  },
+  series_pct_change: (seriesVal) => {
+    const arr = Array.isArray(seriesVal) ? seriesVal.map(Number) : [];
+    const result = [0];
+    for (let i = 1; i < arr.length; i++) {
+      const prev = arr[i - 1];
+      const change = prev === 0 ? 0 : (arr[i] - prev) / Math.abs(prev);
+      result.push(parseFloat((change * 100).toFixed(2)));
+    }
+    return result;
+  },
+  series_cumulative_sum: (seriesVal) => {
+    const arr = Array.isArray(seriesVal) ? seriesVal.map(Number) : [];
+    let acc = 0;
+    return arr.map((x) => acc += x);
+  },
+  series_z_score: (seriesVal) => {
+    const arr = Array.isArray(seriesVal) ? seriesVal.map(Number) : [];
+    if (arr.length === 0) return [];
+    const mean = arr.reduce((a, b) => a + b, 0) / arr.length;
+    const std = Math.sqrt(arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / arr.length) || 1e-7;
+    return arr.map((x) => parseFloat(((x - mean) / std).toFixed(4)));
+  },
+  // 3. Inferential Statistics
+  student_t_test_one_sample: (sampleVal, muVal = 0) => {
+    const arr = Array.isArray(sampleVal) ? sampleVal.map(Number) : [];
+    const mu = Number(muVal);
+    const n = arr.length;
+    if (n < 2) return { t_stat: 0, p_value_approx: 1, df: 0 };
+    const mean = arr.reduce((a, b) => a + b, 0) / n;
+    const variance = arr.reduce((a, b) => a + Math.pow(b - mean, 2), 0) / (n - 1);
+    const se = Math.sqrt(variance / n);
+    const tStat = se === 0 ? 0 : (mean - mu) / se;
+    return {
+      t_stat: parseFloat(tStat.toFixed(4)),
+      sample_mean: mean,
+      hypothesized_mean: mu,
+      degrees_of_freedom: n - 1
+    };
+  },
+  pearson_correlation: (xVal, yVal) => {
+    const x = Array.isArray(xVal) ? xVal.map(Number) : [];
+    const y = Array.isArray(yVal) ? yVal.map(Number) : [];
+    const n = Math.min(x.length, y.length);
+    if (n < 2) return 0;
+    const meanX = x.slice(0, n).reduce((a, b) => a + b, 0) / n;
+    const meanY = y.slice(0, n).reduce((a, b) => a + b, 0) / n;
+    let num = 0;
+    let denX = 0;
+    let denY = 0;
+    for (let i = 0; i < n; i++) {
+      const dx = x[i] - meanX;
+      const dy = y[i] - meanY;
+      num += dx * dy;
+      denX += dx * dx;
+      denY += dy * dy;
+    }
+    const den = Math.sqrt(denX * denY);
+    return den === 0 ? 0 : parseFloat((num / den).toFixed(4));
+  }
+};
+
+// src/builtins/engineering_physics.ts
+var engineeringPhysicsBuiltins = {
+  // 1. Classical Mechanics & Kinematics
+  kinetic_energy: (mass, velocity) => {
+    return 0.5 * Number(mass) * Math.pow(Number(velocity), 2);
+  },
+  gravitational_potential_energy: (mass, height, g = 9.80665) => {
+    return Number(mass) * Number(g) * Number(height);
+  },
+  momentum: (mass, velocity) => {
+    return Number(mass) * Number(velocity);
+  },
+  centripetal_acceleration: (velocity, radius) => {
+    const r = Number(radius);
+    if (r === 0) return 0;
+    return Math.pow(Number(velocity), 2) / r;
+  },
+  centripetal_force: (mass, velocity, radius) => {
+    return Number(mass) * engineeringPhysicsBuiltins.centripetal_acceleration(velocity, radius);
+  },
+  work_done: (force, distance, angleDeg = 0) => {
+    return Number(force) * Number(distance) * Math.cos(Number(angleDeg) * Math.PI / 180);
+  },
+  power_watts: (work, timeSeconds) => {
+    const t = Number(timeSeconds);
+    if (t === 0) return 0;
+    return Number(work) / t;
+  },
+  hookes_law_force: (springConstant, displacement) => {
+    return -Number(springConstant) * Number(displacement);
+  },
+  spring_potential_energy: (springConstant, displacement) => {
+    return 0.5 * Number(springConstant) * Math.pow(Number(displacement), 2);
+  },
+  pendulum_period: (lengthMeters, g = 9.80665) => {
+    const l = Number(lengthMeters);
+    if (l < 0 || g <= 0) return 0;
+    return 2 * Math.PI * Math.sqrt(l / g);
+  },
+  // 2. Astronomy & Gravitation
+  gravitational_force: (m1, m2, distance) => {
+    const G = 66743e-15;
+    const r = Number(distance);
+    if (r === 0) return 0;
+    return G * Number(m1) * Number(m2) / Math.pow(r, 2);
+  },
+  escape_velocity: (planetMass, planetRadius) => {
+    const G = 66743e-15;
+    const r = Number(planetRadius);
+    if (r <= 0) return 0;
+    return Math.sqrt(2 * G * Number(planetMass) / r);
+  },
+  orbital_velocity: (planetMass, orbitRadius) => {
+    const G = 66743e-15;
+    const r = Number(orbitRadius);
+    if (r <= 0) return 0;
+    return Math.sqrt(G * Number(planetMass) / r);
+  },
+  orbital_period_kepler: (planetMass, orbitRadius) => {
+    const G = 66743e-15;
+    const r = Number(orbitRadius);
+    if (r <= 0) return 0;
+    return 2 * Math.PI * Math.sqrt(Math.pow(r, 3) / (G * Number(planetMass)));
+  },
+  schwarzschild_radius: (mass) => {
+    const G = 66743e-15;
+    const c = 299792458;
+    return 2 * G * Number(mass) / Math.pow(c, 2);
+  },
+  // 3. Relativity & Modern Physics
+  lorentz_factor: (velocity) => {
+    const c = 299792458;
+    const v = Math.min(c - 1e-6, Math.abs(Number(velocity)));
+    return 1 / Math.sqrt(1 - Math.pow(v / c, 2));
+  },
+  time_dilation: (properTime, velocity) => {
+    return Number(properTime) * engineeringPhysicsBuiltins.lorentz_factor(velocity);
+  },
+  length_contraction: (properLength, velocity) => {
+    return Number(properLength) / engineeringPhysicsBuiltins.lorentz_factor(velocity);
+  },
+  relativistic_energy: (restMass, velocity = 0) => {
+    const c = 299792458;
+    const gamma = engineeringPhysicsBuiltins.lorentz_factor(velocity);
+    return gamma * Number(restMass) * Math.pow(c, 2);
+  },
+  photon_energy: (frequencyHz) => {
+    const h = 662607015e-42;
+    return h * Number(frequencyHz);
+  },
+  de_broglie_wavelength: (mass, velocity) => {
+    const h = 662607015e-42;
+    const p = Number(mass) * Number(velocity);
+    if (p === 0) return 0;
+    return h / p;
+  },
+  // 4. Thermodynamics & Fluid Dynamics
+  ideal_gas_pressure: (moles, kelvin, volumeCubicMeters) => {
+    const R = 8.314462618;
+    const v = Number(volumeCubicMeters);
+    if (v === 0) return 0;
+    return Number(moles) * R * Number(kelvin) / v;
+  },
+  carnot_efficiency: (tempColdKelvin, tempHotKelvin) => {
+    const th = Number(tempHotKelvin);
+    if (th <= 0) return 0;
+    return 1 - Number(tempColdKelvin) / th;
+  },
+  heat_transfer_conduction: (thermalCond, area, tempDiff, thickness) => {
+    const d = Number(thickness);
+    if (d === 0) return 0;
+    return Number(thermalCond) * Number(area) * Number(tempDiff) / d;
+  },
+  stefan_boltzmann_radiation: (emissivity, area, tempKelvin) => {
+    const sigma = 5670374419e-17;
+    return Number(emissivity) * sigma * Number(area) * Math.pow(Number(tempKelvin), 4);
+  },
+  reynolds_number: (density, velocity, charLength, dynamicViscosity) => {
+    const mu = Number(dynamicViscosity);
+    if (mu === 0) return 0;
+    return Number(density) * Number(velocity) * Number(charLength) / mu;
+  },
+  // 5. Electromagnetism & Circuits
+  coulombs_law: (q1, q2, distance) => {
+    const ke = 89875517923e-1;
+    const r = Number(distance);
+    if (r === 0) return 0;
+    return ke * Number(q1) * Number(q2) / Math.pow(r, 2);
+  },
+  electric_field: (charge, distance) => {
+    const ke = 89875517923e-1;
+    const r = Number(distance);
+    if (r === 0) return 0;
+    return ke * Number(charge) / Math.pow(r, 2);
+  },
+  ohms_law_voltage: (currentAmps, resistanceOhms) => {
+    return Number(currentAmps) * Number(resistanceOhms);
+  },
+  ohms_law_current: (voltageVolts, resistanceOhms) => {
+    const r = Number(resistanceOhms);
+    if (r === 0) return 0;
+    return Number(voltageVolts) / r;
+  },
+  ohms_law_resistance: (voltageVolts, currentAmps) => {
+    const i = Number(currentAmps);
+    if (i === 0) return 0;
+    return Number(voltageVolts) / i;
+  },
+  resistors_series: (resistors) => {
+    const arr = Array.isArray(resistors) ? resistors.map(Number) : [Number(resistors)];
+    return arr.reduce((a, b) => a + b, 0);
+  },
+  resistors_parallel: (resistors) => {
+    const arr = Array.isArray(resistors) ? resistors.map(Number).filter((r) => r > 0) : [];
+    if (arr.length === 0) return 0;
+    const sumInv = arr.reduce((acc, r) => acc + 1 / r, 0);
+    return sumInv === 0 ? 0 : 1 / sumInv;
+  },
+  capacitors_series: (capacitors) => {
+    const arr = Array.isArray(capacitors) ? capacitors.map(Number).filter((c) => c > 0) : [];
+    if (arr.length === 0) return 0;
+    const sumInv = arr.reduce((acc, c) => acc + 1 / c, 0);
+    return sumInv === 0 ? 0 : 1 / sumInv;
+  },
+  capacitors_parallel: (capacitors) => {
+    const arr = Array.isArray(capacitors) ? capacitors.map(Number) : [Number(capacitors)];
+    return arr.reduce((a, b) => a + b, 0);
+  },
+  rlc_resonant_frequency: (inductanceHenries, capacitanceFarads) => {
+    const l = Number(inductanceHenries);
+    const c = Number(capacitanceFarads);
+    if (l <= 0 || c <= 0) return 0;
+    return 1 / (2 * Math.PI * Math.sqrt(l * c));
+  }
+};
+
+// src/builtins/algorithms.ts
+var algorithmsBuiltins = {
+  // 1. Searching Algorithms
+  binary_search: (sortedList, target) => {
+    const arr = Array.isArray(sortedList) ? sortedList : [];
+    let low = 0;
+    let high = arr.length - 1;
+    while (low <= high) {
+      const mid = Math.floor((low + high) / 2);
+      if (arr[mid] === target) return mid;
+      if (arr[mid] < target) low = mid + 1;
+      else high = mid - 1;
+    }
+    return -1;
+  },
+  linear_search: (list, target) => {
+    const arr = Array.isArray(list) ? list : [];
+    return arr.indexOf(target);
+  },
+  // 2. Sorting Algorithms
+  quick_sort: (list) => {
+    const arr = Array.isArray(list) ? [...list] : [];
+    if (arr.length <= 1) return arr;
+    const pivot = arr[Math.floor(arr.length / 2)];
+    const left = arr.filter((x) => x < pivot);
+    const middle = arr.filter((x) => x === pivot);
+    const right = arr.filter((x) => x > pivot);
+    return [
+      ...algorithmsBuiltins.quick_sort(left),
+      ...middle,
+      ...algorithmsBuiltins.quick_sort(right)
+    ];
+  },
+  merge_sort: (list) => {
+    const arr = Array.isArray(list) ? [...list] : [];
+    if (arr.length <= 1) return arr;
+    const mid = Math.floor(arr.length / 2);
+    const left = algorithmsBuiltins.merge_sort(arr.slice(0, mid));
+    const right = algorithmsBuiltins.merge_sort(arr.slice(mid));
+    const result = [];
+    let l = 0, r = 0;
+    while (l < left.length && r < right.length) {
+      if (left[l] <= right[r]) {
+        result.push(left[l++]);
+      } else {
+        result.push(right[r++]);
+      }
+    }
+    return [...result, ...left.slice(l), ...right.slice(r)];
+  },
+  bubble_sort: (list) => {
+    const arr = Array.isArray(list) ? [...list] : [];
+    const n = arr.length;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n - i - 1; j++) {
+        if (arr[j] > arr[j + 1]) {
+          const temp = arr[j];
+          arr[j] = arr[j + 1];
+          arr[j + 1] = temp;
+        }
+      }
+    }
+    return arr;
+  },
+  insertion_sort: (list) => {
+    const arr = Array.isArray(list) ? [...list] : [];
+    for (let i = 1; i < arr.length; i++) {
+      const key = arr[i];
+      let j = i - 1;
+      while (j >= 0 && arr[j] > key) {
+        arr[j + 1] = arr[j];
+        j--;
+      }
+      arr[j + 1] = key;
+    }
+    return arr;
+  },
+  // 3. Graph Algorithms
+  graph_create: () => ({ _type: "Graph", nodes: [], adjacency: {} }),
+  graph_add_edge: (graph, from, to, weight = 1) => {
+    if (!graph || typeof graph !== "object") return {};
+    const adj = graph.adjacency || {};
+    const u = String(from);
+    const v = String(to);
+    if (!adj[u]) adj[u] = [];
+    if (!adj[v]) adj[v] = [];
+    adj[u].push({ node: v, weight: Number(weight) });
+    const nodes = Array.from(/* @__PURE__ */ new Set([...graph.nodes || [], u, v]));
+    return { ...graph, nodes, adjacency: adj };
+  },
+  graph_bfs: (graph, startNode) => {
+    if (!graph || !graph.adjacency) return [];
+    const start = String(startNode);
+    const visited = /* @__PURE__ */ new Set();
+    const queue = [start];
+    const order = [];
+    visited.add(start);
+    while (queue.length > 0) {
+      const current = queue.shift();
+      order.push(current);
+      const neighbors = graph.adjacency[current] || [];
+      for (const edge of neighbors) {
+        if (!visited.has(edge.node)) {
+          visited.add(edge.node);
+          queue.push(edge.node);
+        }
+      }
+    }
+    return order;
+  },
+  graph_dfs: (graph, startNode) => {
+    if (!graph || !graph.adjacency) return [];
+    const start = String(startNode);
+    const visited = /* @__PURE__ */ new Set();
+    const order = [];
+    const dfs = (node) => {
+      visited.add(node);
+      order.push(node);
+      const neighbors = graph.adjacency[node] || [];
+      for (const edge of neighbors) {
+        if (!visited.has(edge.node)) {
+          dfs(edge.node);
+        }
+      }
+    };
+    dfs(start);
+    return order;
+  },
+  graph_dijkstra: (graph, startNode) => {
+    if (!graph || !graph.adjacency) return {};
+    const start = String(startNode);
+    const distances = {};
+    const visited = /* @__PURE__ */ new Set();
+    for (const node of graph.nodes || []) {
+      distances[node] = Infinity;
+    }
+    distances[start] = 0;
+    const unvisited = new Set(graph.nodes || [start]);
+    while (unvisited.size > 0) {
+      let minNode = null;
+      let minDistance = Infinity;
+      for (const node of unvisited) {
+        if (distances[node] < minDistance) {
+          minDistance = distances[node];
+          minNode = node;
+        }
+      }
+      if (!minNode || minDistance === Infinity) break;
+      unvisited.delete(minNode);
+      const neighbors = graph.adjacency[minNode] || [];
+      for (const edge of neighbors) {
+        if (unvisited.has(edge.node)) {
+          const newDist = distances[minNode] + edge.weight;
+          if (newDist < distances[edge.node]) {
+            distances[edge.node] = newDist;
+          }
+        }
+      }
+    }
+    return distances;
+  },
+  // 4. Dynamic Programming & Combinatorics
+  fibonacci_nth: (n) => {
+    const num = Math.floor(Number(n));
+    if (num <= 0) return 0;
+    if (num === 1) return 1;
+    let a = 0, b = 1;
+    for (let i = 2; i <= num; i++) {
+      const c = a + b;
+      a = b;
+      b = c;
+    }
+    return b;
+  },
+  longest_common_subsequence: (s1, s2) => {
+    const str1 = String(s1);
+    const str2 = String(s2);
+    const m = str1.length;
+    const n = str2.length;
+    const dp = Array.from({ length: m + 1 }, () => new Array(n + 1).fill(0));
+    for (let i = 1; i <= m; i++) {
+      for (let j = 1; j <= n; j++) {
+        if (str1[i - 1] === str2[j - 1]) {
+          dp[i][j] = dp[i - 1][j - 1] + 1;
+        } else {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i][j - 1]);
+        }
+      }
+    }
+    return dp[m][n];
+  },
+  knapsack_01: (weights, values, capacity) => {
+    const w = Array.isArray(weights) ? weights.map(Number) : [];
+    const v = Array.isArray(values) ? values.map(Number) : [];
+    const cap = Math.floor(Number(capacity));
+    const n = Math.min(w.length, v.length);
+    const dp = Array.from({ length: n + 1 }, () => new Array(cap + 1).fill(0));
+    for (let i = 1; i <= n; i++) {
+      for (let j = 0; j <= cap; j++) {
+        if (w[i - 1] <= j) {
+          dp[i][j] = Math.max(dp[i - 1][j], dp[i - 1][j - w[i - 1]] + v[i - 1]);
+        } else {
+          dp[i][j] = dp[i - 1][j];
+        }
+      }
+    }
+    return dp[n][cap];
+  },
+  combinations_count: (n, k) => {
+    const N = Math.floor(Number(n));
+    const K = Math.floor(Number(k));
+    if (K < 0 || K > N) return 0;
+    if (K === 0 || K === N) return 1;
+    let res = 1;
+    for (let i = 1; i <= K; i++) {
+      res = res * (N - i + 1) / i;
+    }
+    return Math.round(res);
+  },
+  permutations_count: (n, k) => {
+    const N = Math.floor(Number(n));
+    const K = Math.floor(Number(k));
+    if (K < 0 || K > N) return 0;
+    let res = 1;
+    for (let i = 0; i < K; i++) {
+      res *= N - i;
+    }
+    return res;
+  }
+};
+
+// src/builtins/updater.ts
+var https2 = __toESM(require("https"));
+var CURRENT_PLAIN_VERSION = "1.1.0";
+var GITHUB_REPO = "Reuben123t/plain-lang";
+async function fetchLatestRelease() {
+  return new Promise((resolve7) => {
+    const url2 = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`;
+    const req = https2.get(
+      url2,
+      {
+        headers: {
+          "User-Agent": "plain-language-updater/1.1.0"
+        },
+        timeout: 4e3
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (chunk) => data += chunk);
+        res.on("end", () => {
+          try {
+            if (res.statusCode === 200) {
+              const release = JSON.parse(data);
+              const tagName = release.tag_name || "";
+              const latest = tagName.replace(/^v/, "").trim();
+              const updateAvailable = isVersionNewer(latest, CURRENT_PLAIN_VERSION);
+              let downloadUrl = release.html_url;
+              if (Array.isArray(release.assets)) {
+                const exeAsset = release.assets.find(
+                  (a) => a.name.endsWith(".exe") || a.name.endsWith(".zip")
+                );
+                if (exeAsset) downloadUrl = exeAsset.browser_download_url;
+              }
+              resolve7({
+                currentVersion: CURRENT_PLAIN_VERSION,
+                latestVersion: latest,
+                updateAvailable,
+                releaseUrl: release.html_url,
+                downloadUrl,
+                publishedAt: release.published_at
+              });
+              return;
+            }
+          } catch {
+          }
+          resolve7({
+            currentVersion: CURRENT_PLAIN_VERSION,
+            latestVersion: CURRENT_PLAIN_VERSION,
+            updateAvailable: false,
+            releaseUrl: `https://github.com/${GITHUB_REPO}`
+          });
+        });
+      }
+    );
+    req.on("error", () => {
+      resolve7({
+        currentVersion: CURRENT_PLAIN_VERSION,
+        latestVersion: CURRENT_PLAIN_VERSION,
+        updateAvailable: false,
+        releaseUrl: `https://github.com/${GITHUB_REPO}`
+      });
+    });
+    req.on("timeout", () => {
+      req.destroy();
+      resolve7({
+        currentVersion: CURRENT_PLAIN_VERSION,
+        latestVersion: CURRENT_PLAIN_VERSION,
+        updateAvailable: false,
+        releaseUrl: `https://github.com/${GITHUB_REPO}`
+      });
+    });
+  });
+}
+function isVersionNewer(remote, current) {
+  const rParts = remote.split(".").map((n) => parseInt(n, 10) || 0);
+  const cParts = current.split(".").map((n) => parseInt(n, 10) || 0);
+  for (let i = 0; i < Math.max(rParts.length, cParts.length); i++) {
+    const r = rParts[i] ?? 0;
+    const c = cParts[i] ?? 0;
+    if (r > c) return true;
+    if (r < c) return false;
+  }
+  return false;
+}
+async function promptUpdateIfAvailable() {
+  try {
+    const info = await fetchLatestRelease();
+    if (info.updateAvailable) {
+      console.log("");
+      console.log("\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510");
+      console.log(`\u2502  \u{1F514} NEW PLAIN UPDATE AVAILABLE: v${info.latestVersion} (Current: v${info.currentVersion})  \u2502`);
+      console.log("\u2502  Run 'plain update' or visit:                                \u2502");
+      console.log(`\u2502  ${info.releaseUrl.padEnd(60)}\u2502`);
+      console.log("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
+      console.log("");
+    }
+  } catch {
+  }
+}
+async function performUpdate() {
+  console.log(`Checking for updates from https://github.com/${GITHUB_REPO}...`);
+  const info = await fetchLatestRelease();
+  if (!info.updateAvailable) {
+    console.log(`PLAIN is already up-to-date! Current version: v${CURRENT_PLAIN_VERSION}`);
+    return;
+  }
+  console.log(`Found newer version: v${info.latestVersion} (currently v${CURRENT_PLAIN_VERSION})`);
+  console.log(`Download release: ${info.downloadUrl || info.releaseUrl}`);
+  console.log("");
+  console.log("To update via npm:       npm install -g plain-lang@latest");
+  console.log("To download executable:  Visit https://github.com/" + GITHUB_REPO + "/releases/latest");
+}
+var updaterBuiltins = {
+  check_for_updates: async () => {
+    const info = await fetchLatestRelease();
+    return {
+      current: info.currentVersion,
+      latest: info.latestVersion,
+      update_available: info.updateAvailable,
+      url: info.releaseUrl
+    };
+  },
+  plain_version: () => CURRENT_PLAIN_VERSION,
+  author_name: () => "Reuben",
+  update_software: async () => {
+    await performUpdate();
+    return true;
+  }
+};
+
 // src/builtins/index.ts
 function createStandardEnvironment(options) {
   const env = new Environment();
@@ -4524,60 +6940,56 @@ function createStandardEnvironment(options) {
     };
     env.define(name, plainFn);
   };
-  for (const [name, fn] of Object.entries(mathBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(geometryBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(statsBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(scienceBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(studentBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(textBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(listBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(timeBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(systemBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(networkBuiltins)) {
-    register(name, fn);
-  }
+  const registerModule = (moduleObj) => {
+    for (const [name, fn] of Object.entries(moduleObj)) {
+      register(name, fn);
+      if (name.includes("_")) {
+        const spaceAlias = name.replace(/_/g, " ");
+        register(spaceAlias, fn);
+        const camelCase = name.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
+        register(camelCase, fn);
+      }
+    }
+  };
+  registerModule(mathBuiltins);
+  registerModule(geometryBuiltins);
+  registerModule(statsBuiltins);
+  registerModule(scienceBuiltins);
+  registerModule(studentBuiltins);
+  registerModule(textBuiltins);
+  registerModule(listBuiltins);
+  registerModule(timeBuiltins);
+  registerModule(systemBuiltins);
+  registerModule(networkBuiltins);
   const webBuiltins = createWebBuiltins({ invokeFunction: options?.invokeFunction });
-  for (const [name, fn] of Object.entries(webBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(datascienceBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(aiBuiltins)) {
-    register(name, fn);
-  }
-  for (const [name, fn] of Object.entries(automationBuiltins)) {
-    register(name, fn);
-  }
-  register("read_file", (path6) => fileSandbox.readFile(path6));
-  register("write_file", (path6, content) => fileSandbox.writeFile(path6, content));
-  register("append_file", (path6, content) => fileSandbox.appendFile(path6, content));
-  register("file_exists", (path6) => fileSandbox.fileExists(path6));
-  register("delete_file", (path6) => fileSandbox.deleteFile(path6));
-  register("list_files", (dir) => fileSandbox.listFiles(dir));
-  register("file_size", (path6) => fileSandbox.fileSize(path6));
-  register("create_folder", (dir) => fileSandbox.createFolder(dir));
-  register("folder_exists", (dir) => fileSandbox.folderExists(dir));
+  registerModule(webBuiltins);
+  registerModule(datascienceBuiltins);
+  registerModule(aiBuiltins);
+  registerModule(automationBuiltins);
+  registerModule(aiTrainingBuiltins);
+  const serverDeployer = createServerDeployer({ invokeFunction: options?.invokeFunction });
+  registerModule(serverDeployer);
+  registerModule(linearAlgebraBuiltins);
+  registerModule(cryptoSecurityBuiltins);
+  registerModule(dataProcessingBuiltins);
+  registerModule(engineeringPhysicsBuiltins);
+  registerModule(algorithmsBuiltins);
+  registerModule(updaterBuiltins);
+  const fileOperations = {
+    read_file: (path7) => fileSandbox.readFile(path7),
+    write_file: (path7, content) => fileSandbox.writeFile(path7, content),
+    append_file: (path7, content) => fileSandbox.appendFile(path7, content),
+    file_exists: (path7) => fileSandbox.fileExists(path7),
+    delete_file: (path7) => fileSandbox.deleteFile(path7),
+    list_files: (dir) => fileSandbox.listFiles(dir),
+    file_size: (path7) => fileSandbox.fileSize(path7),
+    create_folder: (dir) => fileSandbox.createFolder(dir),
+    folder_exists: (dir) => fileSandbox.folderExists(dir)
+  };
+  registerModule(fileOperations);
   register("print", (val) => options?.onSay ? options.onSay(plainToString(val)) : console.log(plainToString(val)));
   register("wait", (sec) => timeBuiltins.sleep(sec));
+  register("sleep", (sec) => timeBuiltins.sleep(sec));
   register("sqrt", mathBuiltins.square_root);
   register("cbrt", mathBuiltins.cube_root);
   register("pow", mathBuiltins.power);
@@ -4586,6 +6998,9 @@ function createStandardEnvironment(options) {
   register("min", mathBuiltins.minimum);
   register("max", mathBuiltins.maximum);
   register("avg", listBuiltins.average);
+  register("mean", listBuiltins.average);
+  register("median", statsBuiltins.median);
+  register("mode", statsBuiltins.mode);
   register("len", textBuiltins.length);
   register("size", listBuiltins.count);
   register("upper", textBuiltins.uppercase);
@@ -4599,42 +7014,52 @@ function createStandardEnvironment(options) {
   register("shell", automationBuiltins.run_command);
   register("knn", aiBuiltins.knn_classify);
   register("kmeans", aiBuiltins.kmeans_cluster);
-  register("square root", mathBuiltins.square_root);
-  register("cube root", mathBuiltins.cube_root);
-  register("starts with", textBuiltins.starts_with);
-  register("ends with", textBuiltins.ends_with);
-  register("random between", mathBuiltins.random_between);
-  register("days between", (d1, d2) => timeBuiltins.days_between(d1, d2));
-  register("current time", () => timeBuiltins.current_time());
-  register("read file", (path6) => fileSandbox.readFile(path6));
-  register("write file", (path6, content) => fileSandbox.writeFile(path6, content));
-  register("append file", (path6, content) => fileSandbox.appendFile(path6, content));
-  register("file exists", (path6) => fileSandbox.fileExists(path6));
-  register("delete file", (path6) => fileSandbox.deleteFile(path6));
-  register("list files", (dir) => fileSandbox.listFiles(dir));
-  register("file size", (path6) => fileSandbox.fileSize(path6));
-  register("create folder", (dir) => fileSandbox.createFolder(dir));
-  register("roll dice", (sides, count) => systemBuiltins.roll_dice(sides, count));
-  register("flip coin", () => systemBuiltins.flip_coin());
-  register("pick card", () => systemBuiltins.pick_card());
-  register("letter grade", (pct) => studentBuiltins.letter_grade(pct));
-  register("atomic mass", (elem) => scienceBuiltins.atomic_mass(elem));
-  register("element name", (elem) => scienceBuiltins.element_name(elem));
-  register("read csv", (p) => datascienceBuiltins.read_csv(p));
-  register("write csv", (p, t) => datascienceBuiltins.write_csv(p, t));
-  register("filter table", (t, c, op, v) => datascienceBuiltins.filter_table(t, c, op, v));
-  register("sort table", (t, c, a) => datascienceBuiltins.sort_table(t, c, a));
-  register("start server", (p, h) => webBuiltins.start_server(p, h));
-  register("stop server", () => webBuiltins.stop_server());
-  register("serve static", (p, f) => webBuiltins.serve_static_files(p, f));
-  register("run command", (cmd) => automationBuiltins.run_command(cmd));
-  register("find files", (d, p) => automationBuiltins.find_files(d, p));
-  register("copy file", (s, d) => automationBuiltins.copy_file(s, d));
-  register("move file", (s, d) => automationBuiltins.move_file(s, d));
-  register("batch rename", (d, f, r) => automationBuiltins.batch_rename(d, f, r));
-  register("log info", (m) => automationBuiltins.log_info(m));
-  register("log error", (m) => automationBuiltins.log_error(m));
-  register("log warn", (m) => automationBuiltins.log_warn(m));
+  register("np_zeros", linearAlgebraBuiltins.matrix_zeros);
+  register("zeros", linearAlgebraBuiltins.matrix_zeros);
+  register("np_ones", linearAlgebraBuiltins.matrix_ones);
+  register("ones", linearAlgebraBuiltins.matrix_ones);
+  register("np_eye", linearAlgebraBuiltins.matrix_eye);
+  register("eye", linearAlgebraBuiltins.matrix_eye);
+  register("np_dot", linearAlgebraBuiltins.vector_dot);
+  register("dot", linearAlgebraBuiltins.vector_dot);
+  register("matmul", linearAlgebraBuiltins.matrix_mult);
+  register("np_matmul", linearAlgebraBuiltins.matrix_mult);
+  register("transpose", linearAlgebraBuiltins.matrix_transpose);
+  register("det", linearAlgebraBuiltins.matrix_determinant);
+  register("inv", linearAlgebraBuiltins.matrix_inverse_2x2);
+  register("shape", linearAlgebraBuiltins.matrix_shape);
+  register("reshape", linearAlgebraBuiltins.matrix_reshape);
+  register("head", dataProcessingBuiltins.table_head);
+  register("tail", dataProcessingBuiltins.table_tail);
+  register("columns", dataProcessingBuiltins.table_column_names);
+  register("drop_nulls", dataProcessingBuiltins.table_drop_nulls);
+  register("fill_nulls", dataProcessingBuiltins.table_fill_nulls);
+  register("inner_join", dataProcessingBuiltins.table_join_inner);
+  register("nn_create", aiTrainingBuiltins.create_neural_network);
+  register("nn_train", aiTrainingBuiltins.train_neural_network);
+  register("nn_predict", aiTrainingBuiltins.predict_neural_network);
+  register("load_dataset", aiTrainingBuiltins.load_ai_dataset);
+  register("mse", aiTrainingBuiltins.mean_squared_error_loss);
+  register("mae", aiTrainingBuiltins.mean_absolute_error_loss);
+  register("cross_entropy", aiTrainingBuiltins.binary_cross_entropy_loss);
+  register("log_reg", aiTrainingBuiltins.train_logistic_regression);
+  register("deploy", serverDeployer.deploy_server);
+  register("local_ip", serverDeployer.get_local_ip);
+  register("public_ip", serverDeployer.get_public_ip);
+  register("hash_sha256", cryptoSecurityBuiltins.sha256);
+  register("hash_md5", cryptoSecurityBuiltins.md5);
+  register("uuid", cryptoSecurityBuiltins.generate_uuid);
+  register("jwt_sign", cryptoSecurityBuiltins.create_jwt);
+  register("jwt_verify", cryptoSecurityBuiltins.verify_jwt);
+  register("sort", algorithmsBuiltins.quick_sort);
+  register("binary_search", algorithmsBuiltins.binary_search);
+  register("bfs", algorithmsBuiltins.graph_bfs);
+  register("dfs", algorithmsBuiltins.graph_dfs);
+  register("dijkstra", algorithmsBuiltins.graph_dijkstra);
+  register("fib", algorithmsBuiltins.fibonacci_nth);
+  register("update", updaterBuiltins.update_software);
+  register("upgrade", updaterBuiltins.update_software);
+  register("version", updaterBuiltins.plain_version);
   return env;
 }
 
@@ -4645,11 +7070,12 @@ var ReturnSignal = class {
     this.value = value;
   }
 };
-var Interpreter = class {
+var Interpreter = class _Interpreter {
   globalEnv;
   currentEnv;
   sourceCode;
   sourceFile;
+  baseDir;
   onSay;
   onShow;
   onAsk;
@@ -4657,17 +7083,18 @@ var Interpreter = class {
   constructor(options) {
     this.sourceCode = options?.sourceCode;
     this.sourceFile = options?.sourceFile;
+    this.baseDir = options?.baseDir ? path5.resolve(options.baseDir) : process.cwd();
     this.onSay = options?.onSay || ((s) => console.log(s));
     this.onShow = options?.onShow || ((s) => console.log(s));
     this.onAsk = options?.onAsk || ((p) => {
-      return new Promise((resolve6) => {
+      return new Promise((resolve7) => {
         const rl = readline.createInterface({
           input: process.stdin,
           output: process.stdout
         });
         rl.question(p ? `${p} ` : "", (ans) => {
           rl.close();
-          resolve6(ans);
+          resolve7(ans);
         });
       });
     });
@@ -4694,6 +7121,12 @@ var Interpreter = class {
     switch (statement.type) {
       case "SetStatement":
         await this.executeSet(statement);
+        break;
+      case "AssignmentStatement":
+        await this.executeAssignment(statement);
+        break;
+      case "ImportStatement":
+        await this.executeImport(statement);
         break;
       case "SayStatement":
         await this.executeSay(statement);
@@ -4742,6 +7175,83 @@ var Interpreter = class {
   async executeSet(stmt) {
     const value = await this.evaluate(stmt.value);
     this.currentEnv.assign(stmt.name, value);
+  }
+  async executeAssignment(stmt) {
+    const rhs = await this.evaluate(stmt.value);
+    if (stmt.operator === "=") {
+      this.currentEnv.assign(stmt.name, rhs);
+      return;
+    }
+    const current = this.currentEnv.lookup(stmt.name, stmt.location, this.sourceCode);
+    let finalVal = rhs;
+    if (stmt.operator === "+=") {
+      if (typeof current === "string" || typeof rhs === "string") {
+        finalVal = plainToString(current) + plainToString(rhs);
+      } else {
+        finalVal = mathBuiltins.to_number(current) + mathBuiltins.to_number(rhs);
+      }
+    } else if (stmt.operator === "-=") {
+      finalVal = mathBuiltins.to_number(current) - mathBuiltins.to_number(rhs);
+    } else if (stmt.operator === "*=") {
+      finalVal = mathBuiltins.to_number(current) * mathBuiltins.to_number(rhs);
+    } else if (stmt.operator === "/=") {
+      const divisor = mathBuiltins.to_number(rhs);
+      if (divisor === 0) {
+        throw new PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      }
+      finalVal = mathBuiltins.to_number(current) / divisor;
+    }
+    this.currentEnv.assign(stmt.name, finalVal);
+  }
+  async executeImport(stmt) {
+    const source = stmt.source.trim();
+    const alias = stmt.alias || source.replace(/\.plain$/, "").replace(/[^a-zA-Z0-9_]/g, "_");
+    let localFilePath = path5.resolve(this.baseDir, source);
+    if (!fs5.existsSync(localFilePath) && !source.endsWith(".plain")) {
+      localFilePath = path5.resolve(this.baseDir, source + ".plain");
+    }
+    if (fs5.existsSync(localFilePath) && fs5.statSync(localFilePath).isFile()) {
+      const code = fs5.readFileSync(localFilePath, "utf-8");
+      const lexer = new Lexer(code, localFilePath);
+      const tokens = lexer.tokenize();
+      const parser = new Parser(tokens, code, localFilePath);
+      const ast = parser.parse();
+      const subInterpreter = new _Interpreter({
+        baseDir: path5.dirname(localFilePath),
+        onSay: this.onSay,
+        onShow: this.onShow,
+        onAsk: this.onAsk,
+        onClear: this.onClear
+      });
+      for (const s of ast.body) {
+        await subInterpreter.executeStatement(s);
+      }
+      const moduleExport = {};
+      const exportedNames = subInterpreter.getGlobalEnvironment().getAllVariableNames();
+      for (const name of exportedNames) {
+        const val = subInterpreter.getGlobalEnvironment().lookup(name);
+        moduleExport[name] = val;
+        if (stmt.symbols && stmt.symbols.includes(name)) {
+          this.currentEnv.assign(name, val);
+        }
+      }
+      if (!stmt.symbols || stmt.symbols.length === 0) {
+        this.currentEnv.assign(alias, moduleExport);
+      }
+      return;
+    }
+    const allVars = this.globalEnv.getAllVariableNames();
+    const matchingModuleObj = {};
+    for (const name of allVars) {
+      const val = this.globalEnv.lookup(name);
+      matchingModuleObj[name] = val;
+      if (stmt.symbols && stmt.symbols.includes(name)) {
+        this.currentEnv.assign(name, val);
+      }
+    }
+    if (!stmt.symbols || stmt.symbols.length === 0) {
+      this.currentEnv.assign(alias, matchingModuleObj);
+    }
   }
   async executeSay(stmt) {
     const value = await this.evaluate(stmt.value);
@@ -4903,6 +7413,40 @@ var Interpreter = class {
         }
         return elements;
       }
+      case "DictionaryLiteral": {
+        const obj = {};
+        for (const entry of expr.entries) {
+          obj[entry.key] = await this.evaluate(entry.value);
+        }
+        return obj;
+      }
+      case "IndexExpression": {
+        const target = await this.evaluate(expr.object);
+        const idxVal = await this.evaluate(expr.index);
+        if (Array.isArray(target)) {
+          const idx = Math.floor(mathBuiltins.to_number(idxVal));
+          if (idx < 0) {
+            const wrapped = target.length + idx;
+            return wrapped >= 0 && wrapped < target.length ? target[wrapped] : null;
+          }
+          if (idx < target.length) {
+            return target[idx];
+          }
+          return null;
+        }
+        if (isPlainObject(target)) {
+          const key = plainToString(idxVal);
+          return target[key] ?? null;
+        }
+        return null;
+      }
+      case "MemberAccessExpression": {
+        const target = await this.evaluate(expr.object);
+        if (isPlainObject(target)) {
+          return target[expr.property] ?? null;
+        }
+        return null;
+      }
       case "ItemOfExpression":
         return this.evaluateItemOf(expr);
       case "UnaryExpression":
@@ -4990,6 +7534,24 @@ var Interpreter = class {
         }
         return mathBuiltins.to_number(left) % divisor;
       }
+      case "**": {
+        return Math.pow(mathBuiltins.to_number(left), mathBuiltins.to_number(right));
+      }
+      case "//": {
+        const divisor = mathBuiltins.to_number(right);
+        if (divisor === 0) {
+          throw new PlainError(
+            "Cannot divide by zero.",
+            expr.location,
+            {
+              kind: "RuntimeError",
+              sourceCode: this.sourceCode,
+              suggestion: "Make sure the divisor is not zero."
+            }
+          );
+        }
+        return Math.floor(mathBuiltins.to_number(left) / divisor);
+      }
       case "==":
         return this.valuesEqual(left, right);
       case "!=":
@@ -5011,15 +7573,25 @@ var Interpreter = class {
     }
   }
   async evaluateCall(expr) {
-    const calleeVal = this.currentEnv.lookup(expr.callee, expr.location, this.sourceCode);
+    let calleeVal;
+    let calleeName = "function";
+    if (typeof expr.callee === "string") {
+      calleeName = expr.callee;
+      calleeVal = this.currentEnv.lookup(expr.callee, expr.location, this.sourceCode);
+    } else {
+      calleeVal = await this.evaluate(expr.callee);
+      if (expr.callee.type === "MemberAccessExpression") {
+        calleeName = expr.callee.property;
+      }
+    }
     if (!isPlainFunction(calleeVal)) {
       throw new PlainError(
-        `'${expr.callee}' is a ${typeof calleeVal}, not a function.`,
+        `'${calleeName}' is a ${typeof calleeVal}, not a function.`,
         expr.location,
         {
           kind: "TypeError",
           sourceCode: this.sourceCode,
-          suggestion: `Check the name or define it with: to ${expr.callee} ... end`
+          suggestion: `Check the name or define it with: to ${calleeName} ... end`
         }
       );
     }
@@ -5258,28 +7830,33 @@ Math with lists:
   return `
 ========================================================================
                       PLAIN Programming Language
+                 Super Simple \u2022 1,200+ Functions \u2022 Pythonic
+                         Author: Reuben
 ========================================================================
-PLAIN is designed to be the simplest, most readable programming language.
-Code reads like everyday English instructions.
+PLAIN is designed to be the simplest, most powerful programming language.
+Supports both English and Pythonic syntax with 1,200+ built-in functions.
 
 COMMANDS:
   plain <file.plain>         Run a .plain script
   plain run <file.plain>     Run a .plain script
+  plain deploy [port]        Deploy a live network web server accessible via IP
+  plain update               Check for software updates and upgrade
   plain check <file.plain>   Check syntax without executing
   plain repl                 Start the interactive shell
   plain playground           Launch the visual web playground
   plain help <topic>         Detailed help (topics: variables, conditions,
                              loops, functions, lists)
 
-BASIC SYNTAX:
-  say "Hello, world!"                  Output text
-  set score to 100                     Save a variable
-  ask "Name?" and save as user         Get input from user
-  10 plus 5 times 2                    Math (+, -, *, /, remainder of)
-  item 1 of scores                     1-based list access
-  repeat 3 times ... end               Repeat loop
-  if age is at least 18 then ... end   Conditionals
-  to greet person ... end              Custom functions
+SYNTAX STYLES:
+  x = 100                              Python-style assignment
+  set x to 100                         English assignment
+  x += 5                               Compound assignment (+=, -=, *=, /=)
+  x ** 2,  10 // 3                     Power and floor division
+  def greet(name): say "Hi " + name end  Function definition
+  import "math_tools.plain" as math    Import local or virtual packages
+  user = { "name": "Reuben", "age": 20 } Dictionary syntax
+  deploy_server(8080)                  Deploy web server on 0.0.0.0
+  train_neural_network(net, data)      AI deep neural network training
 
 FILE EXTENSION:
   Save your code in files ending with .plain
@@ -5291,6 +7868,8 @@ FILE EXTENSION:
 function startRepl() {
   console.log("==========================================================");
   console.log("             PLAIN Programming Language REPL              ");
+  console.log("          Super Simple \u2022 1,200+ Functions \u2022 Pythonic      ");
+  console.log("               Created by Author: Reuben                  ");
   console.log("      Type instructions in simple English, or 'exit'.     ");
   console.log("==========================================================\n");
   const interpreter = new Interpreter();
@@ -5326,7 +7905,7 @@ function startRepl() {
       }
     }
     const lower = trimmed.toLowerCase();
-    if (lower.startsWith("if ") || lower.startsWith("repeat ") || lower.startsWith("for each ") || lower.startsWith("to ")) {
+    if (lower.startsWith("if ") || lower.startsWith("repeat ") || lower.startsWith("for each ") || lower.startsWith("for ") || lower.startsWith("while ") || lower.startsWith("def ") || lower.startsWith("to ")) {
       blockDepth++;
     }
     if (lower === "end") {
@@ -5367,7 +7946,7 @@ function startRepl() {
 }
 
 // src/playground/server.ts
-var http2 = __toESM(require("http"));
+var http3 = __toESM(require("http"));
 var HTML_PAGE = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5493,7 +8072,7 @@ var HTML_PAGE = `<!DOCTYPE html>
 </body>
 </html>`;
 function startPlayground(port = 3e3) {
-  const server = http2.createServer(async (req, res) => {
+  const server = http3.createServer(async (req, res) => {
     if (req.method === "GET" && req.url === "/") {
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(HTML_PAGE);
@@ -5538,12 +8117,25 @@ function startPlayground(port = 3e3) {
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
+    await promptUpdateIfAvailable();
     startRepl();
     return;
   }
   const command = args[0];
   if (command === "--version" || command === "-v" || command === "version") {
-    console.log("PLAIN Language version 1.0.0");
+    console.log(`PLAIN Language version ${CURRENT_PLAIN_VERSION}`);
+    console.log("Author: Reuben");
+    console.log("Copyright (C) 2026 Reuben. All rights reserved.");
+    return;
+  }
+  if (command === "update" || command === "upgrade") {
+    await performUpdate();
+    return;
+  }
+  if (command === "deploy") {
+    const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
+    const deployer = createServerDeployer();
+    await deployer.deploy_server(portArg, void 0, "0.0.0.0");
     return;
   }
   if (command === "help" || command === "--help" || command === "-h") {
@@ -5556,17 +8148,17 @@ async function main() {
   }
   if (command === "examples" || command === "example") {
     const candidates = [
-      path5.resolve(__dirname, "..", "examples"),
-      path5.resolve(__dirname, "..", "..", "examples"),
-      path5.resolve(process.cwd(), "examples")
+      path6.resolve(__dirname, "..", "examples"),
+      path6.resolve(__dirname, "..", "..", "examples"),
+      path6.resolve(process.cwd(), "examples")
     ];
-    const examplesDir = candidates.find((d) => fs5.existsSync(d)) || candidates[0];
+    const examplesDir = candidates.find((d) => fs6.existsSync(d)) || candidates[0];
     const target = args[1] === "run" ? args[2] : args[1];
     if (!target) {
       console.log("\n=== PLAIN Example Programs ===");
       console.log("Run any example with: plain examples <number_or_name>\n");
-      if (fs5.existsSync(examplesDir)) {
-        const files = fs5.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+      if (fs6.existsSync(examplesDir)) {
+        const files = fs6.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
         for (const file of files) {
           console.log(`  - ${file.replace(".plain", "")}  (plain examples ${file.split("_")[0]})`);
         }
@@ -5574,14 +8166,14 @@ async function main() {
       console.log("\nExample: plain examples 01_hello\n");
       return;
     }
-    if (fs5.existsSync(examplesDir)) {
-      const files = fs5.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
+    if (fs6.existsSync(examplesDir)) {
+      const files = fs6.readdirSync(examplesDir).filter((f) => f.endsWith(".plain"));
       const match = files.find(
         (f) => f.toLowerCase() === target.toLowerCase() || f.toLowerCase().startsWith(target.toLowerCase()) || f.toLowerCase().includes(target.toLowerCase())
       );
       if (match) {
-        const fullPath = path5.join(examplesDir, match);
-        const source2 = fs5.readFileSync(fullPath, "utf-8");
+        const fullPath = path6.join(examplesDir, match);
+        const source2 = fs6.readFileSync(fullPath, "utf-8");
         console.log(`--- Running: ${match} ---
 `);
         try {
@@ -5606,12 +8198,12 @@ async function main() {
       console.error("Error: Please provide a .plain file to check.");
       process.exit(1);
     }
-    const filePath2 = path5.resolve(process.cwd(), filename2);
-    if (!fs5.existsSync(filePath2)) {
+    const filePath2 = path6.resolve(process.cwd(), filename2);
+    if (!fs6.existsSync(filePath2)) {
       console.error(`Error: File not found: "${filename2}"`);
       process.exit(1);
     }
-    const source2 = fs5.readFileSync(filePath2, "utf-8");
+    const source2 = fs6.readFileSync(filePath2, "utf-8");
     try {
       const lexer = new Lexer(source2, filename2);
       const tokens = lexer.tokenize();
@@ -5632,8 +8224,8 @@ async function main() {
     }
     filename = args[1];
   }
-  const filePath = path5.resolve(process.cwd(), filename);
-  if (!fs5.existsSync(filePath)) {
+  const filePath = path6.resolve(process.cwd(), filename);
+  if (!fs6.existsSync(filePath)) {
     console.error(`Error: File not found: "${filename}"`);
     process.exit(1);
   }
@@ -5641,11 +8233,11 @@ async function main() {
     console.warn(`[Note] PLAIN programs usually end with '.plain', but running "${filename}" anyway.
 `);
   }
-  const source = fs5.readFileSync(filePath, "utf-8");
+  const source = fs6.readFileSync(filePath, "utf-8");
   try {
     await runPlain(source, {
       filename,
-      baseDir: path5.dirname(filePath)
+      baseDir: path6.dirname(filePath)
     });
   } catch (err) {
     console.error(formatError(err, source));

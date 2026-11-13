@@ -1,6 +1,10 @@
 import { Environment } from "./environment";
 import { Statement } from "../ast/types";
-export type PlainValue = number | string | boolean | null | PlainValue[] | PlainFunction;
+export type PlainValue = number | string | boolean | null | PlainValue[] | PlainObject | PlainFunction;
+export interface PlainObject {
+    [key: string]: PlainValue;
+}
+export declare function isPlainObject(val: any): val is PlainObject;
 export interface PlainFunction {
     type: "function";
     name: string;

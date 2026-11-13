@@ -7,7 +7,16 @@ export type PlainValue =
   | boolean
   | null
   | PlainValue[]
+  | PlainObject
   | PlainFunction;
+
+export interface PlainObject {
+  [key: string]: PlainValue;
+}
+
+export function isPlainObject(val: any): val is PlainObject {
+  return typeof val === "object" && val !== null && !Array.isArray(val) && val.type !== "function";
+}
 
 export interface PlainFunction {
   type: "function";
@@ -44,6 +53,13 @@ export function plainToString(value: PlainValue): string {
     });
     return `[${items.join(", ")}]`;
   }
+  if (isPlainObject(value)) {
+    const entries = Object.entries(value).map(([k, v]) => {
+      const vStr = typeof v === "string" ? `"${v}"` : plainToString(v);
+      return `"${k}": ${vStr}`;
+    });
+    return `{${entries.join(", ")}}`;
+  }
   if (isPlainFunction(value)) {
     return `<function ${value.name}>`;
   }
@@ -65,6 +81,7 @@ export function getPlainTypeName(value: PlainValue): string {
   if (typeof value === "string") return "text";
   if (typeof value === "boolean") return "boolean";
   if (Array.isArray(value)) return "list";
+  if (isPlainObject(value)) return "dictionary";
   if (isPlainFunction(value)) return "function";
   return typeof value;
 }

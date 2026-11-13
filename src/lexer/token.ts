@@ -55,7 +55,25 @@ export enum TokenType {
   Remainder = "Remainder",
   Or = "Or",
 
+  // Python & Package Keywords
+  Import = "Import",
+  Def = "Def",
+  Return = "Return",
+
   // Symbols
+  PlusEqual = "PlusEqual",       // +=
+  MinusEqual = "MinusEqual",     // -=
+  StarEqual = "StarEqual",       // *=
+  SlashEqual = "SlashEqual",     // /=
+  StarStar = "StarStar",         // **
+  SlashSlash = "SlashSlash",     // //
+  Colon = "Colon",               // :
+  LeftBrace = "LeftBrace",       // {
+  RightBrace = "RightBrace",     // }
+  Arrow = "Arrow",               // ->
+  FatArrow = "FatArrow",         // =>
+  Pipe = "Pipe",                 // |
+  Dot = "Dot",                   // .
   PlusSign = "PlusSign",         // +
   MinusSign = "MinusSign",       // -
   StarSign = "StarSign",         // *

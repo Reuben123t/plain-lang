@@ -35,8 +35,12 @@ var __importStar = (this && this.__importStar) || (function () {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.Interpreter = void 0;
 const readline = __importStar(require("readline"));
+const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
 const environment_1 = require("./environment");
 const values_1 = require("./values");
+const lexer_1 = require("../lexer/lexer");
+const parser_1 = require("../parser/parser");
 const plain_error_1 = require("../errors/plain-error");
 const math_1 = require("../builtins/math");
 const list_1 = require("../builtins/list");
@@ -53,6 +57,7 @@ class Interpreter {
     currentEnv;
     sourceCode;
     sourceFile;
+    baseDir;
     onSay;
     onShow;
     onAsk;
@@ -60,6 +65,7 @@ class Interpreter {
     constructor(options) {
         this.sourceCode = options?.sourceCode;
         this.sourceFile = options?.sourceFile;
+        this.baseDir = options?.baseDir ? path.resolve(options.baseDir) : process.cwd();
         this.onSay = options?.onSay || ((s) => console.log(s));
         this.onShow = options?.onShow || ((s) => console.log(s));
         this.onAsk =
@@ -99,6 +105,12 @@ class Interpreter {
         switch (statement.type) {
             case "SetStatement":
                 await this.executeSet(statement);
+                break;
+            case "AssignmentStatement":
+                await this.executeAssignment(statement);
+                break;
+            case "ImportStatement":
+                await this.executeImport(statement);
                 break;
             case "SayStatement":
                 await this.executeSay(statement);
@@ -147,6 +159,91 @@ class Interpreter {
     async executeSet(stmt) {
         const value = await this.evaluate(stmt.value);
         this.currentEnv.assign(stmt.name, value);
+    }
+    async executeAssignment(stmt) {
+        const rhs = await this.evaluate(stmt.value);
+        if (stmt.operator === "=") {
+            this.currentEnv.assign(stmt.name, rhs);
+            return;
+        }
+        const current = this.currentEnv.lookup(stmt.name, stmt.location, this.sourceCode);
+        let finalVal = rhs;
+        if (stmt.operator === "+=") {
+            if (typeof current === "string" || typeof rhs === "string") {
+                finalVal = (0, values_1.plainToString)(current) + (0, values_1.plainToString)(rhs);
+            }
+            else {
+                finalVal = math_1.mathBuiltins.to_number(current) + math_1.mathBuiltins.to_number(rhs);
+            }
+        }
+        else if (stmt.operator === "-=") {
+            finalVal = math_1.mathBuiltins.to_number(current) - math_1.mathBuiltins.to_number(rhs);
+        }
+        else if (stmt.operator === "*=") {
+            finalVal = math_1.mathBuiltins.to_number(current) * math_1.mathBuiltins.to_number(rhs);
+        }
+        else if (stmt.operator === "/=") {
+            const divisor = math_1.mathBuiltins.to_number(rhs);
+            if (divisor === 0) {
+                throw new plain_error_1.PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+            }
+            finalVal = math_1.mathBuiltins.to_number(current) / divisor;
+        }
+        this.currentEnv.assign(stmt.name, finalVal);
+    }
+    async executeImport(stmt) {
+        const source = stmt.source.trim();
+        const alias = stmt.alias || source.replace(/\.plain$/, "").replace(/[^a-zA-Z0-9_]/g, "_");
+        // Check if source is a local .plain file
+        let localFilePath = path.resolve(this.baseDir, source);
+        if (!fs.existsSync(localFilePath) && !source.endsWith(".plain")) {
+            localFilePath = path.resolve(this.baseDir, source + ".plain");
+        }
+        if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
+            const code = fs.readFileSync(localFilePath, "utf-8");
+            const lexer = new lexer_1.Lexer(code, localFilePath);
+            const tokens = lexer.tokenize();
+            const parser = new parser_1.Parser(tokens, code, localFilePath);
+            const ast = parser.parse();
+            const subInterpreter = new Interpreter({
+                baseDir: path.dirname(localFilePath),
+                onSay: this.onSay,
+                onShow: this.onShow,
+                onAsk: this.onAsk,
+                onClear: this.onClear
+            });
+            // Execute in submodule scope
+            for (const s of ast.body) {
+                await subInterpreter.executeStatement(s);
+            }
+            // Collect exported variables
+            const moduleExport = {};
+            const exportedNames = subInterpreter.getGlobalEnvironment().getAllVariableNames();
+            for (const name of exportedNames) {
+                const val = subInterpreter.getGlobalEnvironment().lookup(name);
+                moduleExport[name] = val;
+                if (stmt.symbols && stmt.symbols.includes(name)) {
+                    this.currentEnv.assign(name, val);
+                }
+            }
+            if (!stmt.symbols || stmt.symbols.length === 0) {
+                this.currentEnv.assign(alias, moduleExport);
+            }
+            return;
+        }
+        // Built-in virtual packages
+        const allVars = this.globalEnv.getAllVariableNames();
+        const matchingModuleObj = {};
+        for (const name of allVars) {
+            const val = this.globalEnv.lookup(name);
+            matchingModuleObj[name] = val;
+            if (stmt.symbols && stmt.symbols.includes(name)) {
+                this.currentEnv.assign(name, val);
+            }
+        }
+        if (!stmt.symbols || stmt.symbols.length === 0) {
+            this.currentEnv.assign(alias, matchingModuleObj);
+        }
     }
     async executeSay(stmt) {
         const value = await this.evaluate(stmt.value);
@@ -294,6 +391,40 @@ class Interpreter {
                 }
                 return elements;
             }
+            case "DictionaryLiteral": {
+                const obj = {};
+                for (const entry of expr.entries) {
+                    obj[entry.key] = await this.evaluate(entry.value);
+                }
+                return obj;
+            }
+            case "IndexExpression": {
+                const target = await this.evaluate(expr.object);
+                const idxVal = await this.evaluate(expr.index);
+                if (Array.isArray(target)) {
+                    const idx = Math.floor(math_1.mathBuiltins.to_number(idxVal));
+                    if (idx < 0) {
+                        const wrapped = target.length + idx;
+                        return wrapped >= 0 && wrapped < target.length ? target[wrapped] : null;
+                    }
+                    if (idx < target.length) {
+                        return target[idx];
+                    }
+                    return null;
+                }
+                if ((0, values_1.isPlainObject)(target)) {
+                    const key = (0, values_1.plainToString)(idxVal);
+                    return target[key] ?? null;
+                }
+                return null;
+            }
+            case "MemberAccessExpression": {
+                const target = await this.evaluate(expr.object);
+                if ((0, values_1.isPlainObject)(target)) {
+                    return target[expr.property] ?? null;
+                }
+                return null;
+            }
             case "ItemOfExpression":
                 return this.evaluateItemOf(expr);
             case "UnaryExpression":
@@ -379,6 +510,20 @@ class Interpreter {
                 }
                 return math_1.mathBuiltins.to_number(left) % divisor;
             }
+            case "**": {
+                return Math.pow(math_1.mathBuiltins.to_number(left), math_1.mathBuiltins.to_number(right));
+            }
+            case "//": {
+                const divisor = math_1.mathBuiltins.to_number(right);
+                if (divisor === 0) {
+                    throw new plain_error_1.PlainError("Cannot divide by zero.", expr.location, {
+                        kind: "RuntimeError",
+                        sourceCode: this.sourceCode,
+                        suggestion: "Make sure the divisor is not zero."
+                    });
+                }
+                return Math.floor(math_1.mathBuiltins.to_number(left) / divisor);
+            }
             case "==":
                 return this.valuesEqual(left, right);
             case "!=":
@@ -396,12 +541,23 @@ class Interpreter {
         }
     }
     async evaluateCall(expr) {
-        const calleeVal = this.currentEnv.lookup(expr.callee, expr.location, this.sourceCode);
+        let calleeVal;
+        let calleeName = "function";
+        if (typeof expr.callee === "string") {
+            calleeName = expr.callee;
+            calleeVal = this.currentEnv.lookup(expr.callee, expr.location, this.sourceCode);
+        }
+        else {
+            calleeVal = await this.evaluate(expr.callee);
+            if (expr.callee.type === "MemberAccessExpression") {
+                calleeName = expr.callee.property;
+            }
+        }
         if (!(0, values_1.isPlainFunction)(calleeVal)) {
-            throw new plain_error_1.PlainError(`'${expr.callee}' is a ${typeof calleeVal}, not a function.`, expr.location, {
+            throw new plain_error_1.PlainError(`'${calleeName}' is a ${typeof calleeVal}, not a function.`, expr.location, {
                 kind: "TypeError",
                 sourceCode: this.sourceCode,
-                suggestion: `Check the name or define it with: to ${expr.callee} ... end`
+                suggestion: `Check the name or define it with: to ${calleeName} ... end`
             });
         }
         const evaluatedArgs = [];
