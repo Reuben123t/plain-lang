@@ -159,3 +159,4 @@ class IconGenerator
         return path;
     }
 }
+

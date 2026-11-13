@@ -10,14 +10,18 @@ describe("PLAIN Native Desktop IDE (Python IDLE Equivalent)", () => {
   const localAppIdeExe = path.join(process.env.LOCALAPPDATA || "", "PLAIN", "bin", "plain-ide.exe");
   const ideSourceCs = path.join(workspaceRoot, "src", "ide", "plain-ide.cs");
   const iconPath = path.join(workspaceRoot, "build_assets", "plain.ico");
+  const fileIconPath = path.join(workspaceRoot, "build_assets", "plain-file.ico");
 
-  test("verifies that plain-ide.exe and plain.ico exist", () => {
+  test("verifies that plain-ide.exe, plain.ico and plain-file.ico exist", () => {
     assert.strictEqual(fs.existsSync(distIdeExe), true, "dist/plain-ide.exe should exist");
     assert.strictEqual(fs.existsSync(localAppIdeExe), true, "Local AppData plain-ide.exe should exist");
     assert.strictEqual(fs.existsSync(iconPath), true, "build_assets/plain.ico should exist");
+    assert.strictEqual(fs.existsSync(fileIconPath), true, "build_assets/plain-file.ico should exist");
     
     const stats = fs.statSync(distIdeExe);
     assert.ok(stats.size > 10000, "plain-ide.exe should be a non-trivial executable");
+    const fileIconStats = fs.statSync(fileIconPath);
+    assert.ok(fileIconStats.size > 5000, "plain-file.ico should be a valid icon");
   });
 
   test("verifies C# IDE code loads opened files into code-writing area ONLY without executing", () => {
