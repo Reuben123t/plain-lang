@@ -1,14 +1,33 @@
 {
   "name": "plain-language-support",
-  "displayName": "PLAIN Language Support",
-  "description": "Syntax highlighting and language support for the PLAIN programming language (.plain)",
-  "version": "1.0.0",
-  "publisher": "reuben",
+  "displayName": "PLAIN Language",
+  "description": "Rich language support for PLAIN (.plain): syntax highlighting, IntelliSense, hover docs, linter, snippets, and integrated runner.",
+  "version": "1.3.0",
+  "publisher": "plain-lang",
+  "icon": "icons/icon.png",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Reuben123t/plain-lang.git"
+  },
+  "license": "MIT",
   "engines": {
     "vscode": "^1.75.0"
   },
   "categories": [
-    "Programming Languages"
+    "Programming Languages",
+    "Snippets",
+    "Linters"
+  ],
+  "keywords": [
+    "plain",
+    "cybersecurity",
+    "ai",
+    "programming-language",
+    "runner"
+  ],
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "onLanguage:plain"
   ],
   "contributes": {
     "languages": [
@@ -21,7 +40,11 @@
         "extensions": [
           ".plain"
         ],
-        "configuration": "./language-configuration.json"
+        "configuration": "./language-configuration.json",
+        "icon": {
+          "light": "./icons/plain-file.png",
+          "dark": "./icons/plain-file.png"
+        }
       }
     ],
     "grammars": [
@@ -30,7 +53,71 @@
         "scopeName": "source.plain",
         "path": "./syntaxes/plain.tmLanguage.json"
       }
+    ],
+    "snippets": [
+      {
+        "language": "plain",
+        "path": "./snippets/plain.json"
+      }
+    ],
+    "commands": [
+      {
+        "command": "plain.runFile",
+        "title": "Run PLAIN File",
+        "icon": "$(play)"
+      },
+      {
+        "command": "plain.startRepl",
+        "title": "Start PLAIN Interactive REPL",
+        "icon": "$(terminal)"
+      },
+      {
+        "command": "plain.openInIde",
+        "title": "Open in PLAIN Code Studio (Native IDE)",
+        "icon": "$(window)"
+      },
+      {
+        "command": "plain.runCyberScan",
+        "title": "Run PLAIN Cybersecurity Audit",
+        "icon": "$(shield)"
+      },
+      {
+        "command": "plain.showDocs",
+        "title": "Open PLAIN Language Documentation",
+        "icon": "$(book)"
+      }
+    ],
+    "menus": {
+      "editor/title": [
+        {
+          "command": "plain.runFile",
+          "when": "resourceExtname == .plain",
+          "group": "navigation"
+        }
+      ],
+      "editor/context": [
+        {
+          "command": "plain.runFile",
+          "when": "resourceExtname == .plain",
+          "group": "1_run"
+        },
+        {
+          "command": "plain.openInIde",
+          "when": "resourceExtname == .plain",
+          "group": "1_run"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "plain.runFile",
+        "key": "f5",
+        "when": "editorTextFocus && editorLangId == plain"
+      }
     ]
+  },
+  "scripts": {
+    "vscode:prepublish": "npx esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
+    "compile": "npx esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node"
   }
 }
-
