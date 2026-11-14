@@ -4,25 +4,31 @@
   },
   "brackets": [
     ["[", "]"],
-    ["(", ")"]
+    ["(", ")"],
+    ["{", "}"]
   ],
   "autoClosingPairs": [
     { "open": "[", "close": "]" },
     { "open": "(", "close": ")" },
+    { "open": "{", "close": "}" },
     { "open": "\"", "close": "\"", "notIn": ["string"] },
     { "open": "'", "close": "'", "notIn": ["string", "comment"] }
   ],
   "surroundingPairs": [
     ["[", "]"],
     ["(", ")"],
+    ["{", "}"],
     ["\"", "\""],
     ["'", "'"]
   ],
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*(def\\b.*:|while\\b.*:|if\\b.*:|function\\b.*|repeat\\b.*|for\\s+each\\b.*|to\\b.*|otherwise\\b|else\\b).*",
+    "decreaseIndentPattern": "^\\s*(end\\b|otherwise\\b|else\\b).*"
+  },
   "folding": {
     "markers": {
-      "start": "^\\s*(to|if|repeat|for each)\\b",
+      "start": "^\\s*(def|function|to|if|repeat|for each|while)\\b",
       "end": "^\\s*end\\b"
     }
   }
 }
-
