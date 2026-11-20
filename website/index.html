@@ -26,6 +26,10 @@
     <section class="content"><div class="wrap"><div class="try"><div><h2>Try your first program.</h2><p>Install PLAIN from GitHub or open the source to start experimenting today.</p></div><a class="button" href="docs/tutorial.md">Read the tutorial →</a></div></div></section>
   </main>
   <footer><div class="wrap"><span>© 2026 PLAIN by Reuben</span><nav><a href="docs/standard-library.md">Docs</a><a href="SECURITY.md">Security</a><a href="https://github.com/Reuben123t/plain-lang">GitHub</a></nav></div></footer>
+  <script>
+    const docsRoot = "https://github.com/Reuben123t/plain-lang/blob/feat/plain-reliability-tooling/";
+    document.querySelectorAll('a[href="docs/getting-started.md"],a[href="docs/tutorial.md"],a[href="docs/standard-library.md"],a[href="SECURITY.md"]').forEach((link) => { link.href = docsRoot + link.getAttribute("href"); });
+  </script>
   <script type="module">
     import * as THREE from "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js";
     const mount=document.querySelector(".scene");const scene=new THREE.Scene();const camera=new THREE.PerspectiveCamera(32,1,.1,100);camera.position.set(0,0,6);
