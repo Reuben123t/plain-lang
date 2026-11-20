@@ -1,0 +1,51 @@
+appId: org.plainlang.studio
+productName: Plain Studio
+copyright: Copyright © 2026 Reuben
+asar: true
+npmRebuild: false
+directories:
+  output: release
+  buildResources: resources
+files:
+  - dist/**
+  - package.json
+  - '!dist/**/*.map'
+artifactName: Plain-Studio-${version}-${os}-${arch}.${ext}
+fileAssociations:
+  - ext: plain
+    name: Plain source
+    description: Plain programming language source file
+    role: Editor
+win:
+  icon: ../assets/plain-icon.ico
+  target:
+    - target: nsis
+      arch: [x64]
+    - target: portable
+      arch: [x64]
+nsis:
+  artifactName: Plain-Studio-${version}-windows-${arch}-setup.${ext}
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  deleteAppDataOnUninstall: false
+mac:
+  category: public.app-category.developer-tools
+  icon: dist/icons/plain.icns
+  target:
+    - target: dmg
+      arch: [x64, arm64]
+    - target: zip
+      arch: [x64, arm64]
+  identity: null
+linux:
+  icon: dist/icons
+  category: Development
+  executableName: plain-studio
+  maintainer: Reuben
+  target:
+    - target: AppImage
+      arch: [x64]
+    - target: deb
+      arch: [x64]
+publish: null

@@ -38,6 +38,17 @@
     "generate:catalog": "node scripts/generate-catalog.cjs",
     "package:vscode": "node scripts/package-vscode.cjs",
     "preview": "node scripts/preview.cjs",
+    "desktop:setup": "npm ci --prefix desktop",
+    "desktop:dev": "npm --prefix desktop run dev --",
+    "desktop:build": "npm --prefix desktop run build --",
+    "desktop:typecheck": "npm --prefix desktop run typecheck --",
+    "desktop:test": "npm --prefix desktop run test --",
+    "desktop:test:e2e": "npm --prefix desktop run test:e2e --",
+    "desktop:test:smoke": "npm --prefix desktop run test:smoke --",
+    "desktop:preview": "npm --prefix desktop run preview --",
+    "desktop:package": "npm --prefix desktop run package --",
+    "desktop:package:dir": "npm --prefix desktop run package:dir --",
+    "desktop:checksums": "npm --prefix desktop run checksums --",
     "prepack": "npm run build",
     "plain": "tsx src/cli/cli.ts"
   },
@@ -54,7 +65,7 @@
     "type": "git",
     "url": "https://github.com/Reuben123t/plain-lang.git"
   },
-  "homepage": "https://reuben123t.github.io/plain-lang/",
+  "homepage": "https://plain-lang.vercel.app/",
   "bugs": {
     "url": "https://github.com/Reuben123t/plain-lang/issues"
   },

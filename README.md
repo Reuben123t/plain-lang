@@ -80,6 +80,22 @@ code --install-extension .artifacts/plain-language-support-1.3.0.vsix --force
 
 The extension provides syntax highlighting, snippets, diagnostics, hover information, symbols, completions, and PLAIN execution commands.
 
+## Plain Studio desktop
+
+**Plain Studio 1.3.0-beta.1** is the first cross-platform desktop source release. [Windows beta downloads and release notes](https://github.com/Reuben123t/plain-lang/releases/tag/v1.3.0-beta.1) · [Website](https://plain-lang.vercel.app/#studio).
+
+Windows x64 packages are unsigned betas. The packaged app and bundled runtime were tested; clean-machine installer/upgrade checks remain outstanding, and the portable-wrapper startup check is inconclusive. Linux/macOS packaging is provided as source but has not been verified on native hosts; no Linux/macOS binaries are offered in this beta. Existing CLI downloads remain available in the v1.2.0 release.
+
+Plain Studio is the Electron desktop app in [`desktop`](desktop), separate from the CLI, VS Code extension, and legacy native launchers. From a source checkout with Node.js 22 or newer:
+
+```sh
+npm ci
+npm run desktop:setup
+npm run desktop:dev
+```
+
+Packaged candidates bundle their runtime; end users do not need a separate Node installation. Running a program grants it the current user's host capabilities, not a sandbox. See the [desktop guide](docs/desktop.md) for features, trust boundaries, checks, and nonpublishing Windows/Linux/macOS candidate builds; configured targets are not a claim of verified release downloads.
+
 ## Browser playground
 
 Build the static playground with:

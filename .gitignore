@@ -13,9 +13,16 @@ dist/*.blob
 build/
 build_assets/
 
+# Plain Studio desktop outputs (dependencies use the node_modules/ rule above)
+/desktop/dist/
+/desktop/release*/
+/desktop/test-results/
+/desktop/playwright-report/
+
 # Test outputs & coverage
 coverage/
 .nyc_output/
+/.artifacts*.log
 
 # OS and Editor files
 .DS_Store
