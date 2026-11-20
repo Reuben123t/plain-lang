@@ -107,10 +107,13 @@ jobs:
       - name: Install locked desktop dependencies
         run: npm ci --prefix desktop
 
-      - name: Install Linux GUI system libraries
+      - name: Install Linux Electron runtime and GUI system libraries
         if: runner.os == 'Linux'
         working-directory: desktop
-        run: npx --no-install playwright install-deps chromium
+        shell: bash
+        run: |
+          node node_modules/electron/install.js
+          npx --no-install playwright install-deps chromium
 
       - name: Configure Linux Chromium sandbox helper
         if: runner.os == 'Linux'
