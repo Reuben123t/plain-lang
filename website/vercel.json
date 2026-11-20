@@ -2,6 +2,16 @@
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "/docs/getting-started.md",
+      "destination": "https://raw.githubusercontent.com/Reuben123t/plain-lang/feat/plain-reliability-tooling/docs/getting-started.md"
+    },
+    {
+      "source": "/docs/tutorial.md",
+      "destination": "https://raw.githubusercontent.com/Reuben123t/plain-lang/feat/plain-reliability-tooling/docs/tutorial.md"
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",
