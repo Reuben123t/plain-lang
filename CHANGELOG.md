@@ -2,7 +2,16 @@
 
 Changes below are source-development work. Runtime and editor versions are tracked separately. The existing manifests identify the runtime as **1.2.0** and the VS Code extension as **1.3.0**; this file does not invent or announce a new released version.
 
-## Unreleased
+## Plain Studio 1.3.0-beta.1 — 2026-11-20
+
+- First public-beta candidate of Plain Studio: a standalone Electron/Monaco editor using the existing PLAIN runtime and shared language tooling.
+- Native files/folders, tabs, formatting, diagnostics, completions, builtin help, examples, themes, command palette, and bounded local recovery.
+- Interactive Run/Stop with input, arguments, structured errors, execution limits, and managed process-tree cleanup.
+- Unsigned Windows x64 installer and experimental portable candidates. Packaged startup/runtime verified; clean-machine installation/upgrade checks remain outstanding and portable-wrapper startup verification is inconclusive.
+- Linux/macOS build configurations and native validation workflow included, but those platforms are unverified and have no binaries in this beta.
+- PLAIN runtime stays at 1.2.0 and the VS Code extension stays at 1.3.0. This desktop beta does not replace legacy downloads or publish npm/Marketplace packages.
+
+## Unreleased language/tooling development
 
 ### Added
 
@@ -13,6 +22,8 @@ Changes below are source-development work. Runtime and editor versions are track
 - Source onboarding, a language tour, compatibility notes, contributor/security policies, and a release checklist.
 - Bug/feature forms, a pull-request template, and read-only cross-platform CI targeting Node 22 and 24.
 - Short examples for the language/CLI additions and a distinction between deterministic and opt-in examples.
+- Plain Studio Electron desktop app source, with independent locked dependencies and root `desktop:*` convenience commands; see the [desktop guide](docs/desktop.md) for capabilities, full-host execution trust, and bounded best-effort session recovery.
+- Nonpublishing desktop CI configured for native Windows/Linux x64 and macOS x64/arm64 candidates, service tests, Electron end-to-end checks, and SHA-256 manifests. Only manual workflow runs upload candidate build artifacts; signing, notarization, and releases remain separate approval gates. Configured targets do not establish cross-platform verification or download availability.
 
 ### Changed
 

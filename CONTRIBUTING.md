@@ -32,6 +32,27 @@ The current runtime version is `1.2.0`, while the editor extension version is `1
 
 `npm run test:package` validates the package workflow without publishing. Package verification and CI must not replace old native binaries or require an installed desktop IDE or editor extension.
 
+## Plain Studio desktop development
+
+The Electron app has its own manifest and committed lockfile in `desktop/`; it is not an npm workspace or part of the root install/build/test scripts. Keep the existing core checks above. After root `npm ci`, use:
+
+```sh
+npm run desktop:setup
+npm run desktop:typecheck
+npm run desktop:test
+npm run desktop:build
+npm run desktop:test:e2e
+npm run desktop:dev
+```
+
+`desktop:setup` runs `npm ci --prefix desktop`. Other `desktop:*` aliases forward to the corresponding desktop package script and pass through arguments after `--`. Linux Electron GUI tests need a display; use `xvfb-run -a npm run desktop:test:e2e` on a headless machine. Electron's Linux system libraries must also be installed; CI uses Playwright's `install-deps chromium` helper. Node.js 22 or newer is a development requirement; packaged users do not install Node separately.
+
+Read the [desktop guide](docs/desktop.md) before changing execution, IPC, native dialogs, file saves, settings, or recovery. Keep the renderer isolated from Node and execution behind an explicit user action. Desktop programs are fully trusted host code, not browser-sandboxed examples. Preserve the argument array supplied to `onRun`; never silently drop it or convert it to a shell command. Recovery is bounded and best effort, not a backup or an autosave guarantee.
+
+Service tests and Electron E2E tests must use temporary fixtures and an isolated test profile. Never reuse a contributor's real application profile or run arbitrary restored/opened code. `--smoke-test` is an isolated startup check that must not execute a program; it does not replace E2E or packaged-candidate testing. Record the checks actually run. Accessibility, clean/existing-profile, packaging, and install/upgrade/uninstall checks still require explicit manual evidence; a configured CI matrix is not proof they passed.
+
+For native, unsigned, nonpublishing candidates, use `desktop:package`, `desktop:package:dir`, and `desktop:checksums` as described in the guide. Do not replace legacy binaries. Signing, notarization, external publication, and release assets require separate approval.
+
 ## Optional native/local integration checks
 
 Native artifact assertions are opt-in through `PLAIN_TEST_NATIVE=1`; they are not prerequisites for the normal cross-platform suite. Only enable them on a deliberately configured Windows machine with the artifacts/installations being tested.
@@ -62,6 +83,7 @@ A skip is not evidence that a native artifact works. Record what artifact, platf
 | `tests` | Automated regressions |
 | `examples` | Runnable learning material; see its execution guide |
 | `editors/vscode` | Editor extension source and packaging |
+| `desktop` | Plain Studio Electron app, independent dependencies, service/E2E tests, and native candidate builds |
 | `docs` | Guides and generated reference/site outputs |
 | `scripts` | Build, verification, and release-staging tools |
 
@@ -86,6 +108,8 @@ Be constructive and specific in review. Discuss the behavior and evidence rather
 
 ## CI and releases
 
-The workflow in `.github/workflows/ci.yml` uses read-only repository permissions and official `actions/checkout@v4` and `actions/setup-node@v4` major-version references. These are explicit, documented upstream major pins, not immutable SHAs. Review upstream changes when updating them; use a verified full upstream SHA if the project adopts immutable action pinning. Never insert a guessed SHA.
+The workflows in `.github/workflows/ci.yml` and `.github/workflows/desktop.yml` use read-only repository permissions and official `actions/checkout@v4` and `actions/setup-node@v4` major-version references. Desktop CI also uses `actions/upload-artifact@v4`, only on manual workflow runs. These are explicit, documented upstream major pins, not immutable SHAs. Review upstream changes when updating them; use a verified full upstream SHA if the project adopts immutable action pinning. Never insert a guessed SHA.
 
-CI checks changes; it does not deploy, publish packages, or create releases. Metadata/topics/site changes, npm or Marketplace publication, release uploads, signing, and replacement/removal of legacy artifacts require separate approval and the [release checklist](docs/releasing.md).
+Core CI retains its Node 22/24 matrix. Desktop CI uses Node 22 on native Linux/Windows x64 runners and separate macOS Intel x64/Apple Silicon arm64 runners. Push/PR path filters cover desktop, shared core/tooling, build inputs, and integration docs. It installs both lockfiles, checks types, runs desktop service tests and Electron E2E (with Xvfb on Linux), builds native candidates with explicit platform/architecture arguments and `--publish never`, and generates SHA-256 manifests. Only successful `workflow_dispatch` jobs upload unsigned candidate files as seven-day Actions build artifacts; push/PR runs do not upload them. These artifacts follow repository/Actions access rules and are not release assets or an approved public distribution channel.
+
+CI checks changes; it does not deploy, publish packages, or create releases, and the desktop workflow requires no publishing/signing secrets. Metadata/topics/site changes, npm or Marketplace publication, release uploads, signing/notarization, and replacement/removal of legacy artifacts require separate approval and the [release checklist](docs/releasing.md).

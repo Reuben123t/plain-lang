@@ -1,0 +1,164 @@
+name: Desktop candidates
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'desktop/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'assets/**'
+      - 'examples/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'LICENSE'
+      - '.github/workflows/desktop.yml'
+      - '.gitignore'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'docs/desktop.md'
+  pull_request:
+    paths:
+      - 'desktop/**'
+      - 'src/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - 'assets/**'
+      - 'examples/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'tsconfig*.json'
+      - 'LICENSE'
+      - '.github/workflows/desktop.yml'
+      - '.gitignore'
+      - 'README.md'
+      - 'CONTRIBUTING.md'
+      - 'CHANGELOG.md'
+      - 'docs/desktop.md'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    name: ${{ matrix.label }} / Node 22
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: Linux x64
+            os: ubuntu-24.04
+            platform: linux
+            arch: x64
+            package-args: --linux AppImage deb --x64
+          - label: Windows x64
+            os: windows-2022
+            platform: win32
+            arch: x64
+            package-args: --win nsis portable --x64
+          - label: macOS Intel x64
+            os: macos-15-intel
+            platform: darwin
+            arch: x64
+            package-args: --mac dmg zip --x64
+          - label: macOS Apple Silicon arm64
+            os: macos-15
+            platform: darwin
+            arch: arm64
+            package-args: --mac dmg zip --arm64
+    env:
+      CI: 'true'
+      # Unsigned validation candidates only. No signing/notarization secrets.
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      # Official major-version references; see CONTRIBUTING.md for pinning policy.
+      - name: Check out source
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Set up Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+
+      - name: Verify native host architecture
+        env:
+          EXPECTED_PLATFORM: ${{ matrix.platform }}
+          EXPECTED_ARCH: ${{ matrix.arch }}
+        run: node -e "const assert = require('node:assert/strict'); assert.equal(process.platform, process.env.EXPECTED_PLATFORM); assert.equal(process.arch, process.env.EXPECTED_ARCH); console.log(process.platform + '/' + process.arch);"
+
+      - name: Install locked root dependencies
+        run: npm ci
+
+      - name: Install locked desktop dependencies
+        run: npm ci --prefix desktop
+
+      - name: Install Linux GUI system libraries
+        if: runner.os == 'Linux'
+        working-directory: desktop
+        run: npx --no-install playwright install-deps chromium
+
+      - name: Check core types
+        run: npm run typecheck
+
+      - name: Check desktop types
+        run: npm --prefix desktop run typecheck
+
+      - name: Run desktop service tests
+        run: npm --prefix desktop run test
+
+      - name: Build desktop from source
+        run: npm --prefix desktop run build
+
+      - name: Run Electron end-to-end tests on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm --prefix desktop run test:e2e
+
+      - name: Run Electron end-to-end tests on Windows and macOS
+        if: runner.os != 'Linux'
+        run: npm --prefix desktop run test:e2e
+
+      - name: Smoke-test native startup on Linux
+        if: runner.os == 'Linux'
+        run: xvfb-run -a npm --prefix desktop run test:smoke
+
+      - name: Smoke-test native startup on Windows and macOS
+        if: runner.os != 'Linux'
+        run: npm --prefix desktop run test:smoke
+
+      - name: Package native unsigned candidates without publishing
+        run: npm --prefix desktop run package -- ${{ matrix.package-args }}
+
+      - name: Generate candidate SHA-256 checksums
+        run: npm --prefix desktop run checksums
+
+      # Actions build artifacts are not GitHub Releases. No uploads on PR/push.
+      - name: Upload manual-run candidate build artifacts
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Plain-Studio-${{ matrix.platform }}-${{ matrix.arch }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.AppImage
+            desktop/release/*.deb
+            desktop/release/*.dmg
+            desktop/release/*.zip
+            desktop/release/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 7
+          compression-level: 0
