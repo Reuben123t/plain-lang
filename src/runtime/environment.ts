@@ -1,12 +1,15 @@
-import { PlainValue } from "./values";
+import type { PlainValue } from "./values";
 import { PlainError, SourceLocation } from "../errors/plain-error";
 
 export class Environment {
   private variables = new Map<string, PlainValue>();
   private parent?: Environment;
+  private assignmentBoundary: boolean;
 
-  constructor(parent?: Environment) {
+  constructor(parent?: Environment, assignmentBoundary = false) {
     this.parent = parent;
+    // Program/module scopes can read builtins without assigning into their host.
+    this.assignmentBoundary = assignmentBoundary;
   }
 
   public define(name: string, value: PlainValue): void {
@@ -16,18 +19,14 @@ export class Environment {
 
   public assign(name: string, value: PlainValue): void {
     const key = name.toLowerCase();
-    if (this.variables.has(key)) {
-      this.variables.set(key, value);
-      return;
-    }
+    const owner = this.findAssignmentOwner(key);
+    (owner || this).variables.set(key, value);
+  }
 
-    if (this.parent) {
-      this.parent.assign(name, value);
-      return;
-    }
-
-    // Default to defining in current scope if not found in ancestors
-    this.variables.set(key, value);
+  private findAssignmentOwner(key: string): Environment | undefined {
+    if (this.variables.has(key)) return this;
+    if (this.assignmentBoundary) return undefined;
+    return this.parent?.findAssignmentOwner(key);
   }
 
   public lookup(name: string, location?: SourceLocation, sourceCode?: string): PlainValue {
@@ -36,11 +35,11 @@ export class Environment {
       return this.variables.get(key)!;
     }
 
-    if (this.parent) {
+    if (this.parent?.has(name)) {
       return this.parent.lookup(name, location, sourceCode);
     }
 
-    // Not found anywhere
+    // Not found anywhere; include this scope in spelling suggestions.
     const available = this.getAllVariableNames();
     const suggestion = this.findClosestMatch(name, available);
 
@@ -62,6 +61,10 @@ export class Environment {
     const key = name.toLowerCase();
     if (this.variables.has(key)) return true;
     return this.parent ? this.parent.has(name) : false;
+  }
+
+  public getOwnVariableNames(): string[] {
+    return Array.from(this.variables.keys());
   }
 
   public getAllVariableNames(): string[] {

@@ -146,6 +146,45 @@ exports.listBuiltins = {
         }
         return res;
     },
+    enumerate: (val) => ensureList(val, "enumerate").map((item, index) => [index + 1, item]),
+    rotate: (val, placesVal = 1) => {
+        const list = [...ensureList(val, "rotate")];
+        if (!list.length)
+            return list;
+        const places = Math.trunc(math_1.mathBuiltins.to_number(placesVal));
+        const offset = ((places % list.length) + list.length) % list.length;
+        return [...list.slice(offset), ...list.slice(0, offset)];
+    },
+    adjacent_pairs: (val) => {
+        const list = ensureList(val, "adjacent_pairs");
+        return list.slice(0, -1).map((item, index) => [item, list[index + 1]]);
+    },
+    interleave: (leftVal, rightVal) => {
+        const left = ensureList(leftVal, "interleave");
+        const right = ensureList(rightVal, "interleave");
+        const result = [];
+        for (let index = 0; index < Math.max(left.length, right.length); index++) {
+            if (index < left.length)
+                result.push(left[index]);
+            if (index < right.length)
+                result.push(right[index]);
+        }
+        return result;
+    },
+    group_by: (val, keyVal) => {
+        const list = ensureList(val, "group_by");
+        const keyName = (0, values_1.plainToString)(keyVal);
+        const groups = (0, values_1.createPlainObject)();
+        for (const item of list) {
+            const key = (0, values_1.isPlainObject)(item) ? (0, values_1.plainToString)(item[keyName] ?? null) : "nothing";
+            const group = groups[key];
+            if (Array.isArray(group))
+                group.push(item);
+            else
+                (0, values_1.setOwnProperty)(groups, key, [item]);
+        }
+        return groups;
+    },
     intersection: (listAVal, listBVal) => {
         const a = ensureList(listAVal, "intersection");
         const b = ensureList(listBVal, "intersection");
@@ -218,14 +257,24 @@ exports.listBuiltins = {
     },
     fill_list: (val, countVal) => {
         const count = Math.max(0, Math.round(math_1.mathBuiltins.to_number(countVal)));
+        if (!Number.isFinite(count) || count > 1000000) {
+            throw new plain_error_1.PlainError("List size must be a finite number no larger than 1000000.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
         return new Array(count).fill(val);
     },
     range_list: (startVal, endVal, stepVal) => {
         const start = math_1.mathBuiltins.to_number(startVal);
         const end = math_1.mathBuiltins.to_number(endVal);
-        const step = stepVal ? math_1.mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
+        const step = stepVal !== undefined ? math_1.mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
         if (step === 0)
             throw new plain_error_1.PlainError("Step cannot be zero in range.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+        if (![start, end, step].every(Number.isFinite)) {
+            throw new plain_error_1.PlainError("Range bounds and step must be finite numbers.", { line: 1, column: 1 }, { kind: "TypeError" });
+        }
+        const length = Math.floor((end - start) / step) + 1;
+        if (length > 1000000 || (start !== end && start + step === start)) {
+            throw new plain_error_1.PlainError("Range is too large; use a loop or a larger step.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
         const res = [];
         if (step > 0) {
             for (let i = start; i <= end; i += step)

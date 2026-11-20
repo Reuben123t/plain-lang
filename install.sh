@@ -1,62 +1,31 @@
 #!/usr/bin/env bash
-# PLAIN Programming Language - Automatic Installer for Linux / macOS
-# Run with: curl -fsSL https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.sh | bash
+# Review this script before running it. It never replaces an existing installation.
+set -euo pipefail
 
-set -e
-
-echo ""
-echo "=========================================================="
-echo "        PLAIN Programming Language Installer              "
-echo "  The English-like language that's simple and powerful    "
-echo "=========================================================="
-echo ""
-
-# 1. Check for Node.js
-echo "[1/4] Checking for Node.js runtime..."
-if ! command -v node >/dev/null 2>&1; then
-    echo "Node.js is not found on your system."
-    echo "Please install Node.js from https://nodejs.org or via your package manager:"
-    echo "  Ubuntu/Debian: sudo apt install nodejs npm"
-    echo "  macOS:         brew install node"
+INSTALL_DIR="${PLAIN_INSTALL_DIR:-$HOME/.plain}"
+printf '\nPLAIN source installer\n\n'
+for tool in node npm git; do
+    if ! command -v "$tool" >/dev/null 2>&1; then
+        printf 'Required tool is missing: %s. Install Node.js 22+ and Git first.\n' "$tool" >&2
+        exit 1
+    fi
+done
+if ! node -e 'process.exit(Number(process.versions.node.split(".")[0]) >= 22 ? 0 : 1)'; then
+    printf 'PLAIN requires Node.js 22 or newer.\n' >&2
     exit 1
 fi
-echo "  Node.js found ($(node --version))"
-
-# 2. Destination directory
-INSTALL_DIR="$HOME/.plain"
-echo "[2/4] Downloading PLAIN into $INSTALL_DIR..."
-
-if [ -d "$INSTALL_DIR" ]; then
-    echo "  Existing installation detected. Updating..."
-    rm -rf "$INSTALL_DIR"
+if [ -e "$INSTALL_DIR" ] || [ -L "$INSTALL_DIR" ]; then
+    printf 'Destination already exists: %s\nNothing was changed. Choose a new PLAIN_INSTALL_DIR or update your checkout manually.\n' "$INSTALL_DIR" >&2
+    exit 1
 fi
 
-if command -v git >/dev/null 2>&1; then
-    git clone https://github.com/Reuben123t/plain-lang.git "$INSTALL_DIR" --depth 1
-else
-    mkdir -p "$INSTALL_DIR"
-    curl -fsSL https://github.com/Reuben123t/plain-lang/archive/refs/heads/main.tar.gz | tar -xz -C "$INSTALL_DIR" --strip-components=1
-fi
+printf 'Cloning into a new directory: %s\n' "$INSTALL_DIR"
+git clone --depth 1 https://github.com/Reuben123t/plain-lang.git "$INSTALL_DIR"
+printf 'Installing locked development dependencies without lifecycle hooks...\n'
+npm --prefix "$INSTALL_DIR" ci --ignore-scripts --no-audit --no-fund
+npm --prefix "$INSTALL_DIR" run build
+node "$INSTALL_DIR/bin/plain.js" --version
 
-# 3. Build PLAIN
-echo "[3/4] Building PLAIN language package..."
-cd "$INSTALL_DIR"
-npm install --silent
-npm run build
-npm link >/dev/null 2>&1 || sudo npm link
-
-# 4. Verify installation
-echo "[4/4] Verifying installation..."
-
-echo ""
-echo "=========================================================="
-echo "  PLAIN was installed successfully!                       "
-echo "=========================================================="
-echo ""
-echo "Quick commands to try right now:"
-echo "  plain repl            # Start interactive English shell"
-echo "  plain playground      # Open visual code editor in browser"
-echo "  plain examples        # View and run built-in examples"
-echo "  plain <file.plain>    # Run any .plain program"
-echo ""
-
+printf '\nPLAIN is built. Run it with:\n  node "%s/bin/plain.js" repl\n' "$INSTALL_DIR"
+printf 'Optional global command setup (review permissions first):\n  npm --prefix "%s" link --ignore-scripts\n' "$INSTALL_DIR"
+printf 'No existing files, shell profiles, global packages, or system settings were changed.\n'

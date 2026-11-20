@@ -69,3 +69,4 @@ describe("PLAIN VS Code Extension Package (.vsix)", () => {
     assert.strictEqual(fs.existsSync(userExtDir), true, "Extension must be installed in .vscode/extensions");
   });
 });
+

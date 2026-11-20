@@ -12,7 +12,7 @@ Official VS Code package for the **PLAIN Programming Language** (`.plain`).
 - Python-style function definitions (`def ...:`) and classic PLAIN block syntax (`function ... end`).
 
 ### 💡 IntelliSense Autocomplete
-- Context-aware code completion for 1,327+ standard library functions and keywords.
+- Context-aware code completion for 500+ documented standard-library functions and keywords.
 - Dynamic scanning of local variables and user-defined functions in the open document.
 
 ### 📖 Hover Documentation

@@ -409,7 +409,7 @@ $startShortcut.Save()
     console.log("");
     console.log("╔══════════════════════════════════════════════════════════════╗");
     console.log("║         🛠️  PLAIN LANGUAGE APPLICATION SETUP WIZARD          ║");
-    console.log("║           Super Simple • 1,235 Functions • Pythonic          ║");
+    console.log("║       PLAIN • 500+ Standard-Library Functions • Pythonic     ║");
     console.log("║                     Author: Reuben                           ║");
     console.log("╚══════════════════════════════════════════════════════════════╝");
     console.log("");

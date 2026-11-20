@@ -2,148 +2,180 @@
   "PLAIN Starter Template": {
     "prefix": ["starter", "plain", "template"],
     "body": [
-      "# PLAIN Program",
-      "Set ABC = Main",
-      "",
-      "x = ${1:100}",
-      "y = ${2:25}",
-      "say \"Result: \" + str((x + y) * 2)",
-      "say \"${3:Ready for AI, Web Servers & Cybersecurity!}\"",
+      "# PLAIN program; Set assigns a value (no entry declaration is required).",
+      "Set greeting = \"${1:Hello from PLAIN!}\"",
+      "say greeting",
       "$0"
     ],
-    "description": "Standard PLAIN starter template with Set ABC = Main"
+    "description": "Small runnable PLAIN program"
   },
-  "Set ABC Statement": {
-    "prefix": ["setabc", "main"],
-    "body": [
-      "Set ABC = Main",
-      "$0"
-    ],
-    "description": "Initialize PLAIN main execution block"
+  "Set Variable": {
+    "prefix": ["set"],
+    "body": ["set ${1:total} to ${2:0}$0"],
+    "description": "Assign a value using PLAIN's set-to syntax"
   },
   "Say Statement": {
-    "prefix": ["say", "print"],
-    "body": [
-      "say \"$1\"$0"
-    ],
-    "description": "Print output to screen or terminal"
+    "prefix": ["say"],
+    "body": ["say \"${1:Hello!}\"$0"],
+    "description": "Print text"
   },
-  "Function Definition (Python Style)": {
+  "Function Definition (Colon Style)": {
     "prefix": ["def"],
     "body": [
-      "def ${1:name}(${2:args}):",
-      "\t${0:return None}"
+      "def ${1:identity}(${2:value}):",
+      "\treturn ${2:value}",
+      "end",
+      "$0"
     ],
-    "description": "Define a Python-style function in PLAIN"
+    "description": "Define a function; colon-style blocks still require end"
   },
   "Function Definition (PLAIN Style)": {
     "prefix": ["function", "fn"],
     "body": [
-      "function ${1:name}(${2:args})",
-      "\t${0}",
-      "end"
+      "function ${1:identity}(${2:value})",
+      "\tgive back ${2:value}",
+      "end",
+      "$0"
     ],
-    "description": "Define a PLAIN block function with end"
+    "description": "Define a function with an explicit end"
+  },
+  "Natural Function Definition": {
+    "prefix": ["to"],
+    "body": [
+      "to ${1:greet} ${2:person}",
+      "\tgive back \"Hello, \" + ${2:person}",
+      "end",
+      "$0"
+    ],
+    "description": "Define a natural-language function"
   },
   "If Statement": {
     "prefix": ["if", "ifelse"],
     "body": [
-      "if ${1:condition}",
-      "\t${2:# then block}",
+      "if ${1:true} then",
+      "\t${2:say \"Yes\"}",
       "otherwise",
-      "\t${0:# else block}",
-      "end"
+      "\t${3:say \"No\"}",
+      "end",
+      "$0"
     ],
     "description": "Conditional if-otherwise-end block"
   },
   "For Each Loop": {
     "prefix": ["for", "foreach"],
     "body": [
-      "for each ${1:item} in ${2:list}",
-      "\t${0:say str(item)}",
-      "end"
+      "for each ${1:value} in ${2:[1, 2, 3]}",
+      "\tsay ${1:value}",
+      "end",
+      "$0"
     ],
-    "description": "Iterate over a collection or list"
+    "description": "Iterate over a list using an ordinary identifier (item is a keyword)"
   },
   "Repeat Loop": {
     "prefix": ["repeat"],
     "body": [
-      "repeat ${1:5} times",
-      "\t${0:say \"Looping...\"}",
-      "end"
+      "repeat ${1:3} times",
+      "\t${2:say \"Looping\"}",
+      "end",
+      "$0"
     ],
-    "description": "Repeat a block N times"
+    "description": "Repeat a block a fixed number of times"
   },
   "While Loop": {
     "prefix": ["while"],
     "body": [
-      "while ${1:condition}:",
-      "\t${0:# loop body}"
+      "${1:counter} = 0",
+      "while ${1:counter} < ${2:3}:",
+      "\tsay ${1:counter}",
+      "\t${1:counter} += 1",
+      "end",
+      "$0"
     ],
-    "description": "While loop condition"
+    "description": "Runnable finite while loop with an explicit end"
   },
   "Cybersecurity Port Scanner": {
     "prefix": ["cyber_portscan", "portscan"],
     "body": [
+      "# Runs a TCP scan only when you explicitly execute this program.",
       "import cyber",
-      "ports = [21, 22, 80, 443, 8080]",
-      "open_ports = cyber.port_scan(\"${1:127.0.0.1}\", ports)",
-      "say \"Open Ports: \" + str(open_ports)$0"
+      "ports = [${2:80, 443}]",
+      "scan_report = cyber.port_scan(\"${1:127.0.0.1}\", ports)",
+      "say scan_report.open_ports",
+      "$0"
     ],
-    "description": "Scan TCP ports on target host"
+    "description": "Explicit TCP scan using port_scan's report object; not run by the extension"
   },
   "Cybersecurity Security Headers Audit": {
     "prefix": ["cyber_audit", "audit"],
     "body": [
+      "# Sends an HTTP request only when you explicitly execute this program.",
       "import cyber",
-      "audit = cyber.audit_security_headers(\"${1:https://google.com}\")",
-      "say \"Score: \" + str(audit.score) + \"/100 (Grade: \" + audit.grade + \")\"$0"
+      "audit_report = cyber.audit_security_headers(\"${1:http://127.0.0.1:8080}\")",
+      "say audit_report.security_score",
+      "say audit_report.grade",
+      "$0"
     ],
-    "description": "Audit HTTP security headers of target website"
+    "description": "Explicit HTTP header audit using the security_score and grade fields"
   },
   "Cybersecurity CVE Threat Intel": {
     "prefix": ["cyber_cve", "cve"],
     "body": [
       "import cyber",
-      "cve = cyber.cve_lookup(\"${1:CVE-2021-44228}\")",
-      "say \"Threat ID: \" + cve.id + \" -> Severity: \" + cve.severity$0"
+      "cve_report = cyber.cve_lookup(\"${1:CVE-2021-44228}\")",
+      "say cve_report.cve_id",
+      "say cve_report.severity",
+      "$0"
     ],
-    "description": "Offline lookup for known CVE vulnerabilities"
+    "description": "Offline lookup of a known CVE"
   },
   "AI Neural Network Training": {
-    "prefix": ["ai_neural_network", "neuralnet", "ai"],
+    "prefix": ["ai_nn", "ai_neural_network", "neuralnet"],
     "body": [
-      "nn = neural_network([2, 4, 1])",
-      "inputs = [[0, 0], [0, 1], [1, 0], [1, 1]]",
-      "targets = [[0], [1], [1], [0]]",
-      "train_ai(nn, inputs, targets, 200)",
-      "output = predict_ai(nn, [1, 0])",
-      "say \"Prediction: \" + str(output)$0"
+      "nn = create_neural_network([2, 4, 1])",
+      "dataset = [{input: [0, 0], output: [0]}, {input: [0, 1], output: [1]}, {input: [1, 0], output: [1]}, {input: [1, 1], output: [0]}]",
+      "training = train_neural_network(nn, dataset, ${1:20}, 0.1)",
+      "prediction = predict_neural_network(nn, [1, 0])",
+      "say prediction",
+      "$0"
     ],
-    "description": "Train a multi-layer perceptron neural network"
+    "description": "Train and predict with the implemented neural-network API and dataset shape"
+  },
+  "Web Server": {
+    "prefix": ["webserver", "server", "http"],
+    "body": [
+      "# Opens a listening socket when explicitly executed. Stop with Ctrl+C.",
+      "server_status = start_server(${1:8080}, \"${2:Hello from PLAIN!}\")",
+      "say server_status",
+      "$0"
+    ],
+    "description": "Start an HTTP server with a static response using start_server"
   },
   "Web Server Deployment": {
-    "prefix": ["web_server", "server", "http"],
+    "prefix": ["deploy", "plain_deploy"],
     "body": [
-      "server = web_server(${1:8080})",
-      "say \"PLAIN Web Server running on port ${1:8080}...\"$0"
+      "# Start a local HTTP service when explicitly run.",
+      "server_status = start_server(${1:8080}, \"${2:Hello from PLAIN!}\")",
+      "say server_status",
+      "$0"
     ],
-    "description": "Launch a live HTTP web server"
+    "description": "Start a local HTTP server with a simple response"
   },
   "Read Text File": {
     "prefix": ["read_file", "readfile"],
     "body": [
       "content = read_file(\"${1:data.txt}\")",
-      "say content$0"
+      "say content",
+      "$0"
     ],
-    "description": "Read contents of a text file"
+    "description": "Read an existing UTF-8 text file inside the script's project directory"
   },
   "Write Text File": {
     "prefix": ["write_file", "writefile"],
     "body": [
       "write_file(\"${1:output.txt}\", \"${2:Hello from PLAIN!}\")",
-      "say \"File saved!\"$0"
+      "$0"
     ],
-    "description": "Write text data to a file"
+    "description": "Write a UTF-8 text file inside the script's project directory"
   }
 }
+

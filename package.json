@@ -1,51 +1,81 @@
 {
   "name": "plain-lang",
   "version": "1.2.0",
-  "description": "PLAIN: Simple, Python-like, super easy programming language for AI training, network web server deployment, data science, and automation with 1000+ functions.",
+  "description": "PLAIN: an English-friendly programming language with Python-like syntax, a local CLI, editor tooling, and a browser playground.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
     "plain": "./bin/plain.js"
   },
   "files": [
-    "dist",
-    "bin",
-    "docs",
-    "examples",
-    "editors",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
+    "!dist/bundle.js",
+    "bin/plain.js",
+    "docs/*.md",
+    "examples/*.plain",
+    "examples/README.md",
+    "website/index.html",
+    "website/assets/*.js",
+    "website/assets/*.css",
+    "website/assets/*.svg",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "scripts": {
-    "build": "tsc",
+    "build": "npm run build:core && npm run build:web && npm run build:vscode",
+    "build:core": "tsc",
+    "build:web": "node scripts/build-web.cjs",
+    "build:vscode": "node scripts/build-vscode.cjs",
+    "build:bundle": "node scripts/build-bundle.cjs",
     "watch": "tsc -w",
-    "test": "node --test --import tsx tests/**/*.test.ts",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p editors/vscode/tsconfig.json",
+    "test": "node scripts/run-tests.cjs",
+    "test:examples": "node --import tsx scripts/verify-examples.ts",
+    "test:package": "node scripts/check-package.cjs",
+    "test:catalog": "node scripts/generate-catalog.cjs --check",
+    "generate:catalog": "node scripts/generate-catalog.cjs",
+    "package:vscode": "node scripts/package-vscode.cjs",
+    "preview": "node scripts/preview.cjs",
+    "prepack": "npm run build",
     "plain": "tsx src/cli/cli.ts"
   },
   "keywords": [
     "plain",
-    "pliton",
     "programming-language",
     "beginner-friendly",
     "interpreter",
-    "dsl",
-    "simple",
     "english",
-    "education"
+    "education",
+    "playground"
   ],
   "repository": {
     "type": "git",
     "url": "https://github.com/Reuben123t/plain-lang.git"
   },
+  "homepage": "https://reuben123t.github.io/plain-lang/",
+  "bugs": {
+    "url": "https://github.com/Reuben123t/plain-lang/issues"
+  },
   "author": "Reuben",
   "license": "MIT",
   "devDependencies": {
-    "@types/node": "^22.0.0",
-    "@types/vscode": "^1.146.0",
-    "tsx": "^4.19.0",
-    "typescript": "^5.0.0"
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.85.0",
+    "@vscode/vsce": "4.1.1",
+    "esbuild": "0.28.2",
+    "tsx": "4.23.15",
+    "typescript": "5.9.3",
+    "vscode-oniguruma": "2.0.1",
+    "vscode-textmate": "9.3.2"
+  },
+  "overrides": {
+    "@vscode/vsce": {
+      "minimatch": "11.0.9"
+    }
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.0.0"
   }
 }

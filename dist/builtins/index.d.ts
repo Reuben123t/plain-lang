@@ -1,11 +1,6 @@
 import { Environment } from "../runtime/environment";
-import { PlainFunction, PlainValue } from "../runtime/values";
-export declare function createStandardEnvironment(options?: {
-    baseDir?: string;
-    onSay?: (text: string) => void;
-    onShow?: (text: string) => void;
-    onAsk?: (prompt: string) => Promise<string>;
-    onClear?: () => void;
-    invokeFunction?: (fn: PlainFunction, args: PlainValue[]) => Promise<PlainValue>;
-}): Environment;
+import { PlainObject } from "../runtime/values";
+import { BuiltinEnvironmentOptions } from "./registry";
+export declare function createStandardEnvironment(options?: BuiltinEnvironmentOptions): Environment;
+export declare function getBuiltinModule(name: string, environment: Environment): PlainObject | undefined;
 //# sourceMappingURL=index.d.ts.map

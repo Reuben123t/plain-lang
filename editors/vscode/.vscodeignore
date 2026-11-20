@@ -1,5 +1,9 @@
 .vscode/**
 .vscode-test/**
 src/**
+out/**
+node_modules/**
+*.vsix
 tsconfig.json
 **/*.map
+

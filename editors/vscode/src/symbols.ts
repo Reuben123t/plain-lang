@@ -59,3 +59,4 @@ export class PlainDocumentSymbolProvider implements vscode.DocumentSymbolProvide
     return symbols;
   }
 }
+

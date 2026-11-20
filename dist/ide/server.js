@@ -54,7 +54,7 @@ function startPlainIde(port = 4200, initialFilePath) {
     const examplesDir = examplesDirCandidates.find((d) => fs.existsSync(d)) || "";
     let initialCode = `# ==========================================================
 # Welcome to PLAIN IDE (Python IDLE Equivalent)
-# Author: Reuben • 1,235 Functions Built-In
+# Author: Reuben • 500+ Standard-Library Functions
 # Press [F5] or click 'Run' to execute code!
 # ==========================================================
 
@@ -95,7 +95,7 @@ say "Iris sample count: " + dataset.sample_count
             res.end();
             return;
         }
-        // 1. API: List all 1235 functions
+        // 1. API: List all registered function names and aliases
         if (pathname === "/api/functions") {
             res.writeHead(200, { "Content-Type": "application/json" });
             res.end(JSON.stringify({ count: allFunctions.length, functions: allFunctions }));
@@ -558,7 +558,7 @@ function getIdeHtml(initialCode, initialPath) {
     </div>
     <div class="toolbar-right">
       <button class="btn" id="doctorBtn">🩺 Diagnostics</button>
-      <button class="btn" id="functionsBtn">📚 1,235 Functions</button>
+      <button class="btn" id="functionsBtn">📚 500+ Functions</button>
       <button class="btn" id="clearBtn">Clear Shell</button>
     </div>
   </div>
@@ -585,7 +585,7 @@ function getIdeHtml(initialCode, initialPath) {
       </div>
       <div class="console-output" id="consoleOutput">PLAIN Interactive Shell (v1.1.0)
 Type code in the editor and press Run (F5) or type commands below.
-Author: Reuben • All 1,235 Functions Loaded.
+Author: Reuben • Standard library ready.
 ----------------------------------------------------------------------
 </div>
       <div class="console-input-row">
@@ -599,7 +599,7 @@ Author: Reuben • All 1,235 Functions Loaded.
   <div class="statusbar">
     <div class="status-item">
       <span class="pulse-dot"></span>
-      <span id="statusMessage">PLAIN Engine Ready (1,235 Built-in Functions)</span>
+      <span id="statusMessage">PLAIN Engine Ready (500+ Standard-Library Functions)</span>
     </div>
     <div class="status-item">
       <span>UTF-8 • PLAIN Language • Author: Reuben</span>
@@ -610,7 +610,7 @@ Author: Reuben • All 1,235 Functions Loaded.
   <div class="modal" id="fnModal">
     <div class="modal-content">
       <div class="modal-header">
-        <span>PLAIN Standard Library Reference (1,235 Functions)</span>
+      <span>PLAIN Standard Library Reference (500+ Functions)</span>
         <button class="btn" id="closeFnModal">Close</button>
       </div>
       <div class="modal-body">

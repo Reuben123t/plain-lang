@@ -10,6 +10,7 @@ export type PlainErrorKind =
   | "LexerError"
   | "ParserError"
   | "RuntimeError"
+  | "ImportError"
   | "TypeError"
   | "NameError";
 

@@ -4,45 +4,24 @@
   "scopeName": "source.plain",
   "patterns": [
     { "include": "#comments" },
-    { "include": "#set_abc_statement" },
     { "include": "#strings" },
+    { "include": "#function_defs" },
+    { "include": "#set_statement" },
+    { "include": "#set_abc_statement" },
     { "include": "#numbers" },
-    { "include": "#booleans" },
+    { "include": "#constants" },
+    { "include": "#operators" },
+    { "include": "#keywords" },
+    { "include": "#function_calls" },
     { "include": "#cyber_functions" },
     { "include": "#ai_functions" },
-    { "include": "#server_functions" },
-    { "include": "#function_defs" },
-    { "include": "#keywords" },
-    { "include": "#operators" },
-    { "include": "#python_builtins" },
-    { "include": "#stdlib_functions" },
-    { "include": "#function_calls" },
+    { "include": "#punctuation" },
     { "include": "#identifiers" }
   ],
   "repository": {
     "comments": {
       "patterns": [
-        {
-          "name": "comment.line.number-sign.plain",
-          "match": "#.*$"
-        },
-        {
-          "name": "comment.line.double-slash.plain",
-          "match": "//.*$"
-        }
-      ]
-    },
-    "set_abc_statement": {
-      "patterns": [
-        {
-          "match": "\\b(Set|set)\\s+([a-zA-Z_][a-zA-Z0-9_]*)\\s*(=)\\s*([a-zA-Z_][a-zA-Z0-9_]*)\\b",
-          "captures": {
-            "1": { "name": "keyword.other.set.plain" },
-            "2": { "name": "variable.other.readwrite.plain" },
-            "3": { "name": "keyword.operator.assignment.plain" },
-            "4": { "name": "entity.name.type.plain" }
-          }
-        }
+        { "name": "comment.line.number-sign.plain", "match": "#.*$" }
       ]
     },
     "strings": {
@@ -50,94 +29,86 @@
         {
           "name": "string.quoted.double.plain",
           "begin": "\"",
-          "end": "\"",
+          "end": "\"|$",
           "patterns": [
-            {
-              "name": "constant.character.escape.plain",
-              "match": "\\\\."
-            }
+            { "name": "constant.character.escape.plain", "match": "\\\\." }
           ]
         },
         {
           "name": "string.quoted.single.plain",
           "begin": "'",
-          "end": "'",
+          "end": "'|$",
           "patterns": [
-            {
-              "name": "constant.character.escape.plain",
-              "match": "\\\\."
-            }
+            { "name": "constant.character.escape.plain", "match": "\\\\." }
           ]
-        }
-      ]
-    },
-    "numbers": {
-      "patterns": [
-        {
-          "name": "constant.numeric.hex.plain",
-          "match": "\\b0[xX][0-9a-fA-F]+\\b"
-        },
-        {
-          "name": "constant.numeric.binary.plain",
-          "match": "\\b0[bB][01]+\\b"
-        },
-        {
-          "name": "constant.numeric.float.plain",
-          "match": "\\b\\d+\\.\\d+([eE][+-]?\\d+)?\\b"
-        },
-        {
-          "name": "constant.numeric.decimal.plain",
-          "match": "\\b\\d+\\b"
-        }
-      ]
-    },
-    "booleans": {
-      "patterns": [
-        {
-          "name": "constant.language.boolean.plain",
-          "match": "\\b(true|false)\\b"
-        },
-        {
-          "name": "constant.language.null.plain",
-          "match": "\\b(nothing|null|none)\\b"
-        }
-      ]
-    },
-    "cyber_functions": {
-      "patterns": [
-        {
-          "match": "\\b(cyber)\\.(port_scan|audit_security_headers|cve_lookup|common_ports|detect_sqli|detect_xss|sanitize_html|shannon_entropy|file_signature|ipv4_subnet|check_password|rate_limiter|waf_rules|ip_lookup|dns_lookup|hash_data|generate_cert|encrypt_aes|decrypt_aes|sign_rsa|verify_rsa)\\b",
-          "captures": {
-            "1": { "name": "support.class.cyber.plain" },
-            "2": { "name": "support.function.cyber.plain" }
-          }
-        }
-      ]
-    },
-    "ai_functions": {
-      "patterns": [
-        {
-          "name": "support.function.ai.plain",
-          "match": "\\b(neural_network|train_ai|predict_ai|load_dataset|evaluate_model|matrix_multiply|matrix_dot|matrix_transpose|matrix_inverse|dense_layer|activation_relu|activation_sigmoid|activation_softmax|backward_pass|loss_cross_entropy|loss_mse)\\b"
-        }
-      ]
-    },
-    "server_functions": {
-      "patterns": [
-        {
-          "name": "support.function.server.plain",
-          "match": "\\b(web_server|serve_static|handle_route|listen|close_server|http_get|http_post|fetch|send_json|render_html|get_client_ip)\\b"
         }
       ]
     },
     "function_defs": {
       "patterns": [
         {
-          "match": "\\b(def|function|to)\\s+([a-zA-Z_][a-zA-Z0-9_]*)",
+          "match": "^\\s*(?i:(def|fn|function|to))\\s+([A-Za-z_][A-Za-z0-9_]*)",
           "captures": {
-            "1": { "name": "keyword.control.def.plain" },
+            "1": { "name": "keyword.control.function.plain" },
             "2": { "name": "entity.name.function.plain" }
           }
+        }
+      ]
+    },
+    "set_statement": {
+      "patterns": [
+        {
+          "match": "\\b(?i:(set))\\s+([A-Za-z_][A-Za-z0-9_]*)",
+          "captures": {
+            "1": { "name": "keyword.other.set.plain" },
+            "2": { "name": "variable.other.readwrite.plain" }
+          }
+        }
+      ]
+    },
+    "set_abc_statement": {
+      "patterns": [
+        { "name": "meta.assignment.set-abc.plain", "match": "^\\s*(?i:set)\\s+([A-Za-z_][A-Za-z0-9_]*)\\s*(?:=|\\bto\\b)\\s*([A-Za-z_][A-Za-z0-9_]*)", "captures": { "1": { "name": "variable.other.readwrite.plain" }, "2": { "name": "string.unquoted.plain" } } }
+      ]
+    },
+    "cyber_functions": {
+      "patterns": [
+        { "name": "support.function.cyber.plain", "match": "\\b(?i:port_scan|is_port_open|banner_grab|audit_security_headers|detect_sql_injection|detect_xss|check_password_strength|subnet_calculator|dns_resolve|cve_lookup)\\b" }
+      ]
+    },
+    "ai_functions": {
+      "patterns": [
+        { "name": "support.function.ai.plain", "match": "\\b(?i:create_neural_network|train_neural_network|predict_neural_network|knn_classify|kmeans_cluster|train_logistic_regression|softmax|sigmoid|relu)\\b" }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        { "name": "constant.numeric.plain", "match": "\\b[0-9]+(?:\\.[0-9]+)?\\b" }
+      ]
+    },
+    "constants": {
+      "patterns": [
+        { "name": "constant.language.boolean.plain", "match": "\\b(?i:true|false)\\b" },
+        { "name": "constant.language.null.plain", "match": "\\b(?i:nothing|null)\\b" }
+      ]
+    },
+    "operators": {
+      "patterns": [
+        {
+          "name": "keyword.operator.comparison.plain",
+          "match": "==|!=|<=|>=|<|>|\\b(?i:is\\s+not\\s+equal\\s+to|is\\s+equal\\s+to|is\\s+greater\\s+than|is\\s+less\\s+than|is\\s+at\\s+least|is\\s+at\\s+most|is\\s+not|is|equals)\\b"
+        },
+        {
+          "name": "keyword.operator.assignment.plain",
+          "match": "\\*\\*=|//=|\\+=|-=|\\*=|/=|%=|=(?!=|>)"
+        },
+        {
+          "name": "keyword.operator.arithmetic.plain",
+          "match": "\\*\\*|//|\\+|-|\\*|/|%|\\b(?i:plus|minus|times|divided\\s+by|remainder\\s+of)\\b"
+        },
+        {
+          "name": "keyword.operator.logical.plain",
+          "match": "\\b(?i:and|or|not)\\b"
         }
       ]
     },
@@ -145,66 +116,39 @@
       "patterns": [
         {
           "name": "keyword.control.plain",
-          "match": "\\b(if|then|otherwise|else|end|repeat|while|times|for\\s+each|for|each|in|to|give\\s+back|give|back|return|def|function|class|import|as|wait|break|continue|pass)\\b"
+          "match": "\\b(?i:if|then|otherwise|else|end|repeat|while|for|each|in|to|give|back|return|def|fn|function|import|from|as|break|continue)\\b"
         },
         {
           "name": "keyword.other.plain",
-          "match": "\\b(Set|set|let|say|show|ask|and\\s+save\\s+as|save\\s+as|save|as|clear\\s+screen|clear|screen|item|of|add|remove|from)\\b"
-        }
-      ]
-    },
-    "operators": {
-      "patterns": [
-        {
-          "name": "keyword.operator.assignment.plain",
-          "match": "(\\+=|-=|\\*=|/=|%=|\\*\\*=|//=|=)"
-        },
-        {
-          "name": "keyword.operator.arithmetic.plain",
-          "match": "(\\+|-|\\*\\*|\\*|//|/|%|\\bplus\\b|\\bminus\\b|\\btimes\\b|\\bdivided\\s+by\\b|\\bremainder\\s+of\\b)"
-        },
-        {
-          "name": "keyword.operator.comparison.plain",
-          "match": "(==|!=|<=|>=|<|>|\\bis\\s+equal\\s+to\\b|\\bis\\s+not\\s+equal\\s+to\\b|\\bis\\s+greater\\s+than\\b|\\bis\\s+less\\s+than\\b|\\bis\\s+at\\s+least\\b|\\bis\\s+at\\s+most\\b|\\bis\\s+not\\b|\\bis\\b|\\bequals\\b)"
-        },
-        {
-          "name": "keyword.operator.logical.plain",
-          "match": "\\b(and|or|not)\\b"
-        }
-      ]
-    },
-    "python_builtins": {
-      "patterns": [
-        {
-          "name": "support.function.builtin.python.plain",
-          "match": "\\b(str|int|float|bool|type|len|range|print|input|abs|min|max|sum|all|any|zip|enumerate|map|filter)\\b"
-        }
-      ]
-    },
-    "stdlib_functions": {
-      "patterns": [
-        {
-          "name": "support.function.builtin.plain",
-          "match": "\\b(count|first|last|item|sort|reverse|average|highest|lowest|uppercase|lowercase|length|contains|replace|trim|starts_with|ends_with|starts\\s+with|ends\\s+with|to_number|to_text|to\\s+number|to\\s+text|round|floor|ceiling|absolute|minimum|maximum|random_between|random\\s+between|today|current_time|current\\s+time|days_between|days\\s+between|read_file|read\\s+file|write_file|write\\s+file|file_exists|file\\s+exists|join|split|append|keys|values|entries|json_parse|json_stringify|md5|sha256|base64_encode|base64_decode)\\b"
+          "match": "\\b(?i:set|say|show|ask|save|clear|screen|item|of|add|remove|wait)\\b"
         }
       ]
     },
     "function_calls": {
       "patterns": [
         {
-          "match": "\\b([a-zA-Z_][a-zA-Z0-9_]*)\\s*(?=\\()",
+          "match": "\\b([A-Za-z_][A-Za-z0-9_]*)\\s*(\\.)\\s*([A-Za-z_][A-Za-z0-9_]*)\\s*(?=\\()",
           "captures": {
-            "1": { "name": "support.function.call.plain" }
+            "1": { "name": "variable.other.object.plain" },
+            "2": { "name": "punctuation.accessor.plain" },
+            "3": { "name": "entity.name.function.call.plain" }
           }
+        },
+        {
+          "name": "entity.name.function.call.plain",
+          "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b(?=\\s*\\()"
         }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        { "name": "punctuation.section.brackets.plain", "match": "[()\\[\\]{}]" },
+        { "name": "punctuation.separator.plain", "match": "[,:.]" }
       ]
     },
     "identifiers": {
       "patterns": [
-        {
-          "name": "variable.other.readwrite.plain",
-          "match": "\\b[a-zA-Z_][a-zA-Z0-9_]*\\b"
-        }
+        { "name": "variable.other.readwrite.plain", "match": "\\b[A-Za-z_][A-Za-z0-9_]*\\b" }
       ]
     }
   }

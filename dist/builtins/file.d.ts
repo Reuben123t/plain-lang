@@ -2,7 +2,7 @@ import { PlainValue } from "../runtime/values";
 export declare class FileSystemSandbox {
     private baseDir;
     constructor(baseDir?: string);
-    private resolveSafePath;
+    resolvePath(filePath: string): string;
     readFile(filePathVal: PlainValue): string;
     writeFile(filePathVal: PlainValue, contentVal: PlainValue): void;
     fileExists(filePathVal: PlainValue): boolean;

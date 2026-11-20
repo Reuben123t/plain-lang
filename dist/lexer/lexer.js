@@ -54,6 +54,8 @@ const KEYWORDS = {
     fn: token_1.TokenType.Def,
     function: token_1.TokenType.Def,
     return: token_1.TokenType.Return,
+    break: token_1.TokenType.Break,
+    continue: token_1.TokenType.Continue,
 };
 class Lexer {
     source;
@@ -118,8 +120,28 @@ class Lexer {
                 tokens.push(this.readIdentifierOrKeyword());
                 continue;
             }
-            // Two-character symbols
             const loc = this.currentLocation();
+            // Longest operators first, so **= and //= remain single tokens.
+            const threeChars = this.source.slice(this.pos, this.pos + 3);
+            if (threeChars === "**=" || threeChars === "//=") {
+                this.advance();
+                this.advance();
+                this.advance();
+                tokens.push({
+                    type: threeChars === "**=" ? token_1.TokenType.StarStarEqual : token_1.TokenType.SlashSlashEqual,
+                    value: threeChars,
+                    raw: threeChars,
+                    location: loc
+                });
+                continue;
+            }
+            if (char === "%" && this.peekNext() === "=") {
+                this.advance();
+                this.advance();
+                tokens.push({ type: token_1.TokenType.PercentEqual, value: "%=", raw: "%=", location: loc });
+                continue;
+            }
+            // Two-character symbols
             if (char === "=" && this.peekNext() === "=") {
                 this.advance();
                 this.advance();
@@ -385,7 +407,7 @@ class Lexer {
         if (lower === "nothing" || lower === "null") {
             return { type: token_1.TokenType.Nothing, value: null, raw, location: loc };
         }
-        if (KEYWORDS[lower]) {
+        if (Object.prototype.hasOwnProperty.call(KEYWORDS, lower)) {
             return {
                 type: KEYWORDS[lower],
                 value: lower,

@@ -8,6 +8,7 @@ class Parser {
     current = 0;
     source;
     sourceFile;
+    loopDepth = 0;
     constructor(tokens, source, sourceFile) {
         this.tokens = tokens;
         this.source = source;
@@ -73,18 +74,9 @@ class Parser {
                 return this.parseListRemoveStatement();
             case token_1.TokenType.Wait:
                 return this.parseWaitStatement();
-            case token_1.TokenType.Identifier: {
-                const next = this.peekNext();
-                if (next &&
-                    (next.type === token_1.TokenType.Equal ||
-                        next.type === token_1.TokenType.PlusEqual ||
-                        next.type === token_1.TokenType.MinusEqual ||
-                        next.type === token_1.TokenType.StarEqual ||
-                        next.type === token_1.TokenType.SlashEqual)) {
-                    return this.parseAssignmentStatement();
-                }
-                return this.parseExpressionStatement();
-            }
+            case token_1.TokenType.Break:
+            case token_1.TokenType.Continue:
+                return this.parseLoopControlStatement();
             default:
                 // Could be an expression statement or unparenthesized function call like `greet "Alex"`
                 return this.parseExpressionStatement();
@@ -99,8 +91,8 @@ class Parser {
                 suggestion: "Example: Set ABC = Main or ABC = 10"
             });
         }
-        const nameToken = this.advance();
-        const varName = nameToken.raw || nameToken.value;
+        const target = this.requireAssignmentTarget(this.parsePostfix());
+        const varName = target.type === "Identifier" ? target.name : "target";
         // Support both '=' (preferred standard) and 'to' (or '==')
         if (this.match(token_1.TokenType.Equal) || this.match(token_1.TokenType.To) || this.match(token_1.TokenType.EqualEqual)) {
             // Good
@@ -123,44 +115,75 @@ class Parser {
         this.expectStatementEnd();
         return {
             type: "SetStatement",
-            name: varName,
+            name: target.type === "Identifier" ? target.name : "",
+            target,
             value,
             location: setToken.location
         };
     }
-    parseAssignmentStatement() {
-        const nameToken = this.advance(); // consume identifier
-        const opToken = this.advance(); // consume =, +=, -=, *=, /=
-        let operator = "=";
-        switch (opToken.type) {
-            case token_1.TokenType.Equal:
-                operator = "=";
-                break;
-            case token_1.TokenType.PlusEqual:
-                operator = "+=";
-                break;
-            case token_1.TokenType.MinusEqual:
-                operator = "-=";
-                break;
-            case token_1.TokenType.StarEqual:
-                operator = "*=";
-                break;
-            case token_1.TokenType.SlashEqual:
-                operator = "/=";
-                break;
-            default:
-                operator = "=";
-                break;
-        }
+    parseAssignmentStatement(expression) {
+        const target = this.requireAssignmentTarget(expression);
+        const operator = this.assignmentOperator(this.advance().type);
         const value = this.parseExpression();
         this.expectStatementEnd();
         return {
             type: "AssignmentStatement",
-            name: nameToken.raw || nameToken.value,
+            name: target.type === "Identifier" ? target.name : "",
+            target,
             operator,
             value,
-            location: nameToken.location
+            location: target.location
         };
+    }
+    assignmentOperator(type) {
+        switch (type) {
+            case token_1.TokenType.Equal: return "=";
+            case token_1.TokenType.PlusEqual: return "+=";
+            case token_1.TokenType.MinusEqual: return "-=";
+            case token_1.TokenType.StarEqual: return "*=";
+            case token_1.TokenType.SlashEqual: return "/=";
+            case token_1.TokenType.PercentEqual: return "%=";
+            case token_1.TokenType.StarStarEqual: return "**=";
+            case token_1.TokenType.SlashSlashEqual: return "//=";
+            default: return undefined;
+        }
+    }
+    requireAssignmentTarget(expression) {
+        if (expression.type === "Identifier" || expression.type === "MemberAccessExpression" || expression.type === "IndexExpression") {
+            return expression;
+        }
+        throw new plain_error_1.PlainError("Invalid assignment target. Assign to a variable, dictionary member, or list/dictionary index.", expression.location, {
+            kind: "ParserError",
+            sourceCode: this.source
+        });
+    }
+    parseLoopControlStatement() {
+        const token = this.advance();
+        if (this.loopDepth === 0) {
+            throw new plain_error_1.PlainError(`'${token.value}' can only be used inside a loop in the same function.`, token.location, {
+                kind: "ParserError",
+                sourceCode: this.source
+            });
+        }
+        this.expectStatementEnd();
+        return { type: token.type === token_1.TokenType.Break ? "BreakStatement" : "ContinueStatement", location: token.location };
+    }
+    parseLoopBody() {
+        const body = [];
+        this.loopDepth++;
+        try {
+            while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
+                this.skipNewlines();
+                if (this.isAtEnd() || this.check(token_1.TokenType.End))
+                    break;
+                body.push(this.parseStatement());
+                this.skipNewlines();
+            }
+        }
+        finally {
+            this.loopDepth--;
+        }
+        return body;
     }
     parseImportStatement() {
         const importToken = this.advance(); // consume 'import'
@@ -180,9 +203,10 @@ class Parser {
         }
         let alias;
         if (this.match(token_1.TokenType.As)) {
-            if (this.isWord(this.peek())) {
-                alias = this.advance().raw;
+            if (!this.isWord(this.peek())) {
+                throw new plain_error_1.PlainError("Expected an alias name after 'as'.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
             }
+            alias = this.advance().raw;
         }
         this.expectStatementEnd();
         return {
@@ -223,14 +247,7 @@ class Parser {
             this.advance();
         }
         this.expectStatementEnd();
-        const body = [];
-        while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
-            this.skipNewlines();
-            if (this.check(token_1.TokenType.End))
-                break;
-            body.push(this.parseStatement());
-            this.skipNewlines();
-        }
+        const body = this.parseLoopBody();
         if (!this.match(token_1.TokenType.End)) {
             throw new plain_error_1.PlainError(`You started a 'while' loop on line ${token.location.line}, but didn't close it with 'end'.`, this.peek().location, {
                 kind: "ParserError",
@@ -419,14 +436,7 @@ class Parser {
         if (this.match(token_1.TokenType.While)) {
             const condition = this.parseExpression();
             this.expectStatementEnd();
-            const body = [];
-            while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
-                this.skipNewlines();
-                if (this.check(token_1.TokenType.End))
-                    break;
-                body.push(this.parseStatement());
-                this.skipNewlines();
-            }
+            const body = this.parseLoopBody();
             if (!this.match(token_1.TokenType.End)) {
                 throw new plain_error_1.PlainError(`You started a 'repeat while' loop on line ${token.location.line}, but didn't close it with 'end'.`, this.peek().location, {
                     kind: "ParserError",
@@ -459,14 +469,7 @@ class Parser {
             });
         }
         this.expectStatementEnd();
-        const body = [];
-        while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
-            this.skipNewlines();
-            if (this.check(token_1.TokenType.End))
-                break;
-            body.push(this.parseStatement());
-            this.skipNewlines();
-        }
+        const body = this.parseLoopBody();
         if (!this.match(token_1.TokenType.End)) {
             throw new plain_error_1.PlainError(`You started a 'repeat' loop on line ${token.location.line}, but didn't close it with 'end'.`, this.peek().location, {
                 kind: "ParserError",
@@ -505,14 +508,7 @@ class Parser {
         if (this.check(token_1.TokenType.Colon))
             this.advance();
         this.expectStatementEnd();
-        const body = [];
-        while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
-            this.skipNewlines();
-            if (this.check(token_1.TokenType.End))
-                break;
-            body.push(this.parseStatement());
-            this.skipNewlines();
-        }
+        const body = this.parseLoopBody();
         if (!this.match(token_1.TokenType.End)) {
             throw new plain_error_1.PlainError(`You started a 'for each' loop on line ${token.location.line}, but didn't close it with 'end'.`, this.peek().location, {
                 kind: "ParserError",
@@ -588,12 +584,19 @@ class Parser {
         }
         this.expectStatementEnd();
         const body = [];
-        while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
-            this.skipNewlines();
-            if (this.check(token_1.TokenType.End))
-                break;
-            body.push(this.parseStatement());
-            this.skipNewlines();
+        const enclosingLoopDepth = this.loopDepth;
+        this.loopDepth = 0;
+        try {
+            while (!this.isAtEnd() && !this.check(token_1.TokenType.End)) {
+                this.skipNewlines();
+                if (this.isAtEnd() || this.check(token_1.TokenType.End))
+                    break;
+                body.push(this.parseStatement());
+                this.skipNewlines();
+            }
+        }
+        finally {
+            this.loopDepth = enclosingLoopDepth;
         }
         if (!this.match(token_1.TokenType.End)) {
             throw new plain_error_1.PlainError(`You defined the function '${name}' on line ${token.location.line}, but didn't close it with 'end'.`, this.peek().location, {
@@ -701,6 +704,9 @@ class Parser {
     }
     parseExpressionStatement() {
         const expr = this.parseExpression();
+        if (this.assignmentOperator(this.peek().type)) {
+            return this.parseAssignmentStatement(expr);
+        }
         this.expectStatementEnd();
         return {
             type: "ExpressionStatement",
@@ -730,7 +736,7 @@ class Parser {
         return left;
     }
     parseLogicalAnd() {
-        let left = this.parseComparison();
+        let left = this.parseLogicalNot();
         while (this.check(token_1.TokenType.And)) {
             const next = this.peekNext();
             if (next && next.type === token_1.TokenType.Save) {
@@ -739,7 +745,7 @@ class Parser {
             }
             this.advance(); // consume 'and'
             const opToken = this.previous();
-            const right = this.parseComparison();
+            const right = this.parseLogicalNot();
             left = {
                 type: "BinaryExpression",
                 operator: "and",
@@ -749,6 +755,18 @@ class Parser {
             };
         }
         return left;
+    }
+    parseLogicalNot() {
+        if (this.match(token_1.TokenType.Not)) {
+            const token = this.previous();
+            return {
+                type: "UnaryExpression",
+                operator: "not",
+                argument: this.parseLogicalNot(),
+                location: token.location
+            };
+        }
+        return this.parseComparison();
     }
     parseComparison() {
         let left = this.parseAdditive();
@@ -854,11 +872,6 @@ class Parser {
     parseMultiplicative() {
         let left = this.parseUnary();
         while (true) {
-            if (this.match(token_1.TokenType.StarStar)) {
-                const right = this.parseUnary();
-                left = { type: "BinaryExpression", operator: "**", left, right, location: left.location };
-                continue;
-            }
             if (this.match(token_1.TokenType.SlashSlash)) {
                 const right = this.parseUnary();
                 left = { type: "BinaryExpression", operator: "//", left, right, location: left.location };
@@ -901,16 +914,6 @@ class Parser {
         return left;
     }
     parseUnary() {
-        if (this.match(token_1.TokenType.Not)) {
-            const token = this.previous();
-            const argument = this.parseUnary();
-            return {
-                type: "UnaryExpression",
-                operator: "not",
-                argument,
-                location: token.location
-            };
-        }
         if (this.match(token_1.TokenType.MinusSign)) {
             const token = this.previous();
             const argument = this.parseUnary();
@@ -921,7 +924,17 @@ class Parser {
                 location: token.location
             };
         }
-        return this.parsePostfix();
+        return this.parsePower();
+    }
+    parsePower() {
+        const left = this.parsePostfix();
+        if (this.match(token_1.TokenType.StarStar)) {
+            const token = this.previous();
+            // Unary on the right permits negative exponents and recurses into power.
+            const right = this.parseUnary();
+            return { type: "BinaryExpression", operator: "**", left, right, location: token.location };
+        }
+        return left;
     }
     parsePostfix() {
         let expr = this.parsePrimary();
