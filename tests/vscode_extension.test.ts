@@ -64,7 +64,9 @@ describe("PLAIN VS Code Extension Package (.vsix)", () => {
     assert.ok(content.includes("PlainHoverProvider"));
   });
 
-  test("verifies extension is installed in user's VS Code extensions directory", () => {
+  test("verifies extension is installed in user's VS Code extensions directory", {
+    skip: Boolean(process.env.CI)
+  }, () => {
     const userExtDir = path.join(os.homedir(), ".vscode", "extensions", "plain-lang.plain-language-support-1.3.0");
     assert.strictEqual(fs.existsSync(userExtDir), true, "Extension must be installed in .vscode/extensions");
   });
