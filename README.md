@@ -101,7 +101,7 @@ npm run test:package
 npm run test:catalog
 ```
 
-# Official website: https://plain-lang.vercel.app/
+Official website: https://plain-lang.vercel.app/
 
 See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md), and [ROADMAP.md](ROADMAP.md) for project policies and release information.
 
