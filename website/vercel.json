@@ -2,14 +2,16 @@
   "version": 2,
   "cleanUrls": true,
   "trailingSlash": false,
-  "rewrites": [
+  "redirects": [
     {
       "source": "/docs/getting-started.md",
-      "destination": "/docs/getting-started.html"
+      "destination": "/docs/getting-started.html",
+      "permanent": false
     },
     {
       "source": "/docs/tutorial.md",
-      "destination": "/docs/tutorial.html"
+      "destination": "/docs/tutorial.html",
+      "permanent": false
     }
   ],
   "headers": [
