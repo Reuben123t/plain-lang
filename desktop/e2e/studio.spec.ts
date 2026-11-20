@@ -1,5 +1,5 @@
 import { test, expect, _electron as electron, type ElectronApplication, type Page } from "@playwright/test";
-import { mkdtemp, readFile, writeFile, rm } from "node:fs/promises";
+import { mkdtemp, readFile, writeFile, rm, realpath } from "node:fs/promises";
 import * as path from "node:path";
 import * as os from "node:os";
 import AxeBuilder from "@axe-core/playwright";
@@ -12,8 +12,10 @@ const desktop = path.resolve(__dirname, "..");
 async function launch(args: string[] = []) {
   const env: Record<string, string> = { ...Object.fromEntries(Object.entries(process.env).filter((entry): entry is [string, string] => entry[1] !== undefined)), PLAIN_DESKTOP_TEST_DIR: profile };
   delete env.ELECTRON_RUN_AS_NODE;
-  app = await electron.launch({ args: [desktop, "--test-mode", ...args], env, cwd: desktop });
+  app = await electron.launch({ args: [desktop, "--test-mode", ...args], env, cwd: desktop, chromiumSandbox: true });
   page = await app.firstWindow();
+  await expect(page.locator("html")).toHaveAttribute("data-studio-ready", "true");
+  await app.evaluate(({ BrowserWindow }) => { const window = BrowserWindow.getAllWindows()[0]; window.show(); window.focus(); });
   await expect(page.getByRole("button", { name: "Plain Studio home" })).toBeVisible();
 }
 async function trustDialogs(response = 1) {
@@ -28,7 +30,7 @@ async function replaceSource(source: string) {
   await page.keyboard.insertText(source);
 }
 
-test.beforeEach(async () => { profile = await mkdtemp(path.join(os.tmpdir(), "plain-studio-e2e-")); });
+test.beforeEach(async () => { profile = await realpath(await mkdtemp(path.join(os.tmpdir(), "plain-studio-e2e-"))); });
 async function exitApp() {
   if (!app) return;
   await app.evaluate(({ app }) => app.exit(0)).catch(() => undefined);
@@ -36,10 +38,10 @@ async function exitApp() {
 }
 test.afterEach(async () => { await exitApp(); await rm(profile, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }); });
 
-test("welcome, examples, keyboard palette, preferences, and renderer boundary", async () => {
+test("welcome, examples, keyboard palette, preferences, and renderer boundary", async ({}, testInfo) => {
   await launch();
   await expect(page.getByRole("heading", { name: "Think it. Write it in Plain." })).toBeVisible();
-  await page.screenshot({ path: path.join(desktop, "test-results/welcome.png") });
+  await page.screenshot({ path: testInfo.outputPath("welcome.png"), timeout: 10_000 });
   const welcomeAccessibility = await new AxeBuilder({ page }).setLegacyMode().withTags(["wcag2a", "wcag2aa"]).analyze();
   expect(welcomeAccessibility.violations).toEqual([]);
   const boundary = await page.evaluate(() => ({ require: typeof (window as any).require, process: typeof (window as any).process, bridge: Object.keys(window.plain || {}) }));
@@ -62,7 +64,7 @@ test("welcome, examples, keyboard palette, preferences, and renderer boundary", 
   await expect(page.getByRole("button", { name: "Run current file (F5)" })).toBeVisible();
 });
 
-test("open Unicode file, run with input, save, stop, and reject stale input", async () => {
+test("open Unicode file, run with input, save, and stop", async ({}, testInfo) => {
   const file = path.join(profile, "hello café.plain");
   await writeFile(file, 'ask "Your name?" and save as visitor\nsay "Hello, " plus visitor\n');
   await launch([file]);
@@ -74,7 +76,7 @@ test("open Unicode file, run with input, save, stop, and reject stale input", as
   await page.getByRole("button", { name: "Send" }).click();
   await expect(page.locator(".program-output")).toContainText("Hello, Studio");
   await expect(page.locator("#run-status")).toContainText("Completed");
-  await page.screenshot({ path: path.join(desktop, "test-results/editor.png") });
+  await page.screenshot({ path: testInfo.outputPath("editor.png"), timeout: 10_000 });
   await replaceSource('say "Saved from Studio"\n');
   await app.evaluate(({ Menu }) => {
     const fileMenu = Menu.getApplicationMenu()!.items.find((item) => item.label === "File")!;
@@ -101,9 +103,12 @@ test("cancelled save preserves dirty tab and recovery restores without execution
   await expect(page.getByRole("button", { name: /^untitled.plain/ })).toBeVisible();
   await expect(page.getByLabel("Unsaved changes")).toBeVisible();
   await expect.poll(async () => {
-    const files = await app.evaluate(({ app }) => app.getPath("userData"));
-    return (await import("node:fs/promises")).readdir(files);
-  }).not.toEqual([]);
+    const directory = await app.evaluate(({ app }) => app.getPath("userData"));
+    try {
+      const state = JSON.parse(await readFile(path.join(directory, "desktop-state.json"), "utf8"));
+      return state.session?.documents?.find((document: { dirty: boolean; content: string }) => document.dirty && document.content.includes("Recovered, not executed"))?.content;
+    } catch { return undefined; }
+  }).toContain("Recovered, not executed");
   // Exit without the close handshake to exercise recovery after an interrupted session.
   await exitApp();
   await launch();

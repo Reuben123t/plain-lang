@@ -7,7 +7,7 @@ import { build } from "esbuild";
 import { DesktopHost } from "../src/main/host";
 
 test("saved files resolve sibling imports from their own directory and preserve argument arrays", async (t) => {
-  const root = await fs.mkdtemp(path.join(os.tmpdir(), "plain-imports-"));
+  const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "plain-imports-")));
   t.after(() => fs.rm(root, { recursive: true, force: true, maxRetries: 3 }));
   const project = path.join(root, "workspace");
   const nested = path.join(project, "nested café");
@@ -21,7 +21,8 @@ test("saved files resolve sibling imports from their own directory and preserve 
   const host = new DesktopHost({ userData: path.join(root, "profile"), version: "test", platform: process.platform, childFile, examples: [], initialFiles: [filename], dialogs: { openFiles: async () => undefined, openFolder: async () => project, saveFile: async () => undefined, confirmClose: async () => "cancel", trust: async () => true } });
   await host.initialize(); t.after(() => host.close());
   const workspace = await host.openFolder();
-  const started = await host.startRun({ filename, workspace, code, args: ["spaces ; are values"] });
+  const opened = host.bootstrap().session!.documents.find((document) => document.name === "main.plain")!;
+  const started = await host.startRun({ filename: opened.path, workspace, code, args: ["spaces ; are values"] });
   const completed = await host.execution.get(started!.id).finished;
   assert.equal(completed.status, "completed", completed.error?.formatted);
   assert.equal(completed.output, "sibling module\nspaces ; are values\n");

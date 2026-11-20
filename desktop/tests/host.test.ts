@@ -12,7 +12,7 @@ import { LIMITS, localPath, validateRun, validateSession } from "../src/main/val
 import { initialFileArguments, isOfflineResource, isRendererURL } from "../src/main/security";
 
 async function temporary(t: { after: (callback: () => Promise<void>) => void }): Promise<string> {
-  const directory = await fs.mkdtemp(path.join(os.tmpdir(), "plain-host-test-"));
+  const directory = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), "plain-host-test-")));
   t.after(() => fs.rm(directory, { recursive: true, force: true, maxRetries: 3 }));
   return directory;
 }
@@ -43,18 +43,39 @@ test("directory grants are bounded and do not follow escaping symlinks or juncti
   await fs.writeFile(path.join(workspace, "safe.plain"), "say 1");
   await fs.writeFile(path.join(outside, "secret.plain"), "secret");
   await fs.symlink(outside, path.join(workspace, "escape"), process.platform === "win32" ? "junction" : "dir");
-  const access = new FileAccess(); await access.grantDirectory(workspace);
-  assert.deepEqual((await access.list(workspace)).map((entry) => entry.name), ["safe.plain"]);
+  const access = new FileAccess(); const granted = await access.grantDirectory(workspace);
+  assert.deepEqual((await access.list(granted)).map((entry) => entry.name), ["safe.plain"]);
   await assert.rejects(access.read(path.join(workspace, "escape", "secret.plain")), /not been granted/);
   await assert.rejects(access.list(path.join(workspace, "escape")), /not been granted/);
   await assert.rejects(access.save(path.join(workspace, "escape", "new.plain"), "bad"), /not been granted/);
 });
 
+test("directory aliases return usable canonical grants without allowing retargeted escapes", async (t) => {
+  const root = await temporary(t);
+  const workspace = path.join(root, "workspace"), outside = path.join(root, "outside");
+  const alias = path.join(root, "workspace-alias");
+  await fs.mkdir(workspace); await fs.mkdir(outside);
+  await fs.writeFile(path.join(workspace, "safe.plain"), "say 1");
+  await fs.writeFile(path.join(outside, "secret.plain"), "secret");
+  const kind = process.platform === "win32" ? "junction" : "dir";
+  await fs.symlink(workspace, alias, kind);
+  const access = new FileAccess();
+  const granted = await access.grantDirectory(alias);
+  assert.equal(granted, await fs.realpath(workspace));
+  assert.deepEqual((await access.list(granted + path.sep)).map((entry) => entry.name), ["safe.plain"]);
+  assert.equal((await access.read(path.join(granted, "safe.plain"))).content, "say 1");
+  await fs.unlink(alias);
+  await fs.symlink(outside, alias, kind);
+  await assert.rejects(access.read(path.join(alias, "secret.plain")), /not been granted/);
+  await assert.rejects(access.list(alias), /not been granted/);
+  await assert.rejects(access.save(path.join(alias, "new.plain"), "changed"), /not been granted/);
+});
+
 test("directory listing rejects overflow instead of allocating an unbounded result", async (t) => {
   const root = await temporary(t);
   await Promise.all(Array.from({ length: LIMITS.entries + 1 }, (_, id) => fs.writeFile(path.join(root, `${id}.plain`), "")));
-  const access = new FileAccess(); await access.grantDirectory(root);
-  await assert.rejects(access.list(root), /entry limit/);
+  const access = new FileAccess(); const granted = await access.grantDirectory(root);
+  await assert.rejects(access.list(granted), /entry limit/);
 });
 
 test("optimistic atomic saves preserve originals on stale versions and deletion", async (t) => {

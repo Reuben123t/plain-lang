@@ -5,6 +5,8 @@
   "description": "A thoughtful desktop studio for the Plain programming language",
   "author": "Reuben",
   "license": "MIT",
+  "homepage": "https://plain-lang.vercel.app/",
+  "repository": { "type": "git", "url": "https://github.com/Reuben123t/plain-lang.git" },
   "main": "dist/main.cjs",
   "scripts": {
     "build": "node scripts/build.cjs",

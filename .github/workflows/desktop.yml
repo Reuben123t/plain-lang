@@ -112,6 +112,15 @@ jobs:
         working-directory: desktop
         run: npx --no-install playwright install-deps chromium
 
+      - name: Configure Linux Chromium sandbox helper
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          helper="$(realpath desktop/node_modules/electron/dist/chrome-sandbox)"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          test "$(stat -c '%u:%a' "$helper")" = "0:4755"
+
       - name: Check core types
         run: npm run typecheck
 
@@ -142,6 +151,19 @@ jobs:
 
       - name: Package native unsigned candidates without publishing
         run: npm --prefix desktop run package -- ${{ matrix.package-args }}
+
+      - name: Smoke-test packaged application on Linux
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          helper="$(realpath desktop/release/linux-unpacked/chrome-sandbox)"
+          sudo chown root:root "$helper"
+          sudo chmod 4755 "$helper"
+          xvfb-run -a node desktop/scripts/packaged-smoke.cjs
+
+      - name: Smoke-test packaged application on Windows and macOS
+        if: runner.os != 'Linux'
+        run: node desktop/scripts/packaged-smoke.cjs
 
       - name: Generate candidate SHA-256 checksums
         run: npm --prefix desktop run checksums
