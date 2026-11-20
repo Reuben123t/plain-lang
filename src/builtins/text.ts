@@ -2,6 +2,19 @@ import { PlainValue, plainToString, plainToBoolean } from "../runtime/values";
 import { PlainError } from "../errors/plain-error";
 import { mathBuiltins } from "./math";
 
+function encodeBase64Utf8(text: string): string {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 0x8000) binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+  return btoa(binary);
+}
+
+function decodeBase64Utf8(encoded: string): string {
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
+
 export const textBuiltins: Record<string, (...args: any[]) => any> = {
   str: (val: PlainValue): string => {
     return plainToString(val);
@@ -262,11 +275,11 @@ export const textBuiltins: Record<string, (...args: any[]) => any> = {
   },
 
   base64_encode: (target: PlainValue): string => {
-    return Buffer.from(plainToString(target), "utf-8").toString("base64");
+    return encodeBase64Utf8(plainToString(target));
   },
 
   base64_decode: (target: PlainValue): string => {
-    return Buffer.from(plainToString(target), "base64").toString("utf-8");
+    return decodeBase64Utf8(plainToString(target));
   },
 
   slugify: (target: PlainValue): string => {
@@ -276,5 +289,49 @@ export const textBuiltins: Record<string, (...args: any[]) => any> = {
       .replace(/[^\w\s-]/g, "")
       .replace(/[\s_-]+/g, "-")
       .replace(/^-+|-+$/g, "");
-  }
+  },
+
+  normalize_whitespace: (target: PlainValue): string => plainToString(target).trim().replace(/\s+/g, " "),
+
+  truncate_text: (target: PlainValue, lengthVal: PlainValue, suffixVal: PlainValue = "…"): string => {
+    const text = Array.from(plainToString(target));
+    const limit = Math.trunc(mathBuiltins.to_number(lengthVal));
+    if (limit < 0 || !Number.isFinite(limit)) throw new PlainError("Text length must be a finite nonnegative number.", { line: 1, column: 1 }, { kind: "TypeError" });
+    if (text.length <= limit) return text.join("");
+    const suffix = Array.from(plainToString(suffixVal));
+    if (limit <= suffix.length) return suffix.slice(0, limit).join("");
+    return text.slice(0, limit - suffix.length).join("") + suffix.join("");
+  },
+
+  count_substring: (target: PlainValue, needleVal: PlainValue): number => {
+    const text = plainToString(target);
+    const needle = plainToString(needleVal);
+    if (!needle) return 0;
+    let count = 0;
+    let offset = 0;
+    while ((offset = text.indexOf(needle, offset)) !== -1) { count++; offset += needle.length; }
+    return count;
+  },
+
+  strip_prefix: (target: PlainValue, prefixVal: PlainValue): string => {
+    const text = plainToString(target);
+    const prefix = plainToString(prefixVal);
+    return prefix && text.startsWith(prefix) ? text.slice(prefix.length) : text;
+  },
+
+  strip_suffix: (target: PlainValue, suffixVal: PlainValue): string => {
+    const text = plainToString(target);
+    const suffix = plainToString(suffixVal);
+    return suffix && text.endsWith(suffix) ? text.slice(0, -suffix.length) : text;
+  },
+
+  remove_punctuation: (target: PlainValue): string => plainToString(target).replace(/[\p{P}\p{S}]/gu, ""),
+
+  escape_html: (target: PlainValue): string => plainToString(target).replace(/[&<>"']/g, (char) => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", "\"": "&quot;", "'": "&#39;"
+  })[char]!),
+
+  unescape_html: (target: PlainValue): string => plainToString(target).replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => ({
+    "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": "\"", "&#39;": "'"
+  })[entity]!)
 };

@@ -1,18 +1,22 @@
 import { SourceLocation } from "../errors/plain-error";
 export type ASTNode = Statement | Expression;
-export type Statement = SetStatement | AssignmentStatement | ImportStatement | SayStatement | ShowStatement | AskStatement | ClearScreenStatement | IfStatement | RepeatTimesStatement | RepeatWhileStatement | ForEachStatement | FunctionDefStatement | ReturnStatement | ListAddStatement | ListRemoveStatement | WaitStatement | ExpressionStatement;
+export type Statement = SetStatement | AssignmentStatement | ImportStatement | SayStatement | ShowStatement | AskStatement | ClearScreenStatement | IfStatement | RepeatTimesStatement | RepeatWhileStatement | ForEachStatement | FunctionDefStatement | ReturnStatement | BreakStatement | ContinueStatement | ListAddStatement | ListRemoveStatement | WaitStatement | ExpressionStatement;
 export interface BaseNode {
     location: SourceLocation;
 }
+export type AssignmentTarget = Identifier | MemberAccessExpression | IndexExpression;
+export type AssignmentOperator = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "//=";
 export interface SetStatement extends BaseNode {
     type: "SetStatement";
     name: string;
+    target?: AssignmentTarget;
     value: Expression;
 }
 export interface AssignmentStatement extends BaseNode {
     type: "AssignmentStatement";
     name: string;
-    operator: "=" | "+=" | "-=" | "*=" | "/=";
+    target?: AssignmentTarget;
+    operator: AssignmentOperator;
     value: Expression;
 }
 export interface ImportStatement extends BaseNode {
@@ -74,6 +78,12 @@ export interface FunctionDefStatement extends BaseNode {
 export interface ReturnStatement extends BaseNode {
     type: "ReturnStatement";
     value?: Expression;
+}
+export interface BreakStatement extends BaseNode {
+    type: "BreakStatement";
+}
+export interface ContinueStatement extends BaseNode {
+    type: "ContinueStatement";
 }
 export interface ListAddStatement extends BaseNode {
     type: "ListAddStatement";

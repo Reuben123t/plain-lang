@@ -1,15 +1,61 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.isPlainObject = isPlainObject;
+exports.hasOwnProperty = hasOwnProperty;
+exports.createPlainObject = createPlainObject;
+exports.getOwnProperty = getOwnProperty;
+exports.setOwnProperty = setOwnProperty;
 exports.isPlainFunction = isPlainFunction;
+exports.plainToNumber = plainToNumber;
 exports.plainToString = plainToString;
 exports.plainToBoolean = plainToBoolean;
 exports.getPlainTypeName = getPlainTypeName;
+const environment_1 = require("./environment");
+const plain_error_1 = require("../errors/plain-error");
 function isPlainObject(val) {
-    return typeof val === "object" && val !== null && !Array.isArray(val) && val.type !== "function";
+    return typeof val === "object" && val !== null && !Array.isArray(val) && !isPlainFunction(val);
+}
+function hasOwnProperty(value, key) {
+    return Object.prototype.hasOwnProperty.call(value, key);
+}
+function createPlainObject() {
+    return Object.create(null);
+}
+function getOwnProperty(value, key) {
+    return hasOwnProperty(value, key) ? value[key] ?? null : null;
+}
+function setOwnProperty(value, key, item) {
+    // Define a data property, never invoke inherited setters such as __proto__.
+    Object.defineProperty(value, key, { value: item, enumerable: true, configurable: true, writable: true });
 }
 function isPlainFunction(val) {
-    return typeof val === "object" && val !== null && val.type === "function";
+    if (typeof val !== "object" || val === null || Array.isArray(val))
+        return false;
+    const fn = val;
+    if (!hasOwnProperty(val, "type") || fn.type !== "function" ||
+        !hasOwnProperty(val, "name") || typeof fn.name !== "string" ||
+        !hasOwnProperty(val, "parameters") || !Array.isArray(fn.parameters) ||
+        !fn.parameters.every((parameter) => typeof parameter === "string"))
+        return false;
+    return (hasOwnProperty(val, "nativeFn") && typeof fn.nativeFn === "function") ||
+        (hasOwnProperty(val, "body") && Array.isArray(fn.body) &&
+            hasOwnProperty(val, "closure") && fn.closure instanceof environment_1.Environment);
+}
+function plainToNumber(value, location, sourceCode) {
+    if (typeof value === "number")
+        return value;
+    if (typeof value === "boolean")
+        return value ? 1 : 0;
+    const text = plainToString(value).trim();
+    const number = Number(text);
+    if (Number.isNaN(number) || text === "") {
+        throw new plain_error_1.PlainError(`I cannot convert "${text}" into a number.`, location || { line: 1, column: 1 }, {
+            kind: "TypeError",
+            sourceCode,
+            suggestion: "Make sure the text contains only digits (for example, '42' or '3.14')."
+        });
+    }
+    return number;
 }
 function plainToString(value) {
     if (value === null || value === undefined) {

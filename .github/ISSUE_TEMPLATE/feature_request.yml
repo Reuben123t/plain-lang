@@ -1,0 +1,44 @@
+name: Feature proposal
+description: Propose a language or developer-workflow improvement.
+title: "[Feature]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Start with the problem and a small example. Check ROADMAP.md for directions already under consideration.
+        A proposal does not authorize publication, external services, or a compatibility-breaking change.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Who needs this, and what is difficult with the current behavior?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed behavior
+      description: Include a small syntax, CLI, API, or workflow example. Mark proposed APIs as new rather than existing.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Include existing APIs or a smaller change that could solve the problem.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Compatibility and capability requirements
+      description: Consider English/Python-style syntax, explicit end blocks, indexing, Node versus browser, and side effects.
+    validations:
+      required: true
+  - type: textarea
+    id: testing
+    attributes:
+      label: How could it be tested?
+      description: Prefer deterministic, portable, offline or test-owned loopback fixtures.
+    validations:
+      required: true

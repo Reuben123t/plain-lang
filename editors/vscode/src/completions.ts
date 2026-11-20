@@ -247,3 +247,4 @@ export class PlainCompletionProvider implements vscode.CompletionItemProvider {
     return items;
   }
 }
+

@@ -6,6 +6,7 @@ export interface InterpreterOptions {
     baseDir?: string;
     sourceCode?: string;
     sourceFile?: string;
+    args?: string[];
     onSay?: (output: string) => void;
     onShow?: (output: string) => void;
     onAsk?: (prompt: string) => Promise<string>;
@@ -13,7 +14,10 @@ export interface InterpreterOptions {
 }
 export declare class Interpreter {
     private globalEnv;
-    private currentEnv;
+    private rootEnv;
+    private executionEnv;
+    private get currentEnv();
+    private set currentEnv(value);
     private sourceCode?;
     private sourceFile?;
     private baseDir;
@@ -21,12 +25,14 @@ export declare class Interpreter {
     private onShow;
     private onAsk;
     private onClear;
+    private moduleCache;
     constructor(options?: InterpreterOptions);
     getGlobalEnvironment(): Environment;
     run(program: Program): Promise<void>;
     executeStatement(statement: Statement): Promise<void>;
     private executeSet;
     private executeAssignment;
+    private prepareTarget;
     private executeImport;
     private executeSay;
     private executeShow;

@@ -1,6 +1,7 @@
 import * as readline from "readline";
 import * as fs from "fs";
 import * as path from "path";
+import { AsyncLocalStorage } from "async_hooks";
 import {
   AssignmentStatement,
   BinaryExpression,
@@ -32,7 +33,10 @@ import {
   PlainObject,
   plainToBoolean,
   plainToString,
-  PlainValue
+  PlainValue,
+  createPlainObject,
+  setOwnProperty,
+  getOwnProperty
 } from "./values";
 import { Lexer } from "../lexer/lexer";
 import { Parser } from "../parser/parser";
@@ -41,6 +45,7 @@ import { mathBuiltins } from "../builtins/math";
 import { listBuiltins } from "../builtins/list";
 import { timeBuiltins } from "../builtins/time";
 import { createStandardEnvironment } from "../builtins";
+import { getRegisteredModule } from "../builtins/registry";
 
 class ReturnSignal {
   public readonly value: PlainValue;
@@ -49,10 +54,14 @@ class ReturnSignal {
   }
 }
 
+class BreakSignal {}
+class ContinueSignal {}
+
 export interface InterpreterOptions {
   baseDir?: string;
   sourceCode?: string;
   sourceFile?: string;
+  args?: string[];
   onSay?: (output: string) => void;
   onShow?: (output: string) => void;
   onAsk?: (prompt: string) => Promise<string>;
@@ -61,7 +70,10 @@ export interface InterpreterOptions {
 
 export class Interpreter {
   private globalEnv: Environment;
-  private currentEnv: Environment;
+  private rootEnv!: Environment;
+  private executionEnv = new AsyncLocalStorage<Environment>();
+  private get currentEnv(): Environment { return this.executionEnv.getStore() || this.rootEnv; }
+  private set currentEnv(value: Environment) { this.rootEnv = value; }
   private sourceCode?: string;
   private sourceFile?: string;
   private baseDir: string;
@@ -69,6 +81,7 @@ export class Interpreter {
   private onShow: (output: string) => void;
   private onAsk: (prompt: string) => Promise<string>;
   private onClear: () => void;
+  private moduleCache = new Map<string, PlainObject>();
 
   constructor(options?: InterpreterOptions) {
     this.sourceCode = options?.sourceCode;
@@ -94,6 +107,7 @@ export class Interpreter {
 
     this.globalEnv = createStandardEnvironment({
       baseDir: options?.baseDir,
+      args: options?.args,
       onSay: this.onSay,
       onShow: this.onShow,
       onAsk: this.onAsk,
@@ -166,6 +180,8 @@ export class Interpreter {
       case "ExpressionStatement":
         await this.evaluate(statement.expression);
         break;
+      case "BreakStatement": throw new BreakSignal();
+      case "ContinueStatement": throw new ContinueSignal();
     }
   }
 
@@ -177,24 +193,24 @@ export class Interpreter {
     } else {
       value = await this.evaluate(stmt.value);
     }
-    this.currentEnv.assign(stmt.name, value);
+    const target = await this.prepareTarget(stmt.target || { type: "Identifier", name: stmt.name, location: stmt.location }, stmt.location);
+    target.write(value);
   }
 
   private async executeAssignment(stmt: AssignmentStatement): Promise<void> {
     let rhs: PlainValue;
-    if (stmt.operator === "=" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+    const target = stmt.target || { type: "Identifier" as const, name: stmt.name, location: stmt.location };
+    const prepared = await this.prepareTarget(target, stmt.location);
+    if (stmt.operator === "=" && target.type === "Identifier" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
       // Unquoted identifier fallback (e.g. ABC = Main -> "Main")
       rhs = stmt.value.name;
     } else {
       rhs = await this.evaluate(stmt.value);
     }
 
-    if (stmt.operator === "=") {
-      this.currentEnv.assign(stmt.name, rhs);
-      return;
-    }
+    if (stmt.operator === "=") { prepared.write(rhs); return; }
 
-    const current = this.currentEnv.lookup(stmt.name, stmt.location, this.sourceCode);
+    const current = prepared.read();
     let finalVal: PlainValue = rhs;
     if (stmt.operator === "+=") {
       if (typeof current === "string" || typeof rhs === "string") {
@@ -212,8 +228,52 @@ export class Interpreter {
         throw new PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
       }
       finalVal = mathBuiltins.to_number(current) / divisor;
+    } else if (stmt.operator === "%=") {
+      const divisor = mathBuiltins.to_number(rhs);
+      if (divisor === 0) throw new PlainError("Cannot use modulo with zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      finalVal = mathBuiltins.to_number(current) % divisor;
+    } else if (stmt.operator === "**=") {
+      finalVal = mathBuiltins.to_number(current) ** mathBuiltins.to_number(rhs);
+    } else if (stmt.operator === "//=") {
+      const divisor = mathBuiltins.to_number(rhs);
+      if (divisor === 0) throw new PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      finalVal = Math.floor(mathBuiltins.to_number(current) / divisor);
     }
-    this.currentEnv.assign(stmt.name, finalVal);
+    prepared.write(finalVal);
+  }
+
+  private async prepareTarget(target: NonNullable<AssignmentStatement["target"]>, location: SourceLocation): Promise<{ read: () => PlainValue; write: (value: PlainValue) => void }> {
+    if (target.type === "Identifier") return {
+      read: () => this.currentEnv.lookup(target.name, location, this.sourceCode),
+      write: (value) => this.currentEnv.assign(target.name, value)
+    };
+    if (target.type === "MemberAccessExpression") {
+      const object = await this.evaluate(target.object);
+      if (!isPlainObject(object)) throw new PlainError("A member assignment requires a dictionary.", location, { kind: "TypeError", sourceCode: this.sourceCode });
+      return {
+        read: () => object[target.property] ?? null,
+        write: (value) => setOwnProperty(object, target.property, value)
+      };
+    }
+    const object = await this.evaluate(target.object);
+    const rawIndex = await this.evaluate(target.index);
+    if (Array.isArray(object)) {
+      const index = Math.trunc(mathBuiltins.to_number(rawIndex));
+      const normalized = index < 0 ? object.length + index : index;
+      if (normalized < 0 || normalized >= object.length) throw new PlainError("List assignment index is out of range.", location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      return {
+        read: () => object[normalized],
+        write: (value) => { object[normalized] = value; }
+      };
+    }
+    if (isPlainObject(object)) {
+      const key = plainToString(rawIndex);
+      return {
+        read: () => object[key] ?? null,
+        write: (value) => setOwnProperty(object, key, value)
+      };
+    }
+    throw new PlainError("An index assignment requires a list or dictionary.", location, { kind: "TypeError", sourceCode: this.sourceCode });
   }
 
   private async executeImport(stmt: ImportStatement): Promise<void> {
@@ -227,56 +287,48 @@ export class Interpreter {
     }
 
     if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
-      const code = fs.readFileSync(localFilePath, "utf-8");
-      const lexer = new Lexer(code, localFilePath);
-      const tokens = lexer.tokenize();
-      const parser = new Parser(tokens, code, localFilePath);
-      const ast = parser.parse();
-
-      const subInterpreter = new Interpreter({
-        baseDir: path.dirname(localFilePath),
-        onSay: this.onSay,
-        onShow: this.onShow,
-        onAsk: this.onAsk,
-        onClear: this.onClear
-      });
-      // Execute in submodule scope
-      for (const s of ast.body) {
-        await subInterpreter.executeStatement(s);
-      }
-
-      // Collect exported variables
-      const moduleExport: PlainObject = {};
-      const exportedNames = subInterpreter.getGlobalEnvironment().getAllVariableNames();
-      for (const name of exportedNames) {
-        const val = subInterpreter.getGlobalEnvironment().lookup(name);
-        moduleExport[name] = val;
-        if (stmt.symbols && stmt.symbols.includes(name)) {
-          this.currentEnv.assign(name, val);
+      const absolutePath = path.resolve(localFilePath);
+      let moduleExport = this.moduleCache.get(absolutePath);
+      if (!moduleExport) {
+        const code = fs.readFileSync(absolutePath, "utf-8");
+        const ast = new Parser(new Lexer(code, absolutePath).tokenize(), code, absolutePath).parse();
+        const subInterpreter = new Interpreter({ baseDir: path.dirname(absolutePath), onSay: this.onSay, onShow: this.onShow, onAsk: this.onAsk, onClear: this.onClear });
+        for (const statement of ast.body) await subInterpreter.executeStatement(statement);
+        moduleExport = createPlainObject();
+        const moduleEnv = subInterpreter.getGlobalEnvironment();
+        const exports = new Set<string>();
+        for (const statement of ast.body) {
+          if (statement.type === "SetStatement") {
+            if (statement.target?.type === "Identifier") exports.add(statement.target.name.toLowerCase());
+            else if (!statement.target && statement.name) exports.add(statement.name.toLowerCase());
+          } else if (statement.type === "AssignmentStatement") {
+            if (statement.target?.type === "Identifier") exports.add(statement.target.name.toLowerCase());
+            else if (!statement.target && statement.name) exports.add(statement.name.toLowerCase());
+          } else if (statement.type === "FunctionDefStatement") exports.add(statement.name.toLowerCase());
+          else if (statement.type === "ImportStatement" && statement.alias) exports.add(statement.alias.toLowerCase());
         }
+        for (const name of exports) if (moduleEnv.has(name)) setOwnProperty(moduleExport, name, moduleEnv.lookup(name));
+        this.moduleCache.set(absolutePath, moduleExport);
       }
-
-      if (!stmt.symbols || stmt.symbols.length === 0) {
-        this.currentEnv.assign(alias, moduleExport);
-      }
+      if (stmt.symbols?.length) {
+        for (const name of stmt.symbols) {
+          const key = name.toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(moduleExport, key)) throw new PlainError(`Module '${source}' does not export '${name}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+          this.currentEnv.assign(name, moduleExport[key]);
+        }
+      } else this.currentEnv.assign(alias, moduleExport);
       return;
     }
 
-    // Built-in virtual packages
-    const allVars = this.globalEnv.getAllVariableNames();
-    const matchingModuleObj: PlainObject = {};
-
-    for (const name of allVars) {
-      const val = this.globalEnv.lookup(name);
-      matchingModuleObj[name] = val;
-      if (stmt.symbols && stmt.symbols.includes(name)) {
-        this.currentEnv.assign(name, val);
+    const module = getRegisteredModule(source, this.globalEnv);
+    if (!module) throw new PlainError(`Cannot find module '${source}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+    if (stmt.symbols?.length) {
+      for (const name of stmt.symbols) {
+        const key = name.toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(module, key)) throw new PlainError(`Module '${source}' does not export '${name}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+        this.currentEnv.assign(name, module[key]);
       }
-    }
-
-    if (!stmt.symbols || stmt.symbols.length === 0) {
-      this.currentEnv.assign(alias, matchingModuleObj);
-    }
+    } else this.currentEnv.assign(alias, module);
   }
 
   private async executeSay(stmt: SayStatement): Promise<void> {
@@ -338,17 +390,15 @@ export class Interpreter {
     }
 
     for (let i = 0; i < count; i++) {
-      for (const s of stmt.body) {
-        await this.executeStatement(s);
-      }
+      try { for (const s of stmt.body) await this.executeStatement(s); }
+      catch (signal) { if (signal instanceof BreakSignal) break; if (signal instanceof ContinueSignal) continue; throw signal; }
     }
   }
 
   private async executeRepeatWhile(stmt: RepeatWhileStatement): Promise<void> {
     while (plainToBoolean(await this.evaluate(stmt.condition))) {
-      for (const s of stmt.body) {
-        await this.executeStatement(s);
-      }
+      try { for (const s of stmt.body) await this.executeStatement(s); }
+      catch (signal) { if (signal instanceof BreakSignal) break; if (signal instanceof ContinueSignal) continue; throw signal; }
     }
   }
 
@@ -368,9 +418,8 @@ export class Interpreter {
 
     for (const item of listVal) {
       this.currentEnv.assign(stmt.itemVariable, item);
-      for (const s of stmt.body) {
-        await this.executeStatement(s);
-      }
+      try { for (const s of stmt.body) await this.executeStatement(s); }
+      catch (signal) { if (signal instanceof BreakSignal) break; if (signal instanceof ContinueSignal) continue; throw signal; }
     }
   }
 
@@ -459,9 +508,9 @@ export class Interpreter {
         return elements;
       }
       case "DictionaryLiteral": {
-        const obj: PlainObject = {};
+      const obj: PlainObject = createPlainObject();
         for (const entry of expr.entries) {
-          obj[entry.key] = await this.evaluate(entry.value);
+          setOwnProperty(obj, entry.key, await this.evaluate(entry.value));
         }
         return obj;
       }
@@ -481,14 +530,14 @@ export class Interpreter {
         }
         if (isPlainObject(target)) {
           const key = plainToString(idxVal);
-          return target[key] ?? null;
+          return getOwnProperty(target, key);
         }
         return null;
       }
       case "MemberAccessExpression": {
         const target = await this.evaluate(expr.object);
         if (isPlainObject(target)) {
-          return target[expr.property] ?? null;
+          return getOwnProperty(target, expr.property);
         }
         return null;
       }
@@ -682,7 +731,8 @@ export class Interpreter {
     }
 
     // User-Defined Function
-    if (calleeVal.body) {
+    const body = calleeVal.body;
+    if (body) {
       const callEnv = new Environment(calleeVal.closure || this.globalEnv);
 
       // Bind parameters
@@ -692,22 +742,17 @@ export class Interpreter {
         callEnv.define(paramName, argVal);
       }
 
-      const previousEnv = this.currentEnv;
-      this.currentEnv = callEnv;
-
-      try {
-        for (const s of calleeVal.body) {
+      return this.executionEnv.run(callEnv, async () => {
+        for (const s of body) {
           await this.executeStatement(s);
         }
         return null;
-      } catch (signal) {
+      }).catch((signal: unknown) => {
         if (signal instanceof ReturnSignal) {
           return signal.value;
         }
         throw signal;
-      } finally {
-        this.currentEnv = previousEnv;
-      }
+      });
     }
 
     return null;

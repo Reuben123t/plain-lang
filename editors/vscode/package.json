@@ -1,7 +1,7 @@
 {
   "name": "plain-language-support",
   "displayName": "PLAIN Language",
-  "description": "Rich language support for PLAIN (.plain): syntax highlighting, IntelliSense, hover docs, linter, snippets, and integrated runner.",
+  "description": "Syntax highlighting, parser diagnostics, builtin documentation, same-document navigation, formatting, and explicit CLI tasks for PLAIN.",
   "version": "1.3.0",
   "publisher": "plain-lang",
   "icon": "icons/icon.png",
@@ -11,35 +11,35 @@
   },
   "license": "MIT",
   "engines": {
-    "vscode": "^1.75.0"
+    "vscode": "^1.85.0"
   },
-  "categories": [
-    "Programming Languages",
-    "Snippets",
-    "Linters"
-  ],
-  "keywords": [
-    "plain",
-    "cybersecurity",
-    "ai",
-    "programming-language",
-    "runner"
-  ],
+  "categories": ["Programming Languages", "Snippets", "Linters"],
+  "keywords": ["plain", "programming-language", "runner"],
   "main": "./dist/extension.js",
-  "activationEvents": [
-    "onLanguage:plain"
-  ],
+  "extensionKind": ["workspace"],
+  "activationEvents": ["onLanguage:plain"],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "Static language features work in Restricted Mode. Running files, the REPL, scans, and the native IDE requires a trusted workspace.",
+      "restrictedConfigurations": [
+        "plain.executablePath",
+        "plain.executableArguments",
+        "plain.workingDirectory",
+        "plain.nativeIdePath"
+      ]
+    },
+    "virtualWorkspaces": {
+      "supported": "limited",
+      "description": "Static language features support virtual documents. CLI tasks require a file on the extension host's filesystem."
+    }
+  },
   "contributes": {
     "languages": [
       {
         "id": "plain",
-        "aliases": [
-          "PLAIN",
-          "plain"
-        ],
-        "extensions": [
-          ".plain"
-        ],
+        "aliases": ["PLAIN", "plain"],
+        "extensions": [".plain"],
         "configuration": "./language-configuration.json",
         "icon": {
           "light": "./icons/plain-file.png",
@@ -55,55 +55,72 @@
       }
     ],
     "snippets": [
-      {
-        "language": "plain",
-        "path": "./snippets/plain.json"
-      }
+      { "language": "plain", "path": "./snippets/plain.json" }
     ],
     "commands": [
       {
         "command": "plain.runFile",
-        "title": "Run PLAIN File",
-        "icon": "$(play)"
+        "title": "Run File",
+        "category": "PLAIN",
+        "icon": "$(play)",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "plain.startRepl",
-        "title": "Start PLAIN Interactive REPL",
-        "icon": "$(terminal)"
+        "title": "Start Interactive REPL",
+        "category": "PLAIN",
+        "icon": "$(terminal)",
+        "enablement": "isWorkspaceTrusted"
+      },
+      {
+        "command": "plain.stopRepl",
+        "title": "Stop Interactive REPL",
+        "category": "PLAIN",
+        "icon": "$(debug-stop)"
       },
       {
         "command": "plain.openInIde",
-        "title": "Open in PLAIN Code Studio (Native IDE)",
-        "icon": "$(window)"
+        "title": "Open in Native IDE (Windows)",
+        "category": "PLAIN",
+        "icon": "$(window)",
+        "enablement": "isWorkspaceTrusted && isWindows && !remoteName"
       },
       {
         "command": "plain.runCyberScan",
-        "title": "Run PLAIN Cybersecurity Audit",
-        "icon": "$(shield)"
+        "title": "Run Explicit TCP Port Scan",
+        "category": "PLAIN",
+        "icon": "$(shield)",
+        "enablement": "isWorkspaceTrusted"
       },
       {
         "command": "plain.showDocs",
-        "title": "Open PLAIN Language Documentation",
+        "title": "Open Language Documentation",
+        "category": "PLAIN",
         "icon": "$(book)"
+      },
+      {
+        "command": "plain.showMenu",
+        "title": "Show Language Actions",
+        "category": "PLAIN"
       }
     ],
     "menus": {
       "editor/title": [
         {
           "command": "plain.runFile",
-          "when": "resourceExtname == .plain",
+          "when": "editorLangId == plain && isWorkspaceTrusted",
           "group": "navigation"
         }
       ],
       "editor/context": [
         {
           "command": "plain.runFile",
-          "when": "resourceExtname == .plain",
+          "when": "editorLangId == plain && isWorkspaceTrusted",
           "group": "1_run"
         },
         {
           "command": "plain.openInIde",
-          "when": "resourceExtname == .plain",
+          "when": "editorLangId == plain && isWorkspaceTrusted && isWindows && !remoteName",
           "group": "1_run"
         }
       ]
@@ -112,12 +129,64 @@
       {
         "command": "plain.runFile",
         "key": "f5",
-        "when": "editorTextFocus && editorLangId == plain"
+        "when": "editorTextFocus && editorLangId == plain && isWorkspaceTrusted"
       }
-    ]
+    ],
+    "configuration": {
+      "title": "PLAIN",
+      "properties": {
+        "plain.executablePath": {
+          "type": "string",
+          "default": "plain",
+          "minLength": 1,
+          "scope": "machine-overridable",
+          "markdownDescription": "PLAIN executable (a single path, not a shell command). For a Node installation on Windows, use `node` here and put the absolute path to `bin/plain.js` in `plain.executableArguments`; `.cmd`/`.bat` wrappers are not used."
+        },
+        "plain.executableArguments": {
+          "type": "array",
+          "items": { "type": "string" },
+          "default": [],
+          "scope": "machine-overridable",
+          "description": "Arguments placed before the CLI subcommand, passed directly as an argument array. For example, the absolute path to bin/plain.js when the executable is node."
+        },
+        "plain.workingDirectory": {
+          "type": "string",
+          "default": "",
+          "scope": "resource",
+          "markdownDescription": "Working directory for CLI tasks. Empty uses the active file's workspace folder, then its directory. REPL/scan tasks use the active workspace folder. Supports `${workspaceFolder}` and `${fileDirname}`; other substitutions are rejected. Relative paths are resolved against the same default directory."
+        },
+        "plain.nativeIdePath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine-overridable",
+          "description": "Absolute path to plain-ide.exe on local Windows. Empty uses LOCALAPPDATA/PLAIN/bin/plain-ide.exe. Not available in remote extension hosts."
+        },
+        "plain.diagnostics.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Show static lexer/parser diagnostics. This never runs code or loads imported files."
+        },
+        "plain.diagnostics.debounceMs": {
+          "type": "integer",
+          "default": 250,
+          "minimum": 0,
+          "maximum": 2000,
+          "scope": "resource",
+          "description": "Delay after editing before refreshing parser diagnostics. Interactive language queries analyze the current document version on demand."
+        },
+        "plain.formatting.enabled": {
+          "type": "boolean",
+          "default": true,
+          "scope": "resource",
+          "description": "Enable the shared conservative PLAIN formatter. Uses editor tab size and insert-spaces options, preserving newline style."
+        }
+      }
+    }
   },
   "scripts": {
-    "vscode:prepublish": "npx esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node",
-    "compile": "npx esbuild src/extension.ts --bundle --outfile=dist/extension.js --external:vscode --format=cjs --platform=node"
+    "vscode:prepublish": "npm run compile",
+    "compile": "node ../../scripts/build-vscode.cjs",
+    "typecheck": "node ../../node_modules/typescript/bin/tsc --project tsconfig.json"
   }
 }

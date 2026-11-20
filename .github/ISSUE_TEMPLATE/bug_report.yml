@@ -1,0 +1,66 @@
+name: Bug report
+description: Report a reproducible problem with PLAIN source or tooling.
+title: "[Bug]: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve PLAIN. Include a small reproduction without secrets or personal data.
+        For a possible vulnerability, follow SECURITY.md instead of posting exploit details here.
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: Include OS, Node/npm versions, runtime/editor version or source commit, and how you built or installed it.
+      placeholder: "Windows / macOS / Linux; node --version; npm --version; source checkout or artifact name"
+    validations:
+      required: true
+  - type: dropdown
+    id: profile
+    attributes:
+      label: Where does it happen?
+      options:
+        - Node CLI / REPL
+        - Static browser Worker playground
+        - Node-backed local IDE / playground
+        - VS Code extension
+        - Native Windows artifact
+        - Build / packaging / documentation
+    validations:
+      required: true
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Minimal reproduction
+      description: Include the smallest .plain program, exact command, and steps. Use local fixtures, not a live external target.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior and diagnostics
+      description: Include the exit status and relevant stdout/stderr. Redact credentials and personal paths.
+      render: text
+    validations:
+      required: true
+  - type: textarea
+    id: regression
+    attributes:
+      label: Regression or additional context
+      description: If known, identify a working version/commit and what changed. Do not guess a release version.
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I searched existing issues and checked the current documentation.
+          required: true
+        - label: This report contains no secrets, private data, or security exploit details.
+          required: true

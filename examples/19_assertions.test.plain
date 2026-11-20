@@ -1,0 +1,11 @@
+# Run: plain test examples/19_assertions.test.plain
+# Program output: Assertions passed (the test runner also reports its result).
+
+def double_value(number):
+    return number * 2
+end
+
+assert(double_value(3) == 6)
+assert_equal(average([2, 4, 6]), 4)
+assert_not_equal("red", "blue")
+say "Assertions passed"

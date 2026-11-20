@@ -59,12 +59,17 @@ export enum TokenType {
   Import = "Import",
   Def = "Def",
   Return = "Return",
+  Break = "Break",
+  Continue = "Continue",
 
   // Symbols
   PlusEqual = "PlusEqual",       // +=
   MinusEqual = "MinusEqual",     // -=
   StarEqual = "StarEqual",       // *=
   SlashEqual = "SlashEqual",     // /=
+  PercentEqual = "PercentEqual", // %=
+  StarStarEqual = "StarStarEqual", // **=
+  SlashSlashEqual = "SlashSlashEqual", // //=
   StarStar = "StarStar",         // **
   SlashSlash = "SlashSlash",     // //
   Colon = "Colon",               // :

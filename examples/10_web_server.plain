@@ -1,5 +1,6 @@
-# Web Development in PLAIN
-# Demonstrates HTML generation, responsive pages, and HTTP templates.
+# Opt-in Node HTML generation; this example does not start a web server.
+# Writes student_portal.html beside the script and replaces an existing file.
+# Run a copy in a disposable directory; template input below is trusted text.
 
 say "=== PLAIN Web Development Suite ==="
 

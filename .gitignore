@@ -1,6 +1,10 @@
 # Dependencies
 node_modules/
-package-lock.json
+
+# Local agent state and generated delivery files
+.zcode/
+.artifacts/
+*.tgz
 
 # Large binaries (hosted on GitHub Releases)
 dist/*.exe

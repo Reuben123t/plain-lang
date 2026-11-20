@@ -1,204 +1,152 @@
-# Getting Started with PLAIN
+# Getting started
 
-Welcome to **PLAIN**, a programming language designed to read and feel like clear, everyday English instructions.
+## Requirements and installation
 
-Whether you have never written a line of code in your life or you want a language that anyone on your team can read at a glance, this guide will get you up and running in under five minutes.
+Install Node.js **22 or newer**, with npm, and obtain a source checkout of this repository. Node 22 and 24 are the CI targets on Windows, macOS, and Linux. Run these commands from the repository directory:
 
----
-
-## 1. Installation
-
-### Option 1: Standalone Windows Executable (`plain.exe`) — No Setup Required!
-Download and run directly without installing Node.js or npm:
-- [**Download plain.exe**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe)
-- [**Download plain-windows-x64.zip**](https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain-windows-x64.zip)
-
-Or download via terminal:
-```powershell
-curl.exe -fSLo plain.exe https://github.com/Reuben123t/plain-lang/releases/download/v1.0.0/plain.exe
-.\plain.exe
-```
-
-### Option 2: Automatic 1-Line Terminal Install (Recommended)
-
-**Windows (PowerShell):**
-```powershell
-irm https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.ps1 | iex
-```
-
-**macOS / Linux:**
-```bash
-curl -fsSL https://raw.githubusercontent.com/Reuben123t/plain-lang/main/install.sh | bash
-```
-
-**Universal via NPM:**
-```bash
-npm install -g https://github.com/Reuben123t/plain-lang/archive/refs/heads/main.tar.gz
-```
-
-### Option 3: Clone & Build Manually from GitHub
-```bash
-git clone https://github.com/Reuben123t/plain-lang.git
-cd plain-lang
-npm install
+```sh
+npm ci
 npm run build
-npm link
-```
-Now the `plain` command is available everywhere in your terminal!
-
-### Option C: Run Directly with NPX (No installation required)
-```bash
-npx plain-lang run my_program.plain
+node bin/plain.js --version
+node bin/plain.js examples/01_hello.plain
 ```
 
----
+`npm ci` uses the committed lockfile. `npm run build` compiles the source. The last command prints `Hello, world!`.
 
-## 2. Your Very First Program
+The current runtime manifest says `1.2.0`; the editor extension has its own `1.3.0` version. This guide also describes Unreleased source changes. It does not establish that either package is available from npm, a Marketplace, or a particular release download.
 
-1. Create a file named `hello.plain`:
+You can use the checkout without `npm link`, a global install, or a downloaded executable. In all commands below, `node bin/plain.js` means the CLI from the checkout. If you deliberately install/link a build, `plain` is the corresponding shorter command.
+
+## Write and run a file
+
+Create `hello.plain` in the repository directory:
+
 ```plain
-say "Hello, world!"
+set visitor to "Ada"
+say "Hello, " plus visitor
 ```
 
-2. Run it in your terminal:
-```bash
-plain hello.plain
+Run it and check its syntax:
+
+```sh
+node bin/plain.js run hello.plain
+node bin/plain.js check hello.plain
+node bin/plain.js check hello.plain --json
 ```
 
-You should see:
-```text
-Hello, world!
-```
-
----
-
-## 3. Interactive REPL
-
-Want to try instructions one line at a time? Start the interactive shell:
-```bash
-plain repl
-```
-Or simply:
-```bash
-plain
-```
-
-You will see:
-```text
-plain> set name to "Alex"
-plain> say "Welcome, " plus name
-Welcome, Alex
-plain> 10 plus 25 times 2
-=> 60
-plain> exit
-```
-
----
-
-## 4. Visual Web Playground
-
-If you prefer a visual code editor with a built-in terminal:
-```bash
-plain playground
-```
-This starts a local web server at `http://localhost:3000` where you can write code, select preset examples, and run programs in your web browser.
-
----
-
-## 5. Core Concepts in 3 Minutes
-
-### Variables
-Store information using `set <name> to <value>`:
-```plain
-set username to "Sam"
-set score to 100
-set is_active to true
-```
-
-### Asking the User for Input
-```plain
-ask "What is your name?" and save as name
-say "Nice to meet you, " plus name
-```
-
-### Conditions (Making Decisions)
-```plain
-set age to 16
-
-if age is at least 18 then
-    say "You are an adult."
-otherwise if age is at least 13 then
-    say "You are a teenager."
-otherwise
-    say "You are a child."
-end
-```
-
-### Repeating Things (Loops)
-```plain
-# Repeat a set number of times
-repeat 3 times
-    say "Hip hip hooray!"
-end
-
-# Repeat while something is true
-set countdown to 3
-repeat while countdown is greater than 0
-    say countdown
-    set countdown to countdown minus 1
-end
-say "Blast off!"
-```
-
-### Lists of Items
-```plain
-set fruits to ["apple", "banana", "cherry"]
-
-# 1-based indexing: item 1 is the first item
-say "First fruit: " plus first(fruits)
-say "Second fruit: " plus item 2 of fruits
-
-add "date" to fruits
-remove "banana" from fruits
-
-for each fruit in fruits
-    say "- " plus fruit
-end
-```
-
-### Custom Functions
-```plain
-to double number
-    give back number times 2
-end
-
-to add first and second
-    give back first plus second
-end
-
-say double 10
-say add 4 and 6
-```
-
----
-
-## 6. Helpful Error Messages
-
-When something goes wrong, PLAIN does not give you cryptic computer jargon. It points out what happened and tells you how to fix it:
+Output from the program:
 
 ```text
-Error at line 4, column 12:
-   4 | set total to first divided by 0
-                          ^
-
-Cannot divide by zero.
-
-Suggestion: Make sure the number you are dividing by is not 0.
+Hello, Ada
 ```
 
----
+`run` is optional: `node bin/plain.js hello.plain` does the same thing. `check` does not execute statements, resolve all runtime names, or validate external files. Its JSON mode is intended for tooling; use the command's exit status as well as its diagnostics.
 
-## 7. VS Code Extension
+## Try a short expression or a REPL
 
-For colorful syntax highlighting in Visual Studio Code, check the `editors/vscode` directory. Copy the folder to `~/.vscode/extensions/plain-language-support` and enjoy beautiful syntax highlighting for all `.plain` files!
+```sh
+node bin/plain.js eval 'say 6 * 7'
+node bin/plain.js repl
+```
 
+The `eval` example prints `42`. The quoting shown works in PowerShell and POSIX shells; in Windows Command Prompt use `node bin/plain.js eval "say 6 * 7"` instead.
+
+In the REPL, enter:
+
+```plain
+set greeting to "Hello"
+say uppercase(greeting)
+```
+
+Use `exit` to leave. Prefer a file for multi-line examples and automated runs. `eval` and the REPL execute code with the same trust requirements as running a file.
+
+## Start a small project
+
+From the repository directory, create a new, unused directory:
+
+```sh
+node bin/plain.js init my-plain-project
+```
+
+Inspect the generated files before changing them. Initialization creates a local starter project; it does not install dependencies from a PLAIN registry or publish anything. The command reports the paths and next steps for the generated project. Existing files must not be silently replaced.
+
+## Format and test
+
+```sh
+node bin/plain.js fmt --check examples/16_control_flow.plain
+node bin/plain.js test examples/19_assertions.test.plain
+```
+
+`fmt --check` checks formatting without writing. To format your own file, use `node bin/plain.js fmt hello.plain`; review its diff afterward. Formatting is conservative and is not a translation from Python to PLAIN.
+
+A small test file can use the registered assertion functions:
+
+```plain
+assert(2 + 2 == 4)
+assert_equal(average([80, 90, 100]), 90)
+assert_not_equal("red", "blue")
+say "Assertions passed"
+```
+
+Save it as `sample.test.plain`, then run `node bin/plain.js test sample.test.plain`. Assertions that fail make the test command fail. Test files execute normally, so use only trusted files and keep their side effects isolated.
+
+## Pass script arguments
+
+Place script arguments **after `--`**:
+
+```sh
+node bin/plain.js run examples/18_script_args.plain -- Ada blue
+```
+
+The script reads them with `args()`. These are script arguments, not options for the PLAIN CLI. The example prints:
+
+```text
+Arguments: 2
+Hello, Ada
+```
+
+Without arguments it prints `Arguments: 0` and `Hello, visitor`.
+
+## Syntax to remember
+
+```plain
+set scores to [80, 90, 100]
+say item 1 of scores
+say scores[0]
+say scores[-1]
+
+def double_value(number):
+    return number * 2
+end
+
+if double_value(4) == 8:
+    say "Ready"
+end
+```
+
+- English and Python-style spellings can be mixed. Python-style blocks still require `end`; indentation alone does not close a block.
+- Keywords, variables, and function names are case-insensitive. Dictionary keys and text are case-sensitive.
+- `item 1 of scores` is 1-based; `scores[0]` is 0-based; negative bracket indices count from the end.
+- `item`, `add`, `from`, and other keywords are not ordinary variable names. Use names such as `entry`, `append_value`, and `source_name`.
+- An entry declaration such as `Set ABC = Main` is not required. Quote text explicitly.
+
+Continue with the [language tour](tutorial.md) and the generated [standard-library catalog](standard-library.md).
+
+## Editors and browser tools
+
+The VS Code extension lives in [`editors/vscode`](../editors/vscode). Follow that directory's build instructions, then install a locally built VSIX with VS Code's **Extensions: Install from VSIX** command. Open only workspaces you trust before running programs. Copying raw TypeScript sources into a user extensions directory is not a substitute for compiling and packaging them.
+
+The static browser playground runs a restricted, pure profile in a Web Worker. Filesystem, subprocess, environment, network, and updater operations are unavailable there. Use a trusted Node session for local scripts requiring those capabilities.
+
+`node bin/plain.js playground` starts a Node-backed local playground. Follow the loopback URL printed by the CLI. Local IDE/playground services execute trusted local code: do not publish them or forward their ports. Stop a local server with Ctrl+C when done. Native desktop availability depends on an explicitly built/installed Windows artifact, not on `npm run build`.
+
+## Troubleshooting
+
+- **Wrong Node version:** check `node --version` and your shell's PATH, then use Node 22 or newer.
+- **Missing `dist` modules:** run `npm ci` followed by `npm run build` in the checkout.
+- **A block consumes following code:** add the matching `end`, including after `def` and `while` blocks.
+- **Unknown function or wrong argument shape:** use the canonical API in [standard-library.md](standard-library.md), not a legacy snippet or a guessed Python name.
+- **Example waits for input or writes files:** consult the [example guide](../examples/README.md) before running it.
+- **Existing executable differs from source:** use the newly built source CLI; native/VSIX releases are separate artifacts.
+
+For development checks, see [CONTRIBUTING.md](../CONTRIBUTING.md). For trust boundaries and vulnerability reports, see [SECURITY.md](../SECURITY.md).

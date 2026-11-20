@@ -1,7 +1,19 @@
 {
   "version": 2,
-  "cleanUrls": true,
+  "cleanUrls": false,
   "trailingSlash": false,
+  "redirects": [
+    {
+      "source": "/docs/getting-started.md",
+      "destination": "/docs/getting-started.html",
+      "permanent": false
+    },
+    {
+      "source": "/docs/tutorial.md",
+      "destination": "/docs/tutorial.html",
+      "permanent": false
+    }
+  ],
   "headers": [
     {
       "source": "/(.*)",

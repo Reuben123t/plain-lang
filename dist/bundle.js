@@ -67,8 +67,10 @@ var init_environment = __esm({
     Environment = class {
       variables = /* @__PURE__ */ new Map();
       parent;
-      constructor(parent) {
+      assignmentBoundary;
+      constructor(parent, assignmentBoundary = false) {
         this.parent = parent;
+        this.assignmentBoundary = assignmentBoundary;
       }
       define(name, value) {
         const key = name.toLowerCase();
@@ -76,22 +78,20 @@ var init_environment = __esm({
       }
       assign(name, value) {
         const key = name.toLowerCase();
-        if (this.variables.has(key)) {
-          this.variables.set(key, value);
-          return;
-        }
-        if (this.parent) {
-          this.parent.assign(name, value);
-          return;
-        }
-        this.variables.set(key, value);
+        const owner = this.findAssignmentOwner(key);
+        (owner || this).variables.set(key, value);
+      }
+      findAssignmentOwner(key) {
+        if (this.variables.has(key)) return this;
+        if (this.assignmentBoundary) return void 0;
+        return this.parent?.findAssignmentOwner(key);
       }
       lookup(name, location, sourceCode) {
         const key = name.toLowerCase();
         if (this.variables.has(key)) {
           return this.variables.get(key);
         }
-        if (this.parent) {
+        if (this.parent?.has(name)) {
           return this.parent.lookup(name, location, sourceCode);
         }
         const available = this.getAllVariableNames();
@@ -111,6 +111,9 @@ var init_environment = __esm({
         const key = name.toLowerCase();
         if (this.variables.has(key)) return true;
         return this.parent ? this.parent.has(name) : false;
+      }
+      getOwnVariableNames() {
+        return Array.from(this.variables.keys());
       }
       getAllVariableNames() {
         const names = /* @__PURE__ */ new Set();
@@ -161,10 +164,25 @@ var init_environment = __esm({
 
 // src/runtime/values.ts
 function isPlainObject(val) {
-  return typeof val === "object" && val !== null && !Array.isArray(val) && val.type !== "function";
+  return typeof val === "object" && val !== null && !Array.isArray(val) && !isPlainFunction(val);
+}
+function hasOwnProperty(value, key) {
+  return Object.prototype.hasOwnProperty.call(value, key);
+}
+function createPlainObject() {
+  return /* @__PURE__ */ Object.create(null);
+}
+function getOwnProperty(value, key) {
+  return hasOwnProperty(value, key) ? value[key] ?? null : null;
+}
+function setOwnProperty(value, key, item) {
+  Object.defineProperty(value, key, { value: item, enumerable: true, configurable: true, writable: true });
 }
 function isPlainFunction(val) {
-  return typeof val === "object" && val !== null && val.type === "function";
+  if (typeof val !== "object" || val === null || Array.isArray(val)) return false;
+  const fn = val;
+  if (!hasOwnProperty(val, "type") || fn.type !== "function" || !hasOwnProperty(val, "name") || typeof fn.name !== "string" || !hasOwnProperty(val, "parameters") || !Array.isArray(fn.parameters) || !fn.parameters.every((parameter) => typeof parameter === "string")) return false;
+  return hasOwnProperty(val, "nativeFn") && typeof fn.nativeFn === "function" || hasOwnProperty(val, "body") && Array.isArray(fn.body) && hasOwnProperty(val, "closure") && fn.closure instanceof Environment;
 }
 function plainToString(value) {
   if (value === null || value === void 0) {
@@ -210,6 +228,8 @@ function plainToBoolean(value) {
 var init_values = __esm({
   "src/runtime/values.ts"() {
     "use strict";
+    init_environment();
+    init_plain_error();
   }
 });
 
@@ -630,6 +650,40 @@ var init_list = __esm({
         }
         return res;
       },
+      enumerate: (val) => ensureList(val, "enumerate").map((item, index) => [index + 1, item]),
+      rotate: (val, placesVal = 1) => {
+        const list = [...ensureList(val, "rotate")];
+        if (!list.length) return list;
+        const places = Math.trunc(mathBuiltins.to_number(placesVal));
+        const offset = (places % list.length + list.length) % list.length;
+        return [...list.slice(offset), ...list.slice(0, offset)];
+      },
+      adjacent_pairs: (val) => {
+        const list = ensureList(val, "adjacent_pairs");
+        return list.slice(0, -1).map((item, index) => [item, list[index + 1]]);
+      },
+      interleave: (leftVal, rightVal) => {
+        const left = ensureList(leftVal, "interleave");
+        const right = ensureList(rightVal, "interleave");
+        const result = [];
+        for (let index = 0; index < Math.max(left.length, right.length); index++) {
+          if (index < left.length) result.push(left[index]);
+          if (index < right.length) result.push(right[index]);
+        }
+        return result;
+      },
+      group_by: (val, keyVal) => {
+        const list = ensureList(val, "group_by");
+        const keyName = plainToString(keyVal);
+        const groups = createPlainObject();
+        for (const item of list) {
+          const key = isPlainObject(item) ? plainToString(item[keyName] ?? null) : "nothing";
+          const group = groups[key];
+          if (Array.isArray(group)) group.push(item);
+          else setOwnProperty(groups, key, [item]);
+        }
+        return groups;
+      },
       intersection: (listAVal, listBVal) => {
         const a = ensureList(listAVal, "intersection");
         const b = ensureList(listBVal, "intersection");
@@ -697,13 +751,23 @@ var init_list = __esm({
       },
       fill_list: (val, countVal) => {
         const count = Math.max(0, Math.round(mathBuiltins.to_number(countVal)));
+        if (!Number.isFinite(count) || count > 1e6) {
+          throw new PlainError("List size must be a finite number no larger than 1000000.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
         return new Array(count).fill(val);
       },
       range_list: (startVal, endVal, stepVal) => {
         const start = mathBuiltins.to_number(startVal);
         const end = mathBuiltins.to_number(endVal);
-        const step = stepVal ? mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
+        const step = stepVal !== void 0 ? mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
         if (step === 0) throw new PlainError("Step cannot be zero in range.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+        if (![start, end, step].every(Number.isFinite)) {
+          throw new PlainError("Range bounds and step must be finite numbers.", { line: 1, column: 1 }, { kind: "TypeError" });
+        }
+        const length = Math.floor((end - start) / step) + 1;
+        if (length > 1e6 || start !== end && start + step === start) {
+          throw new PlainError("Range is too large; use a loop or a larger step.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+        }
         const res = [];
         if (step > 0) {
           for (let i = start; i <= end; i += step) res.push(i);
@@ -849,11 +913,23 @@ var init_time = __esm({
 });
 
 // src/builtins/text.ts
+function encodeBase64Utf8(text) {
+  const bytes = new TextEncoder().encode(text);
+  let binary = "";
+  for (let offset = 0; offset < bytes.length; offset += 32768) binary += String.fromCharCode(...bytes.subarray(offset, offset + 32768));
+  return btoa(binary);
+}
+function decodeBase64Utf8(encoded) {
+  const binary = atob(encoded);
+  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0));
+  return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+}
 var textBuiltins;
 var init_text = __esm({
   "src/builtins/text.ts"() {
     "use strict";
     init_values();
+    init_plain_error();
     init_math();
     textBuiltins = {
       str: (val) => {
@@ -1061,14 +1137,61 @@ var init_text = __esm({
         return res;
       },
       base64_encode: (target) => {
-        return Buffer.from(plainToString(target), "utf-8").toString("base64");
+        return encodeBase64Utf8(plainToString(target));
       },
       base64_decode: (target) => {
-        return Buffer.from(plainToString(target), "base64").toString("utf-8");
+        return decodeBase64Utf8(plainToString(target));
       },
       slugify: (target) => {
         return plainToString(target).toLowerCase().trim().replace(/[^\w\s-]/g, "").replace(/[\s_-]+/g, "-").replace(/^-+|-+$/g, "");
-      }
+      },
+      normalize_whitespace: (target) => plainToString(target).trim().replace(/\s+/g, " "),
+      truncate_text: (target, lengthVal, suffixVal = "\u2026") => {
+        const text = Array.from(plainToString(target));
+        const limit = Math.trunc(mathBuiltins.to_number(lengthVal));
+        if (limit < 0 || !Number.isFinite(limit)) throw new PlainError("Text length must be a finite nonnegative number.", { line: 1, column: 1 }, { kind: "TypeError" });
+        if (text.length <= limit) return text.join("");
+        const suffix = Array.from(plainToString(suffixVal));
+        if (limit <= suffix.length) return suffix.slice(0, limit).join("");
+        return text.slice(0, limit - suffix.length).join("") + suffix.join("");
+      },
+      count_substring: (target, needleVal) => {
+        const text = plainToString(target);
+        const needle = plainToString(needleVal);
+        if (!needle) return 0;
+        let count = 0;
+        let offset = 0;
+        while ((offset = text.indexOf(needle, offset)) !== -1) {
+          count++;
+          offset += needle.length;
+        }
+        return count;
+      },
+      strip_prefix: (target, prefixVal) => {
+        const text = plainToString(target);
+        const prefix = plainToString(prefixVal);
+        return prefix && text.startsWith(prefix) ? text.slice(prefix.length) : text;
+      },
+      strip_suffix: (target, suffixVal) => {
+        const text = plainToString(target);
+        const suffix = plainToString(suffixVal);
+        return suffix && text.endsWith(suffix) ? text.slice(0, -suffix.length) : text;
+      },
+      remove_punctuation: (target) => plainToString(target).replace(/[\p{P}\p{S}]/gu, ""),
+      escape_html: (target) => plainToString(target).replace(/[&<>"']/g, (char) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+      })[char]),
+      unescape_html: (target) => plainToString(target).replace(/&(?:amp|lt|gt|quot|#39);/g, (entity) => ({
+        "&amp;": "&",
+        "&lt;": "<",
+        "&gt;": ">",
+        "&quot;": '"',
+        "&#39;": "'"
+      })[entity])
     };
   }
 });
@@ -3048,16 +3171,41 @@ var init_file = __esm({
       constructor(baseDir) {
         this.baseDir = path4.resolve(baseDir || process.cwd());
       }
-      resolveSafePath(filePath) {
+      resolvePath(filePath) {
         const resolved = path4.resolve(this.baseDir, filePath);
-        const relative3 = path4.relative(this.baseDir, resolved);
-        if (relative3.startsWith("..") && !path4.isAbsolute(relative3)) {
+        const isContained = (root, candidate) => {
+          const relative4 = path4.relative(root, candidate);
+          return relative4 !== ".." && !relative4.startsWith(`..${path4.sep}`) && !path4.isAbsolute(relative4);
+        };
+        const realPath = (candidate) => {
+          let ancestor = candidate;
+          const suffix = [];
+          while (!fs4.existsSync(ancestor)) {
+            try {
+              if (fs4.lstatSync(ancestor).isSymbolicLink()) {
+                throw new Error("Cannot access a dangling symbolic link.");
+              }
+            } catch (error) {
+              if (error.code !== "ENOENT") throw error;
+            }
+            const parent = path4.dirname(ancestor);
+            if (parent === ancestor) break;
+            suffix.unshift(path4.basename(ancestor));
+            ancestor = parent;
+          }
+          return path4.resolve(fs4.realpathSync(ancestor), ...suffix);
+        };
+        try {
+          if (!isContained(this.baseDir, resolved) || !isContained(realPath(this.baseDir), realPath(resolved))) {
+            throw new Error("Path is outside the project folder.");
+          }
+        } catch {
           throw new PlainError(
             `Access to file outside the project folder is not allowed: "${filePath}".`,
             { line: 1, column: 1 },
             {
               kind: "RuntimeError",
-              suggestion: "Save and read files inside your project directory."
+              suggestion: "Save and read files inside your project directory; symbolic links must stay inside it."
             }
           );
         }
@@ -3065,7 +3213,7 @@ var init_file = __esm({
       }
       readFile(filePathVal) {
         const rawPath = plainToString(filePathVal);
-        const safePath = this.resolveSafePath(rawPath);
+        const safePath = this.resolvePath(rawPath);
         if (!fs4.existsSync(safePath)) {
           throw new PlainError(
             `File not found: "${rawPath}".`,
@@ -3088,7 +3236,7 @@ var init_file = __esm({
       }
       writeFile(filePathVal, contentVal) {
         const rawPath = plainToString(filePathVal);
-        const safePath = this.resolveSafePath(rawPath);
+        const safePath = this.resolvePath(rawPath);
         const content = plainToString(contentVal);
         try {
           const dir = path4.dirname(safePath);
@@ -3107,7 +3255,7 @@ var init_file = __esm({
       fileExists(filePathVal) {
         const rawPath = plainToString(filePathVal);
         try {
-          const safePath = this.resolveSafePath(rawPath);
+          const safePath = this.resolvePath(rawPath);
           return fs4.existsSync(safePath) && fs4.statSync(safePath).isFile();
         } catch {
           return false;
@@ -3115,7 +3263,7 @@ var init_file = __esm({
       }
       appendFile(filePathVal, contentVal) {
         const rawPath = plainToString(filePathVal);
-        const safePath = this.resolveSafePath(rawPath);
+        const safePath = this.resolvePath(rawPath);
         const content = plainToString(contentVal);
         try {
           const dir = path4.dirname(safePath);
@@ -3133,7 +3281,7 @@ var init_file = __esm({
       }
       deleteFile(filePathVal) {
         const rawPath = plainToString(filePathVal);
-        const safePath = this.resolveSafePath(rawPath);
+        const safePath = this.resolvePath(rawPath);
         if (!fs4.existsSync(safePath)) {
           return false;
         }
@@ -3150,7 +3298,7 @@ var init_file = __esm({
       }
       listFiles(dirPathVal) {
         const rawDir = dirPathVal !== void 0 ? plainToString(dirPathVal) : ".";
-        const safeDir = this.resolveSafePath(rawDir);
+        const safeDir = this.resolvePath(rawDir);
         if (!fs4.existsSync(safeDir)) {
           throw new PlainError(
             `Folder not found: "${rawDir}".`,
@@ -3170,7 +3318,7 @@ var init_file = __esm({
       }
       fileSize(filePathVal) {
         const rawPath = plainToString(filePathVal);
-        const safePath = this.resolveSafePath(rawPath);
+        const safePath = this.resolvePath(rawPath);
         if (!fs4.existsSync(safePath)) {
           throw new PlainError(
             `File not found: "${rawPath}".`,
@@ -3182,7 +3330,7 @@ var init_file = __esm({
       }
       createFolder(dirPathVal) {
         const rawDir = plainToString(dirPathVal);
-        const safeDir = this.resolveSafePath(rawDir);
+        const safeDir = this.resolvePath(rawDir);
         try {
           if (!fs4.existsSync(safeDir)) {
             fs4.mkdirSync(safeDir, { recursive: true });
@@ -3198,7 +3346,7 @@ var init_file = __esm({
       folderExists(dirPathVal) {
         const rawDir = plainToString(dirPathVal);
         try {
-          const safeDir = this.resolveSafePath(rawDir);
+          const safeDir = this.resolvePath(rawDir);
           return fs4.existsSync(safeDir) && fs4.statSync(safeDir).isDirectory();
         } catch {
           return false;
@@ -3209,10 +3357,28 @@ var init_file = __esm({
 });
 
 // src/builtins/ai_training.ts
-var NeuralNetwork, PRELOADED_DATASETS, aiTrainingBuiltins;
+function validateNetworkVector(value, size, name) {
+  if (!Array.isArray(value)) {
+    throw new Error(`${name} must be an array of ${size} finite numbers.`);
+  }
+  if (value.length !== size) {
+    throw new Error(`${name} must contain ${size} values; received ${value.length}.`);
+  }
+  for (let i = 0; i < value.length; i++) {
+    if (typeof value[i] !== "number" || !Number.isFinite(value[i])) {
+      throw new Error(`${name}[${i}] must be a finite number.`);
+    }
+  }
+}
+var MAX_NETWORK_LAYERS, MAX_LAYER_SIZE, MAX_NETWORK_PARAMETERS, NETWORK_ACTIVATIONS, TRAINING_NUMERIC_ERROR, NeuralNetwork, PRELOADED_DATASETS, aiTrainingBuiltins;
 var init_ai_training = __esm({
   "src/builtins/ai_training.ts"() {
     "use strict";
+    MAX_NETWORK_LAYERS = 128;
+    MAX_LAYER_SIZE = 1e4;
+    MAX_NETWORK_PARAMETERS = 1e6;
+    NETWORK_ACTIVATIONS = ["sigmoid", "relu", "leaky_relu", "tanh", "softmax"];
+    TRAINING_NUMERIC_ERROR = "Neural network training produced a non-finite value. Scale the data or reduce the learning rate.";
     NeuralNetwork = class {
       layerSizes;
       weights;
@@ -3221,7 +3387,30 @@ var init_ai_training = __esm({
       // biases[layer][toNode]
       activation;
       constructor(layerSizes, activation = "sigmoid") {
-        this.layerSizes = layerSizes;
+        if (!Array.isArray(layerSizes) || layerSizes.length < 2) {
+          throw new Error("Neural network layers must be an array with at least 2 layers (input and output).");
+        }
+        if (layerSizes.length > MAX_NETWORK_LAYERS) {
+          throw new Error(`Neural networks support at most ${MAX_NETWORK_LAYERS} layers.`);
+        }
+        let parameterCount = 0;
+        for (let i = 0; i < layerSizes.length; i++) {
+          const size = layerSizes[i];
+          if (!Number.isSafeInteger(size) || size <= 0) {
+            throw new Error(`Neural network layer ${i + 1} must have a positive integer size.`);
+          }
+          if (size > MAX_LAYER_SIZE) {
+            throw new Error(`Neural network layer ${i + 1} exceeds the limit of ${MAX_LAYER_SIZE} nodes.`);
+          }
+          if (i > 0) parameterCount += layerSizes[i - 1] * size + size;
+          if (parameterCount > MAX_NETWORK_PARAMETERS) {
+            throw new Error(`Neural network exceeds the allocation limit of ${MAX_NETWORK_PARAMETERS} weights and biases.`);
+          }
+        }
+        if (!NETWORK_ACTIVATIONS.includes(activation)) {
+          throw new Error(`Unsupported neural network activation '${String(activation)}'. Use ${NETWORK_ACTIVATIONS.join(", ")}.`);
+        }
+        this.layerSizes = [...layerSizes];
         this.activation = activation;
         this.weights = [];
         this.biases = [];
@@ -3270,6 +3459,7 @@ var init_ai_training = __esm({
         }
       }
       forward(input) {
+        validateNetworkVector(input, this.layerSizes[0], "Network input");
         let current = [...input];
         const activations = [current];
         const zValues = [];
@@ -3281,6 +3471,9 @@ var init_ai_training = __esm({
             let z = this.biases[l][j];
             for (let k = 0; k < current.length; k++) {
               z += this.weights[l][j][k] * current[k];
+            }
+            if (!Number.isFinite(z)) {
+              throw new Error("Neural network forward pass produced a non-finite value. Check the weights and scale the input data.");
             }
             zLayer.push(z);
             next.push(this.activate(z));
@@ -3303,6 +3496,26 @@ var init_ai_training = __esm({
         return this.forward(input).activations[this.weights.length];
       }
       train(dataset, epochs = 100, learningRate = 0.1, batchSize = 16) {
+        if (!Number.isSafeInteger(epochs) || epochs <= 0) {
+          throw new Error("Training epochs must be a positive integer.");
+        }
+        if (typeof learningRate !== "number" || !Number.isFinite(learningRate) || learningRate <= 0) {
+          throw new Error("Training learning rate must be a positive finite number.");
+        }
+        if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+          throw new Error("Training batch size must be a positive integer.");
+        }
+        if (!Array.isArray(dataset) || dataset.length === 0) {
+          throw new Error("Training dataset must be a non-empty array of {input, output} records.");
+        }
+        for (let i = 0; i < dataset.length; i++) {
+          const sample = dataset[i];
+          if (!sample || typeof sample !== "object" || Array.isArray(sample)) {
+            throw new Error(`Training sample ${i + 1} must be an {input, output} record.`);
+          }
+          validateNetworkVector(sample.input, this.layerSizes[0], `Training sample ${i + 1} input`);
+          validateNetworkVector(sample.output, this.layerSizes[this.layerSizes.length - 1], `Training sample ${i + 1} output`);
+        }
         const lossHistory = [];
         for (let epoch = 0; epoch < epochs; epoch++) {
           let epochLoss = 0;
@@ -3313,11 +3526,20 @@ var init_ai_training = __esm({
             const output = activations[L];
             const deltas = [];
             const outputDeltas = [];
-            for (let j = 0; j < output.length; j++) {
-              const target = sample.output[j] ?? 0;
-              const diff = output[j] - target;
+            const differences = output.map((value, j) => value - sample.output[j]);
+            for (const diff of differences) {
               epochLoss += 0.5 * diff * diff;
-              outputDeltas.push(diff * this.activatePrime(output[j]));
+            }
+            if (!Number.isFinite(epochLoss)) throw new Error(TRAINING_NUMERIC_ERROR);
+            if (this.activation === "softmax" && output.length > 1) {
+              const weightedError = differences.reduce((sum, diff, j) => sum + diff * output[j], 0);
+              for (let j = 0; j < output.length; j++) {
+                outputDeltas.push(output[j] * (differences[j] - weightedError));
+              }
+            } else {
+              for (let j = 0; j < output.length; j++) {
+                outputDeltas.push(differences[j] * this.activatePrime(output[j]));
+              }
             }
             deltas[L - 1] = outputDeltas;
             for (let l = L - 2; l >= 0; l--) {
@@ -3333,20 +3555,26 @@ var init_ai_training = __esm({
             }
             for (let l = 0; l < L; l++) {
               for (let j = 0; j < this.weights[l].length; j++) {
+                const adjustment = learningRate * deltas[l][j];
+                if (!Number.isFinite(adjustment)) throw new Error(TRAINING_NUMERIC_ERROR);
                 for (let k = 0; k < this.weights[l][j].length; k++) {
-                  this.weights[l][j][k] -= learningRate * deltas[l][j] * activations[l][k];
+                  const weight = this.weights[l][j][k] - adjustment * activations[l][k];
+                  if (!Number.isFinite(weight)) throw new Error(TRAINING_NUMERIC_ERROR);
+                  this.weights[l][j][k] = weight;
                 }
-                this.biases[l][j] -= learningRate * deltas[l][j];
+                const bias = this.biases[l][j] - adjustment;
+                if (!Number.isFinite(bias)) throw new Error(TRAINING_NUMERIC_ERROR);
+                this.biases[l][j] = bias;
               }
             }
           }
-          const meanLoss = epochLoss / Math.max(1, dataset.length);
+          const meanLoss = epochLoss / dataset.length;
           if (epoch % Math.max(1, Math.floor(epochs / 10)) === 0 || epoch === epochs - 1) {
-            lossHistory.push(parseFloat(meanLoss.toFixed(6)));
+            lossHistory.push(meanLoss);
           }
         }
         return {
-          finalLoss: lossHistory[lossHistory.length - 1] || 0,
+          finalLoss: lossHistory[lossHistory.length - 1],
           lossHistory,
           epochs
         };
@@ -3440,13 +3668,12 @@ var init_ai_training = __esm({
     aiTrainingBuiltins = {
       // 1. Neural Networks & Deep Learning
       create_neural_network: (layers, activationVal = "sigmoid") => {
-        const layerSizes = Array.isArray(layers) ? layers.map((n) => typeof n === "number" ? n : parseInt(String(n), 10) || 1) : [2, 4, 1];
-        const act = typeof activationVal === "string" ? activationVal : "sigmoid";
-        const net2 = new NeuralNetwork(layerSizes, act);
+        const layerSizes = Array.isArray(layers) && layers.length <= MAX_NETWORK_LAYERS ? Array.from(layers, (n) => typeof n === "string" && n.trim() !== "" ? Number(n) : n) : layers;
+        const net2 = new NeuralNetwork(layerSizes, activationVal);
         return {
           _type: "NeuralNetwork",
-          layers: layerSizes,
-          activation: act,
+          layers: [...net2.layerSizes],
+          activation: net2.activation,
           net: net2
         };
       },
@@ -3461,6 +3688,12 @@ var init_ai_training = __esm({
           dataset = datasetVal.map((item) => ({
             input: Array.isArray(item.input) ? item.input.map(Number) : [],
             output: Array.isArray(item.output) ? item.output.map(Number) : [Number(item.output)]
+          }));
+        } else if (datasetVal && typeof datasetVal === "object" && Array.isArray(datasetVal.inputs) && Array.isArray(datasetVal.targets)) {
+          if (datasetVal.inputs.length !== datasetVal.targets.length) throw new Error("Dataset inputs and targets must contain the same number of samples.");
+          dataset = datasetVal.inputs.map((input, index) => ({
+            input: Array.isArray(input) ? input.map(Number) : [],
+            output: Array.isArray(datasetVal.targets[index]) ? datasetVal.targets[index].map(Number) : [Number(datasetVal.targets[index])]
           }));
         }
         const trainingResult = netObj.net.train(dataset, epochs, lr);
@@ -6046,21 +6279,6 @@ function isVersionNewer(remote, current) {
   }
   return false;
 }
-async function promptUpdateIfAvailable() {
-  try {
-    const info = await fetchLatestRelease();
-    if (info.updateAvailable) {
-      console.log("");
-      console.log("\u250C\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510");
-      console.log(`\u2502  \u{1F514} NEW PLAIN UPDATE AVAILABLE: v${info.latestVersion} (Current: v${info.currentVersion})  \u2502`);
-      console.log("\u2502  Run 'plain update' or visit:                                \u2502");
-      console.log(`\u2502  ${info.releaseUrl.padEnd(60)}\u2502`);
-      console.log("\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518");
-      console.log("");
-    }
-  } catch {
-  }
-}
 async function performUpdate() {
   console.log(`Checking for updates from https://github.com/${GITHUB_REPO}...`);
   const info = await fetchLatestRelease();
@@ -6101,161 +6319,7675 @@ var init_updater = __esm({
   }
 });
 
+// src/builtins/testing.ts
+function valuesEqual(left, right, visited = /* @__PURE__ */ new WeakMap()) {
+  if (Object.is(left, right)) return true;
+  if (left === null || right === null || typeof left !== "object" || typeof right !== "object") return false;
+  if (isPlainFunction(left) || isPlainFunction(right)) return false;
+  if (Array.isArray(left) !== Array.isArray(right)) return false;
+  if (visited.has(left)) return visited.get(left) === right;
+  visited.set(left, right);
+  const leftKeys = Object.keys(left);
+  const rightKeys = Object.keys(right);
+  return leftKeys.length === rightKeys.length && leftKeys.every(
+    (key) => Object.prototype.hasOwnProperty.call(right, key) && valuesEqual(left[key], right[key], visited)
+  );
+}
+function fail(message) {
+  throw new PlainError(message, { line: 1, column: 1 }, { kind: "RuntimeError" });
+}
+var testingBuiltins;
+var init_testing = __esm({
+  "src/builtins/testing.ts"() {
+    "use strict";
+    init_values();
+    init_plain_error();
+    testingBuiltins = {
+      assert: (condition, message) => {
+        if (!plainToBoolean(condition)) fail(message === void 0 ? "Assertion failed." : plainToString(message));
+        return true;
+      },
+      assert_equal: (actual, expected, message) => {
+        if (!valuesEqual(actual, expected)) {
+          fail(message === void 0 ? `Expected ${plainToString(expected)}, received ${plainToString(actual)}.` : plainToString(message));
+        }
+        return true;
+      },
+      assert_not_equal: (actual, expected, message) => {
+        if (valuesEqual(actual, expected)) {
+          fail(message === void 0 ? `Expected values to differ, but both were ${plainToString(actual)}.` : plainToString(message));
+        }
+        return true;
+      }
+    };
+  }
+});
+
+// src/builtins/manifest.ts
+function canonicalModuleName(name) {
+  const normalized = name.toLowerCase();
+  if (BUILTIN_MODULES.includes(normalized)) return normalized;
+  return Object.prototype.hasOwnProperty.call(MODULE_ALIASES, normalized) ? MODULE_ALIASES[normalized] : void 0;
+}
+function builtinNameVariants(name) {
+  const variants = [name];
+  if (name.includes("_")) {
+    variants.push(name.replace(/_/g, " "));
+    variants.push(name.replace(/_([a-z0-9])/g, (_, character) => character.toUpperCase()));
+  }
+  return [...new Set(variants)];
+}
+var BUILTIN_MODULES, MODULE_ALIASES, GLOBAL_BUILTIN_OWNERS, BUILTIN_ALIASES;
+var init_manifest = __esm({
+  "src/builtins/manifest.ts"() {
+    "use strict";
+    BUILTIN_MODULES = [
+      "math",
+      "geometry",
+      "stats",
+      "science",
+      "student",
+      "text",
+      "list",
+      "time",
+      "system",
+      "network",
+      "web",
+      "data",
+      "ai",
+      "automation",
+      "ai_training",
+      "server",
+      "linear_algebra",
+      "crypto",
+      "cyber",
+      "tables",
+      "physics",
+      "algorithms",
+      "updater",
+      "file",
+      "testing",
+      "io"
+    ];
+    MODULE_ALIASES = {
+      statistics: "stats",
+      strings: "text",
+      lists: "list",
+      datetime: "time",
+      os: "system",
+      datascience: "data",
+      data_science: "data",
+      ml: "ai",
+      neural: "ai_training",
+      neural_network: "ai_training",
+      linalg: "linear_algebra",
+      numpy: "linear_algebra",
+      security: "crypto",
+      cybersecurity: "cyber",
+      data_processing: "tables",
+      engineering: "physics",
+      files: "file",
+      test: "testing"
+    };
+    GLOBAL_BUILTIN_OWNERS = {
+      vector_dot: "linear_algebra",
+      vector_magnitude: "linear_algebra",
+      vector_distance: "linear_algebra",
+      sigmoid: "ai_training",
+      relu: "ai_training",
+      softmax: "ai_training",
+      train_test_split: "ai_training",
+      base64_encode: "text",
+      base64_decode: "text",
+      caesar_cipher: "text",
+      generate_password: "crypto",
+      kinetic_energy: "physics",
+      momentum: "physics",
+      work_done: "physics",
+      power_watts: "physics",
+      parse_query_string: "server"
+    };
+    BUILTIN_ALIASES = [
+      { name: "wait", module: "time", target: "sleep" },
+      { name: "sqrt", module: "math", target: "square_root" },
+      { name: "cbrt", module: "math", target: "cube_root" },
+      { name: "pow", module: "math", target: "power" },
+      { name: "fact", module: "math", target: "factorial" },
+      { name: "abs", module: "math", target: "absolute" },
+      { name: "min", module: "math", target: "minimum" },
+      { name: "max", module: "math", target: "maximum" },
+      { name: "avg", module: "list", target: "average" },
+      { name: "mean", module: "list", target: "average" },
+      { name: "len", module: "text", target: "length" },
+      { name: "size", module: "list", target: "count" },
+      { name: "upper", module: "text", target: "uppercase" },
+      { name: "lower", module: "text", target: "lowercase" },
+      { name: "capitalize", module: "text", target: "title_case" },
+      { name: "stdev", module: "stats", target: "standard_deviation" },
+      { name: "now", module: "time", target: "current_time" },
+      { name: "bar_chart", module: "data", target: "ascii_bar_chart" },
+      { name: "histogram", module: "data", target: "ascii_histogram" },
+      { name: "exec_shell", module: "automation", target: "run_command" },
+      { name: "shell", module: "automation", target: "run_command" },
+      { name: "knn", module: "ai", target: "knn_classify" },
+      { name: "kmeans", module: "ai", target: "kmeans_cluster" },
+      { name: "np_zeros", module: "linear_algebra", target: "matrix_zeros" },
+      { name: "zeros", module: "linear_algebra", target: "matrix_zeros" },
+      { name: "np_ones", module: "linear_algebra", target: "matrix_ones" },
+      { name: "ones", module: "linear_algebra", target: "matrix_ones" },
+      { name: "np_eye", module: "linear_algebra", target: "matrix_eye" },
+      { name: "eye", module: "linear_algebra", target: "matrix_eye" },
+      { name: "np_dot", module: "linear_algebra", target: "vector_dot" },
+      { name: "dot", module: "linear_algebra", target: "vector_dot" },
+      { name: "matmul", module: "linear_algebra", target: "matrix_mult" },
+      { name: "np_matmul", module: "linear_algebra", target: "matrix_mult" },
+      { name: "transpose", module: "linear_algebra", target: "matrix_transpose" },
+      { name: "det", module: "linear_algebra", target: "matrix_determinant" },
+      { name: "inv", module: "linear_algebra", target: "matrix_inverse_2x2" },
+      { name: "shape", module: "linear_algebra", target: "matrix_shape" },
+      { name: "reshape", module: "linear_algebra", target: "matrix_reshape" },
+      { name: "head", module: "tables", target: "table_head" },
+      { name: "tail", module: "tables", target: "table_tail" },
+      { name: "columns", module: "tables", target: "table_column_names" },
+      { name: "drop_nulls", module: "tables", target: "table_drop_nulls" },
+      { name: "fill_nulls", module: "tables", target: "table_fill_nulls" },
+      { name: "inner_join", module: "tables", target: "table_join_inner" },
+      { name: "nn_create", module: "ai_training", target: "create_neural_network" },
+      { name: "nn_train", module: "ai_training", target: "train_neural_network" },
+      { name: "nn_predict", module: "ai_training", target: "predict_neural_network" },
+      { name: "load_dataset", module: "ai_training", target: "load_ai_dataset" },
+      { name: "mse", module: "ai_training", target: "mean_squared_error_loss" },
+      { name: "mae", module: "ai_training", target: "mean_absolute_error_loss" },
+      { name: "cross_entropy", module: "ai_training", target: "binary_cross_entropy_loss" },
+      { name: "log_reg", module: "ai_training", target: "train_logistic_regression" },
+      { name: "deploy", module: "server", target: "deploy_server" },
+      { name: "local_ip", module: "server", target: "get_local_ip" },
+      { name: "public_ip", module: "server", target: "get_public_ip" },
+      { name: "hash_sha256", module: "crypto", target: "sha256" },
+      { name: "hash_md5", module: "crypto", target: "md5" },
+      { name: "uuid", module: "crypto", target: "generate_uuid" },
+      { name: "jwt_sign", module: "crypto", target: "create_jwt" },
+      { name: "jwt_verify", module: "crypto", target: "verify_jwt" },
+      { name: "scan", module: "cyber", target: "port_scan" },
+      { name: "audit", module: "cyber", target: "audit_security_headers" },
+      { name: "sqli_check", module: "cyber", target: "detect_sql_injection" },
+      { name: "xss_check", module: "cyber", target: "detect_xss" },
+      { name: "entropy", module: "cyber", target: "calculate_entropy" },
+      { name: "magic_bytes", module: "cyber", target: "detect_file_signature" },
+      { name: "cve", module: "cyber", target: "cve_lookup" },
+      { name: "pwd_strength", module: "cyber", target: "check_password_strength" },
+      { name: "subnet", module: "cyber", target: "subnet_calculator" },
+      { name: "ping", module: "cyber", target: "ping_host" },
+      { name: "banner_grab_host", module: "cyber", target: "banner_grab" },
+      { name: "fib", module: "algorithms", target: "fibonacci_nth" },
+      { name: "update", module: "updater", target: "update_software" },
+      { name: "upgrade", module: "updater", target: "update_software" },
+      { name: "version", module: "updater", target: "plain_version" }
+    ];
+  }
+});
+
+// src/tooling/catalog-data.ts
+var catalogData;
+var init_catalog_data = __esm({
+  "src/tooling/catalog-data.ts"() {
+    "use strict";
+    catalogData = [
+      {
+        "name": "ai_chat",
+        "aliases": [
+          "ai chat",
+          "aiChat"
+        ],
+        "module": "ai",
+        "parameters": [
+          "prompt",
+          "systemPrompt?",
+          "apiKey?",
+          "model?"
+        ],
+        "signature": "ai_chat(prompt, systemPrompt?, apiKey?, model?)",
+        "description": "ai chat \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "ai_prompt",
+        "aliases": [
+          "ai prompt",
+          "aiPrompt"
+        ],
+        "module": "ai",
+        "parameters": [
+          "template",
+          "vars"
+        ],
+        "signature": "ai_prompt(template, vars)",
+        "description": "ai prompt \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "classify_text",
+        "aliases": [
+          "classify text",
+          "classifyText"
+        ],
+        "module": "ai",
+        "parameters": [
+          "model",
+          "text"
+        ],
+        "signature": "classify_text(model, text)",
+        "description": "classify text \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "cosine_similarity",
+        "aliases": [
+          "cosine similarity",
+          "cosineSimilarity"
+        ],
+        "module": "ai",
+        "parameters": [
+          "v1",
+          "v2"
+        ],
+        "signature": "cosine_similarity(v1, v2)",
+        "description": "cosine similarity \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "kmeans_cluster",
+        "aliases": [
+          "kmeans cluster",
+          "kmeansCluster",
+          "kmeans"
+        ],
+        "module": "ai",
+        "parameters": [
+          "data",
+          "k?",
+          "maxIters?"
+        ],
+        "signature": "kmeans_cluster(data, k?, maxIters?)",
+        "description": "kmeans cluster \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "knn_classify",
+        "aliases": [
+          "knn classify",
+          "knnClassify",
+          "knn"
+        ],
+        "module": "ai",
+        "parameters": [
+          "trainX",
+          "trainY",
+          "testPoint",
+          "k?"
+        ],
+        "signature": "knn_classify(trainX, trainY, testPoint, k?)",
+        "description": "knn classify \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "knn_predict",
+        "aliases": [
+          "knn predict",
+          "knnPredict"
+        ],
+        "module": "ai",
+        "parameters": [
+          "trainX",
+          "trainY",
+          "testPoint",
+          "k?"
+        ],
+        "signature": "knn_predict(trainX, trainY, testPoint, k?)",
+        "description": "knn predict \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "neural_forward",
+        "aliases": [
+          "neural forward",
+          "neuralForward"
+        ],
+        "module": "ai",
+        "parameters": [
+          "weights",
+          "biases",
+          "inputs",
+          "activation?"
+        ],
+        "signature": "neural_forward(weights, biases, inputs, activation?)",
+        "description": "neural forward \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "predict_linear",
+        "aliases": [
+          "predict linear",
+          "predictLinear"
+        ],
+        "module": "ai",
+        "parameters": [
+          "xList",
+          "yList",
+          "targetX"
+        ],
+        "signature": "predict_linear(xList, yList, targetX)",
+        "description": "predict linear \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "relu",
+        "aliases": [],
+        "module": "ai",
+        "parameters": [
+          "x"
+        ],
+        "signature": "relu(x)",
+        "description": "relu \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sentiment_analyze",
+        "aliases": [
+          "sentiment analyze",
+          "sentimentAnalyze"
+        ],
+        "module": "ai",
+        "parameters": [
+          "text"
+        ],
+        "signature": "sentiment_analyze(text)",
+        "description": "sentiment analyze \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sigmoid",
+        "aliases": [],
+        "module": "ai",
+        "parameters": [
+          "x"
+        ],
+        "signature": "sigmoid(x)",
+        "description": "sigmoid \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "softmax",
+        "aliases": [],
+        "module": "ai",
+        "parameters": [
+          "list"
+        ],
+        "signature": "softmax(list)",
+        "description": "softmax \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "train_text_classifier",
+        "aliases": [
+          "train text classifier",
+          "trainTextClassifier"
+        ],
+        "module": "ai",
+        "parameters": [
+          "docs",
+          "labels?"
+        ],
+        "signature": "train_text_classifier(docs, labels?)",
+        "description": "train text classifier \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "vector_distance",
+        "aliases": [
+          "vector distance",
+          "vectorDistance"
+        ],
+        "module": "ai",
+        "parameters": [
+          "v1",
+          "v2"
+        ],
+        "signature": "vector_distance(v1, v2)",
+        "description": "vector distance \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "vector_dot",
+        "aliases": [
+          "vector dot",
+          "vectorDot"
+        ],
+        "module": "ai",
+        "parameters": [
+          "v1",
+          "v2"
+        ],
+        "signature": "vector_dot(v1, v2)",
+        "description": "vector dot \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "vector_magnitude",
+        "aliases": [
+          "vector magnitude",
+          "vectorMagnitude"
+        ],
+        "module": "ai",
+        "parameters": [
+          "v"
+        ],
+        "signature": "vector_magnitude(v)",
+        "description": "vector magnitude \u2014 ai standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "accuracy_score",
+        "aliases": [
+          "accuracy score",
+          "accuracyScore"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "accuracy_score(yTrue, yPred)",
+        "description": "accuracy score \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "binary_cross_entropy_loss",
+        "aliases": [
+          "binary cross entropy loss",
+          "binaryCrossEntropyLoss",
+          "cross_entropy"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "binary_cross_entropy_loss(yTrue, yPred)",
+        "description": "binary cross entropy loss \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "categorical_cross_entropy_loss",
+        "aliases": [
+          "categorical cross entropy loss",
+          "categoricalCrossEntropyLoss"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "categorical_cross_entropy_loss(yTrue, yPred)",
+        "description": "categorical cross entropy loss \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "confusion_matrix",
+        "aliases": [
+          "confusion matrix",
+          "confusionMatrix"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "confusion_matrix(yTrue, yPred)",
+        "description": "confusion matrix \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "cosine_similarity_text",
+        "aliases": [
+          "cosine similarity text",
+          "cosineSimilarityText"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "doc1",
+          "doc2"
+        ],
+        "signature": "cosine_similarity_text(doc1, doc2)",
+        "description": "cosine similarity text \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "create_neural_network",
+        "aliases": [
+          "create neural network",
+          "createNeuralNetwork",
+          "nn_create"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "layers",
+          "activation?"
+        ],
+        "signature": "create_neural_network(layers, activation?)",
+        "description": "Create a small fully connected neural network from layer widths and an activation name.",
+        "browserSafe": true
+      },
+      {
+        "name": "gelu",
+        "aliases": [],
+        "module": "ai_training",
+        "parameters": [
+          "x"
+        ],
+        "signature": "gelu(x)",
+        "description": "gelu \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "get_network_biases",
+        "aliases": [
+          "get network biases",
+          "getNetworkBiases"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "net"
+        ],
+        "signature": "get_network_biases(net)",
+        "description": "get network biases \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "get_network_weights",
+        "aliases": [
+          "get network weights",
+          "getNetworkWeights"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "net"
+        ],
+        "signature": "get_network_weights(net)",
+        "description": "get network weights \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "label_encode",
+        "aliases": [
+          "label encode",
+          "labelEncode"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "labels"
+        ],
+        "signature": "label_encode(labels)",
+        "description": "label encode \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "leaky_relu",
+        "aliases": [
+          "leaky relu",
+          "leakyRelu"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "x",
+          "alpha?"
+        ],
+        "signature": "leaky_relu(x, alpha?)",
+        "description": "leaky relu \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "levenshtein_distance",
+        "aliases": [
+          "levenshtein distance",
+          "levenshteinDistance"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "levenshtein_distance(a, b)",
+        "description": "levenshtein distance \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "load_ai_dataset",
+        "aliases": [
+          "load ai dataset",
+          "loadAiDataset",
+          "load_dataset"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "name"
+        ],
+        "signature": "load_ai_dataset(name)",
+        "description": "Load an independent copy of a small bundled learning dataset.",
+        "browserSafe": true
+      },
+      {
+        "name": "mean_absolute_error_loss",
+        "aliases": [
+          "mean absolute error loss",
+          "meanAbsoluteErrorLoss",
+          "mae"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "mean_absolute_error_loss(yTrue, yPred)",
+        "description": "mean absolute error loss \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "mean_squared_error_loss",
+        "aliases": [
+          "mean squared error loss",
+          "meanSquaredErrorLoss",
+          "mse"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "mean_squared_error_loss(yTrue, yPred)",
+        "description": "mean squared error loss \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "min_max_scale",
+        "aliases": [
+          "min max scale",
+          "minMaxScale"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "matrix",
+          "min?",
+          "max?"
+        ],
+        "signature": "min_max_scale(matrix, min?, max?)",
+        "description": "min max scale \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "one_hot_encode",
+        "aliases": [
+          "one hot encode",
+          "oneHotEncode"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "labels"
+        ],
+        "signature": "one_hot_encode(labels)",
+        "description": "one hot encode \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "predict_decision_tree_stump",
+        "aliases": [
+          "predict decision tree stump",
+          "predictDecisionTreeStump"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "model",
+          "sample"
+        ],
+        "signature": "predict_decision_tree_stump(model, sample)",
+        "description": "predict decision tree stump \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "predict_logistic_regression",
+        "aliases": [
+          "predict logistic regression",
+          "predictLogisticRegression"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "model",
+          "sample"
+        ],
+        "signature": "predict_logistic_regression(model, sample)",
+        "description": "predict logistic regression \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "predict_neural_network",
+        "aliases": [
+          "predict neural network",
+          "predictNeuralNetwork",
+          "nn_predict"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "net",
+          "input"
+        ],
+        "signature": "predict_neural_network(net, input)",
+        "description": "Run a network on one input vector and return its prediction vector.",
+        "browserSafe": true
+      },
+      {
+        "name": "r2_score",
+        "aliases": [
+          "r2 score",
+          "r2Score"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "yTrue",
+          "yPred"
+        ],
+        "signature": "r2_score(yTrue, yPred)",
+        "description": "r2 score \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "relu",
+        "aliases": [],
+        "module": "ai_training",
+        "parameters": [
+          "x"
+        ],
+        "signature": "relu(x)",
+        "description": "relu \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "relu_derivative",
+        "aliases": [
+          "relu derivative",
+          "reluDerivative"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "x"
+        ],
+        "signature": "relu_derivative(x)",
+        "description": "relu derivative \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "remove_stopwords",
+        "aliases": [
+          "remove stopwords",
+          "removeStopwords"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "words"
+        ],
+        "signature": "remove_stopwords(words)",
+        "description": "remove stopwords \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sigmoid",
+        "aliases": [],
+        "module": "ai_training",
+        "parameters": [
+          "x"
+        ],
+        "signature": "sigmoid(x)",
+        "description": "sigmoid \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sigmoid_derivative",
+        "aliases": [
+          "sigmoid derivative",
+          "sigmoidDerivative"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "y"
+        ],
+        "signature": "sigmoid_derivative(y)",
+        "description": "sigmoid derivative \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "softmax",
+        "aliases": [],
+        "module": "ai_training",
+        "parameters": [
+          "vec"
+        ],
+        "signature": "softmax(vec)",
+        "description": "softmax \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "standard_scale",
+        "aliases": [
+          "standard scale",
+          "standardScale"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "matrix"
+        ],
+        "signature": "standard_scale(matrix)",
+        "description": "standard scale \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "swish",
+        "aliases": [],
+        "module": "ai_training",
+        "parameters": [
+          "x"
+        ],
+        "signature": "swish(x)",
+        "description": "swish \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "tanh_activation",
+        "aliases": [
+          "tanh activation",
+          "tanhActivation"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "x"
+        ],
+        "signature": "tanh_activation(x)",
+        "description": "tanh activation \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "tanh_derivative",
+        "aliases": [
+          "tanh derivative",
+          "tanhDerivative"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "y"
+        ],
+        "signature": "tanh_derivative(y)",
+        "description": "tanh derivative \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "tokenize_sentences",
+        "aliases": [
+          "tokenize sentences",
+          "tokenizeSentences"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "text"
+        ],
+        "signature": "tokenize_sentences(text)",
+        "description": "tokenize sentences \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "tokenize_words",
+        "aliases": [
+          "tokenize words",
+          "tokenizeWords"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "text"
+        ],
+        "signature": "tokenize_words(text)",
+        "description": "tokenize words \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "train_decision_tree_stump",
+        "aliases": [
+          "train decision tree stump",
+          "trainDecisionTreeStump"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "features",
+          "labels"
+        ],
+        "signature": "train_decision_tree_stump(features, labels)",
+        "description": "train decision tree stump \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "train_logistic_regression",
+        "aliases": [
+          "train logistic regression",
+          "trainLogisticRegression",
+          "log_reg"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "features",
+          "labels",
+          "epochs?",
+          "lr?"
+        ],
+        "signature": "train_logistic_regression(features, labels, epochs?, lr?)",
+        "description": "train logistic regression \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "train_neural_network",
+        "aliases": [
+          "train neural network",
+          "trainNeuralNetwork",
+          "nn_train"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "net",
+          "dataset",
+          "epochs?",
+          "lr?"
+        ],
+        "signature": "train_neural_network(net, dataset, epochs?, lr?)",
+        "description": "Train using a dataset with inputs/targets or records with input/output; return loss history.",
+        "browserSafe": true
+      },
+      {
+        "name": "train_test_split",
+        "aliases": [
+          "train test split",
+          "trainTestSplit"
+        ],
+        "module": "ai_training",
+        "parameters": [
+          "inputs",
+          "targets",
+          "testRatio?"
+        ],
+        "signature": "train_test_split(inputs, targets, testRatio?)",
+        "description": "train test split \u2014 ai training standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "binary_search",
+        "aliases": [
+          "binary search",
+          "binarySearch"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "sortedList",
+          "target"
+        ],
+        "signature": "binary_search(sortedList, target)",
+        "description": "binary search \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "bubble_sort",
+        "aliases": [
+          "bubble sort",
+          "bubbleSort"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "list"
+        ],
+        "signature": "bubble_sort(list)",
+        "description": "bubble sort \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "combinations_count",
+        "aliases": [
+          "combinations count",
+          "combinationsCount"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "n",
+          "k"
+        ],
+        "signature": "combinations_count(n, k)",
+        "description": "combinations count \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "fibonacci_nth",
+        "aliases": [
+          "fibonacci nth",
+          "fibonacciNth",
+          "fib"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "n"
+        ],
+        "signature": "fibonacci_nth(n)",
+        "description": "fibonacci nth \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "graph_add_edge",
+        "aliases": [
+          "graph add edge",
+          "graphAddEdge"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "graph",
+          "from",
+          "to",
+          "weight?"
+        ],
+        "signature": "graph_add_edge(graph, from, to, weight?)",
+        "description": "graph add edge \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "graph_bfs",
+        "aliases": [
+          "graph bfs",
+          "graphBfs"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "graph",
+          "startNode"
+        ],
+        "signature": "graph_bfs(graph, startNode)",
+        "description": "graph bfs \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "graph_create",
+        "aliases": [
+          "graph create",
+          "graphCreate"
+        ],
+        "module": "algorithms",
+        "parameters": [],
+        "signature": "graph_create()",
+        "description": "graph create \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "graph_dfs",
+        "aliases": [
+          "graph dfs",
+          "graphDfs"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "graph",
+          "startNode"
+        ],
+        "signature": "graph_dfs(graph, startNode)",
+        "description": "graph dfs \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "graph_dijkstra",
+        "aliases": [
+          "graph dijkstra",
+          "graphDijkstra"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "graph",
+          "startNode"
+        ],
+        "signature": "graph_dijkstra(graph, startNode)",
+        "description": "graph dijkstra \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "insertion_sort",
+        "aliases": [
+          "insertion sort",
+          "insertionSort"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "list"
+        ],
+        "signature": "insertion_sort(list)",
+        "description": "insertion sort \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "knapsack_01",
+        "aliases": [
+          "knapsack 01",
+          "knapsack01"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "weights",
+          "values",
+          "capacity"
+        ],
+        "signature": "knapsack_01(weights, values, capacity)",
+        "description": "knapsack 01 \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "linear_search",
+        "aliases": [
+          "linear search",
+          "linearSearch"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "list",
+          "target"
+        ],
+        "signature": "linear_search(list, target)",
+        "description": "linear search \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "longest_common_subsequence",
+        "aliases": [
+          "longest common subsequence",
+          "longestCommonSubsequence"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "s1",
+          "s2"
+        ],
+        "signature": "longest_common_subsequence(s1, s2)",
+        "description": "longest common subsequence \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "merge_sort",
+        "aliases": [
+          "merge sort",
+          "mergeSort"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "list"
+        ],
+        "signature": "merge_sort(list)",
+        "description": "merge sort \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "permutations_count",
+        "aliases": [
+          "permutations count",
+          "permutationsCount"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "n",
+          "k"
+        ],
+        "signature": "permutations_count(n, k)",
+        "description": "permutations count \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "quick_sort",
+        "aliases": [
+          "quick sort",
+          "quickSort"
+        ],
+        "module": "algorithms",
+        "parameters": [
+          "list"
+        ],
+        "signature": "quick_sort(list)",
+        "description": "quick sort \u2014 algorithms standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "batch_delete",
+        "aliases": [
+          "batch delete",
+          "batchDelete"
+        ],
+        "module": "automation",
+        "parameters": [
+          "dir",
+          "pattern"
+        ],
+        "signature": "batch_delete(dir, pattern)",
+        "description": "batch delete \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "batch_rename",
+        "aliases": [
+          "batch rename",
+          "batchRename"
+        ],
+        "module": "automation",
+        "parameters": [
+          "dir",
+          "find",
+          "replace"
+        ],
+        "signature": "batch_rename(dir, find, replace)",
+        "description": "batch rename \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "checksum_file",
+        "aliases": [
+          "checksum file",
+          "checksumFile"
+        ],
+        "module": "automation",
+        "parameters": [
+          "filePath",
+          "algo?"
+        ],
+        "signature": "checksum_file(filePath, algo?)",
+        "description": "Hash the bytes of a project file; defaults to SHA-256.",
+        "browserSafe": false
+      },
+      {
+        "name": "copy_file",
+        "aliases": [
+          "copy file",
+          "copyFile"
+        ],
+        "module": "automation",
+        "parameters": [
+          "src",
+          "dest"
+        ],
+        "signature": "copy_file(src, dest)",
+        "description": "copy file \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "delay",
+        "aliases": [],
+        "module": "automation",
+        "parameters": [
+          "seconds"
+        ],
+        "signature": "delay(seconds)",
+        "description": "delay \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "find_files",
+        "aliases": [
+          "find files",
+          "findFiles"
+        ],
+        "module": "automation",
+        "parameters": [
+          "dir",
+          "pattern"
+        ],
+        "signature": "find_files(dir, pattern)",
+        "description": "find files \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "get_clipboard",
+        "aliases": [
+          "get clipboard",
+          "getClipboard"
+        ],
+        "module": "automation",
+        "parameters": [],
+        "signature": "get_clipboard()",
+        "description": "get clipboard \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "log_error",
+        "aliases": [
+          "log error",
+          "logError"
+        ],
+        "module": "automation",
+        "parameters": [
+          "msg"
+        ],
+        "signature": "log_error(msg)",
+        "description": "log error \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "log_info",
+        "aliases": [
+          "log info",
+          "logInfo"
+        ],
+        "module": "automation",
+        "parameters": [
+          "msg"
+        ],
+        "signature": "log_info(msg)",
+        "description": "log info \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "log_warn",
+        "aliases": [
+          "log warn",
+          "logWarn"
+        ],
+        "module": "automation",
+        "parameters": [
+          "msg"
+        ],
+        "signature": "log_warn(msg)",
+        "description": "log warn \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "move_file",
+        "aliases": [
+          "move file",
+          "moveFile"
+        ],
+        "module": "automation",
+        "parameters": [
+          "src",
+          "dest"
+        ],
+        "signature": "move_file(src, dest)",
+        "description": "move file \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "parse_env_file",
+        "aliases": [
+          "parse env file",
+          "parseEnvFile"
+        ],
+        "module": "automation",
+        "parameters": [
+          "filePath"
+        ],
+        "signature": "parse_env_file(filePath)",
+        "description": "parse env file \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "run_command",
+        "aliases": [
+          "run command",
+          "runCommand",
+          "exec_shell",
+          "shell"
+        ],
+        "module": "automation",
+        "parameters": [
+          "cmd"
+        ],
+        "signature": "run_command(cmd)",
+        "description": "run command \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "set_clipboard",
+        "aliases": [
+          "set clipboard",
+          "setClipboard"
+        ],
+        "module": "automation",
+        "parameters": [
+          "text"
+        ],
+        "signature": "set_clipboard(text)",
+        "description": "set clipboard \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "walk_directory",
+        "aliases": [
+          "walk directory",
+          "walkDirectory"
+        ],
+        "module": "automation",
+        "parameters": [
+          "dir?"
+        ],
+        "signature": "walk_directory(dir?)",
+        "description": "walk directory \u2014 automation standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "aes_decrypt",
+        "aliases": [
+          "aes decrypt",
+          "aesDecrypt"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "encryptedPayload",
+          "secretKey"
+        ],
+        "signature": "aes_decrypt(encryptedPayload, secretKey)",
+        "description": "aes decrypt \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "aes_encrypt",
+        "aliases": [
+          "aes encrypt",
+          "aesEncrypt"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "plainText",
+          "secretKey"
+        ],
+        "signature": "aes_encrypt(plainText, secretKey)",
+        "description": "aes encrypt \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "base64_decode",
+        "aliases": [
+          "base64 decode",
+          "base64Decode"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "encoded"
+        ],
+        "signature": "base64_decode(encoded)",
+        "description": "Decode Base64 into UTF-8 text.",
+        "browserSafe": false
+      },
+      {
+        "name": "base64_encode",
+        "aliases": [
+          "base64 encode",
+          "base64Encode"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "base64_encode(text)",
+        "description": "Encode UTF-8 text as Base64.",
+        "browserSafe": false
+      },
+      {
+        "name": "caesar_cipher",
+        "aliases": [
+          "caesar cipher",
+          "caesarCipher"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text",
+          "shift?"
+        ],
+        "signature": "caesar_cipher(text, shift?)",
+        "description": "caesar cipher \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "create_jwt",
+        "aliases": [
+          "create jwt",
+          "createJwt",
+          "jwt_sign"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "payload",
+          "secretKey",
+          "expiresInSeconds?"
+        ],
+        "signature": "create_jwt(payload, secretKey, expiresInSeconds?)",
+        "description": "create jwt \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "generate_api_key",
+        "aliases": [
+          "generate api key",
+          "generateApiKey"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "prefix?"
+        ],
+        "signature": "generate_api_key(prefix?)",
+        "description": "generate api key \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "generate_password",
+        "aliases": [
+          "generate password",
+          "generatePassword"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "length?",
+          "includeSymbols?"
+        ],
+        "signature": "generate_password(length?, includeSymbols?)",
+        "description": "generate password \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "generate_random_token",
+        "aliases": [
+          "generate random token",
+          "generateRandomToken"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "byteLength?"
+        ],
+        "signature": "generate_random_token(byteLength?)",
+        "description": "generate random token \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "generate_uuid",
+        "aliases": [
+          "generate uuid",
+          "generateUuid",
+          "uuid"
+        ],
+        "module": "crypto",
+        "parameters": [],
+        "signature": "generate_uuid()",
+        "description": "generate uuid \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "hex_decode",
+        "aliases": [
+          "hex decode",
+          "hexDecode"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "hex"
+        ],
+        "signature": "hex_decode(hex)",
+        "description": "hex decode \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "hex_encode",
+        "aliases": [
+          "hex encode",
+          "hexEncode"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "hex_encode(text)",
+        "description": "hex encode \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "hmac_sha256",
+        "aliases": [
+          "hmac sha256",
+          "hmacSha256"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text",
+          "secretKey"
+        ],
+        "signature": "hmac_sha256(text, secretKey)",
+        "description": "hmac sha256 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "hmac_sha512",
+        "aliases": [
+          "hmac sha512",
+          "hmacSha512"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text",
+          "secretKey"
+        ],
+        "signature": "hmac_sha512(text, secretKey)",
+        "description": "hmac sha512 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "md5",
+        "aliases": [
+          "hash_md5"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "md5(text)",
+        "description": "md5 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "rot13",
+        "aliases": [],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "rot13(text)",
+        "description": "rot13 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "secure_compare",
+        "aliases": [
+          "secure compare",
+          "secureCompare"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "secure_compare(a, b)",
+        "description": "secure compare \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sha1",
+        "aliases": [],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "sha1(text)",
+        "description": "sha1 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sha256",
+        "aliases": [
+          "hash_sha256"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "sha256(text)",
+        "description": "sha256 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sha512",
+        "aliases": [],
+        "module": "crypto",
+        "parameters": [
+          "text"
+        ],
+        "signature": "sha512(text)",
+        "description": "sha512 \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "verify_jwt",
+        "aliases": [
+          "verify jwt",
+          "verifyJwt",
+          "jwt_verify"
+        ],
+        "module": "crypto",
+        "parameters": [
+          "token",
+          "secretKey"
+        ],
+        "signature": "verify_jwt(token, secretKey)",
+        "description": "verify jwt \u2014 crypto standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "audit_security_headers",
+        "aliases": [
+          "audit security headers",
+          "auditSecurityHeaders",
+          "audit"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "targetUrl"
+        ],
+        "signature": "audit_security_headers(targetUrl)",
+        "description": "Inspect response headers for a URL you are authorized to assess (local runtime only).",
+        "browserSafe": false
+      },
+      {
+        "name": "banner_grab",
+        "aliases": [
+          "banner grab",
+          "bannerGrab",
+          "banner_grab_host"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "targetHost",
+          "portNumber?",
+          "timeoutMs?"
+        ],
+        "signature": "banner_grab(targetHost, portNumber?, timeoutMs?)",
+        "description": "banner grab \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "calculate_entropy",
+        "aliases": [
+          "calculate entropy",
+          "calculateEntropy",
+          "entropy"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "data"
+        ],
+        "signature": "calculate_entropy(data)",
+        "description": "calculate entropy \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "check_password_strength",
+        "aliases": [
+          "check password strength",
+          "checkPasswordStrength",
+          "pwd_strength"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "passwordText"
+        ],
+        "signature": "check_password_strength(passwordText)",
+        "description": "check password strength \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "crc32",
+        "aliases": [],
+        "module": "cyber",
+        "parameters": [
+          "data"
+        ],
+        "signature": "crc32(data)",
+        "description": "crc32 \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "cve_lookup",
+        "aliases": [
+          "cve lookup",
+          "cveLookup",
+          "cve"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "cveId"
+        ],
+        "signature": "cve_lookup(cveId)",
+        "description": "cve lookup \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "detect_file_signature",
+        "aliases": [
+          "detect file signature",
+          "detectFileSignature",
+          "magic_bytes"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "hexOrData"
+        ],
+        "signature": "detect_file_signature(hexOrData)",
+        "description": "detect file signature \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "detect_path_traversal",
+        "aliases": [
+          "detect path traversal",
+          "detectPathTraversal"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "filePath"
+        ],
+        "signature": "detect_path_traversal(filePath)",
+        "description": "detect path traversal \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "detect_sql_injection",
+        "aliases": [
+          "detect sql injection",
+          "detectSqlInjection",
+          "sqli_check"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "inputString"
+        ],
+        "signature": "detect_sql_injection(inputString)",
+        "description": "detect sql injection \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "detect_xss",
+        "aliases": [
+          "detect xss",
+          "detectXss",
+          "xss_check"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "inputString"
+        ],
+        "signature": "detect_xss(inputString)",
+        "description": "detect xss \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "dns_resolve",
+        "aliases": [
+          "dns resolve",
+          "dnsResolve"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "hostname",
+          "recordType?"
+        ],
+        "signature": "dns_resolve(hostname, recordType?)",
+        "description": "dns resolve \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "extract_strings",
+        "aliases": [
+          "extract strings",
+          "extractStrings"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "data",
+          "minLength?"
+        ],
+        "signature": "extract_strings(data, minLength?)",
+        "description": "extract strings \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "is_port_open",
+        "aliases": [
+          "is port open",
+          "isPortOpen"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "targetHost",
+          "portNumber",
+          "timeoutMs?"
+        ],
+        "signature": "is_port_open(targetHost, portNumber, timeoutMs?)",
+        "description": "is port open \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "ping_host",
+        "aliases": [
+          "ping host",
+          "pingHost",
+          "ping"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "targetHost",
+          "timeoutMs?"
+        ],
+        "signature": "ping_host(targetHost, timeoutMs?)",
+        "description": "ping host \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "port_lookup",
+        "aliases": [
+          "port lookup",
+          "portLookup"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "portNumber"
+        ],
+        "signature": "port_lookup(portNumber)",
+        "description": "port lookup \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "port_scan",
+        "aliases": [
+          "port scan",
+          "portScan",
+          "scan"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "targetHost?",
+          "customPorts?",
+          "timeoutMs?"
+        ],
+        "signature": "port_scan(targetHost?, customPorts?, timeoutMs?)",
+        "description": "Check selected TCP ports on a host you own or have permission to test (local runtime only).",
+        "browserSafe": false
+      },
+      {
+        "name": "rate_limit_check",
+        "aliases": [
+          "rate limit check",
+          "rateLimitCheck"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "clientKey",
+          "maxRequests?",
+          "windowSeconds?"
+        ],
+        "signature": "rate_limit_check(clientKey, maxRequests?, windowSeconds?)",
+        "description": "rate limit check \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "reverse_dns",
+        "aliases": [
+          "reverse dns",
+          "reverseDns"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "ipAddress"
+        ],
+        "signature": "reverse_dns(ipAddress)",
+        "description": "reverse dns \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sanitize_html",
+        "aliases": [
+          "sanitize html",
+          "sanitizeHtml"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "htmlString"
+        ],
+        "signature": "sanitize_html(htmlString)",
+        "description": "sanitize html \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sanitize_sql_param",
+        "aliases": [
+          "sanitize sql param",
+          "sanitizeSqlParam"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "paramString"
+        ],
+        "signature": "sanitize_sql_param(paramString)",
+        "description": "sanitize sql param \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "subnet_calculator",
+        "aliases": [
+          "subnet calculator",
+          "subnetCalculator",
+          "subnet"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "cidrOrIp",
+          "netmaskStr?"
+        ],
+        "signature": "subnet_calculator(cidrOrIp, netmaskStr?)",
+        "description": "subnet calculator \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "xor_cipher",
+        "aliases": [
+          "xor cipher",
+          "xorCipher"
+        ],
+        "module": "cyber",
+        "parameters": [
+          "plainText",
+          "keyText"
+        ],
+        "signature": "xor_cipher(plainText, keyText)",
+        "description": "xor cipher \u2014 cyber standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "ascii_bar_chart",
+        "aliases": [
+          "ascii bar chart",
+          "asciiBarChart",
+          "bar_chart"
+        ],
+        "module": "data",
+        "parameters": [
+          "labels",
+          "values",
+          "maxWidth?"
+        ],
+        "signature": "ascii_bar_chart(labels, values, maxWidth?)",
+        "description": "ascii bar chart \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "ascii_histogram",
+        "aliases": [
+          "ascii histogram",
+          "asciiHistogram",
+          "histogram"
+        ],
+        "module": "data",
+        "parameters": [
+          "list",
+          "bins?"
+        ],
+        "signature": "ascii_histogram(list, bins?)",
+        "description": "ascii histogram \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "describe_column",
+        "aliases": [
+          "describe column",
+          "describeColumn"
+        ],
+        "module": "data",
+        "parameters": [
+          "col"
+        ],
+        "signature": "describe_column(col)",
+        "description": "describe column \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "export_html_chart",
+        "aliases": [
+          "export html chart",
+          "exportHtmlChart"
+        ],
+        "module": "data",
+        "parameters": [
+          "title",
+          "type",
+          "labels",
+          "data",
+          "filePath"
+        ],
+        "signature": "export_html_chart(title, type, labels, data, filePath)",
+        "description": "export html chart \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "filter_table",
+        "aliases": [
+          "filter table",
+          "filterTable"
+        ],
+        "module": "data",
+        "parameters": [
+          "table",
+          "col",
+          "op",
+          "target"
+        ],
+        "signature": "filter_table(table, col, op, target)",
+        "description": "filter table \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "group_by_count",
+        "aliases": [
+          "group by count",
+          "groupByCount"
+        ],
+        "module": "data",
+        "parameters": [
+          "table",
+          "col"
+        ],
+        "signature": "group_by_count(table, col)",
+        "description": "group by count \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "group_by_sum",
+        "aliases": [
+          "group by sum",
+          "groupBySum"
+        ],
+        "module": "data",
+        "parameters": [
+          "table",
+          "groupCol",
+          "sumCol"
+        ],
+        "signature": "group_by_sum(table, groupCol, sumCol)",
+        "description": "group by sum \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "normalize_data",
+        "aliases": [
+          "normalize data",
+          "normalizeData"
+        ],
+        "module": "data",
+        "parameters": [
+          "list"
+        ],
+        "signature": "normalize_data(list)",
+        "description": "normalize data \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "parse_csv",
+        "aliases": [
+          "parse csv",
+          "parseCsv"
+        ],
+        "module": "data",
+        "parameters": [
+          "text"
+        ],
+        "signature": "parse_csv(text)",
+        "description": "parse csv \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "read_csv",
+        "aliases": [
+          "read csv",
+          "readCsv"
+        ],
+        "module": "data",
+        "parameters": [
+          "filePath"
+        ],
+        "signature": "read_csv(filePath)",
+        "description": "read csv \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "sort_table",
+        "aliases": [
+          "sort table",
+          "sortTable"
+        ],
+        "module": "data",
+        "parameters": [
+          "table",
+          "col",
+          "ascending?"
+        ],
+        "signature": "sort_table(table, col, ascending?)",
+        "description": "sort table \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "standardize_data",
+        "aliases": [
+          "standardize data",
+          "standardizeData"
+        ],
+        "module": "data",
+        "parameters": [
+          "list"
+        ],
+        "signature": "standardize_data(list)",
+        "description": "standardize data \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "table_column",
+        "aliases": [
+          "table column",
+          "tableColumn"
+        ],
+        "module": "data",
+        "parameters": [
+          "table",
+          "col"
+        ],
+        "signature": "table_column(table, col)",
+        "description": "table column \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "table_headers",
+        "aliases": [
+          "table headers",
+          "tableHeaders"
+        ],
+        "module": "data",
+        "parameters": [
+          "table"
+        ],
+        "signature": "table_headers(table)",
+        "description": "table headers \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "table_rows",
+        "aliases": [
+          "table rows",
+          "tableRows"
+        ],
+        "module": "data",
+        "parameters": [
+          "table"
+        ],
+        "signature": "table_rows(table)",
+        "description": "table rows \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "to_csv",
+        "aliases": [
+          "to csv",
+          "toCsv"
+        ],
+        "module": "data",
+        "parameters": [
+          "table"
+        ],
+        "signature": "to_csv(table)",
+        "description": "to csv \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "train_test_split",
+        "aliases": [
+          "train test split",
+          "trainTestSplit"
+        ],
+        "module": "data",
+        "parameters": [
+          "data",
+          "testRatio?"
+        ],
+        "signature": "train_test_split(data, testRatio?)",
+        "description": "train test split \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "write_csv",
+        "aliases": [
+          "write csv",
+          "writeCsv"
+        ],
+        "module": "data",
+        "parameters": [
+          "filePath",
+          "table"
+        ],
+        "signature": "write_csv(filePath, table)",
+        "description": "write csv \u2014 data standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "append_file",
+        "aliases": [
+          "append file",
+          "appendFile"
+        ],
+        "module": "file",
+        "parameters": [
+          "path",
+          "content"
+        ],
+        "signature": "append_file(path, content)",
+        "description": "append file inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "create_folder",
+        "aliases": [
+          "create folder",
+          "createFolder"
+        ],
+        "module": "file",
+        "parameters": [
+          "directory"
+        ],
+        "signature": "create_folder(directory)",
+        "description": "create folder inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "delete_file",
+        "aliases": [
+          "delete file",
+          "deleteFile"
+        ],
+        "module": "file",
+        "parameters": [
+          "path"
+        ],
+        "signature": "delete_file(path)",
+        "description": "delete file inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "file_exists",
+        "aliases": [
+          "file exists",
+          "fileExists"
+        ],
+        "module": "file",
+        "parameters": [
+          "path"
+        ],
+        "signature": "file_exists(path)",
+        "description": "file exists inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "file_size",
+        "aliases": [
+          "file size",
+          "fileSize"
+        ],
+        "module": "file",
+        "parameters": [
+          "path"
+        ],
+        "signature": "file_size(path)",
+        "description": "file size inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "folder_exists",
+        "aliases": [
+          "folder exists",
+          "folderExists"
+        ],
+        "module": "file",
+        "parameters": [
+          "directory"
+        ],
+        "signature": "folder_exists(directory)",
+        "description": "folder exists inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "list_files",
+        "aliases": [
+          "list files",
+          "listFiles"
+        ],
+        "module": "file",
+        "parameters": [
+          "directory?"
+        ],
+        "signature": "list_files(directory?)",
+        "description": "list files inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "read_file",
+        "aliases": [
+          "read file",
+          "readFile"
+        ],
+        "module": "file",
+        "parameters": [
+          "path"
+        ],
+        "signature": "read_file(path)",
+        "description": "Read UTF-8 text from a file inside the project directory.",
+        "browserSafe": false
+      },
+      {
+        "name": "write_file",
+        "aliases": [
+          "write file",
+          "writeFile"
+        ],
+        "module": "file",
+        "parameters": [
+          "path",
+          "content"
+        ],
+        "signature": "write_file(path, content)",
+        "description": "Write UTF-8 text inside the project directory, creating parent directories as needed.",
+        "browserSafe": false
+      },
+      {
+        "name": "area_circle",
+        "aliases": [
+          "area circle",
+          "areaCircle"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius"
+        ],
+        "signature": "area_circle(radius)",
+        "description": "area circle \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "area_rectangle",
+        "aliases": [
+          "area rectangle",
+          "areaRectangle"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "length",
+          "width"
+        ],
+        "signature": "area_rectangle(length, width)",
+        "description": "area rectangle \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "area_trapezoid",
+        "aliases": [
+          "area trapezoid",
+          "areaTrapezoid"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "base1",
+          "base2",
+          "height"
+        ],
+        "signature": "area_trapezoid(base1, base2, height)",
+        "description": "area trapezoid \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "area_triangle",
+        "aliases": [
+          "area triangle",
+          "areaTriangle"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "base",
+          "height"
+        ],
+        "signature": "area_triangle(base, height)",
+        "description": "area triangle \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "circumference_circle",
+        "aliases": [
+          "circumference circle",
+          "circumferenceCircle"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius"
+        ],
+        "signature": "circumference_circle(radius)",
+        "description": "circumference circle \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "distance_2d",
+        "aliases": [
+          "distance 2d",
+          "distance2d"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "x1",
+          "y1",
+          "x2",
+          "y2"
+        ],
+        "signature": "distance_2d(x1, y1, x2, y2)",
+        "description": "distance 2d \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "distance_3d",
+        "aliases": [
+          "distance 3d",
+          "distance3d"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "x1",
+          "y1",
+          "z1",
+          "x2",
+          "y2",
+          "z2"
+        ],
+        "signature": "distance_3d(x1, y1, z1, x2, y2, z2)",
+        "description": "distance 3d \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "hypotenuse",
+        "aliases": [],
+        "module": "geometry",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "hypotenuse(a, b)",
+        "description": "hypotenuse \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "perimeter_rectangle",
+        "aliases": [
+          "perimeter rectangle",
+          "perimeterRectangle"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "length",
+          "width"
+        ],
+        "signature": "perimeter_rectangle(length, width)",
+        "description": "perimeter rectangle \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "surface_area_cylinder",
+        "aliases": [
+          "surface area cylinder",
+          "surfaceAreaCylinder"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius",
+          "height"
+        ],
+        "signature": "surface_area_cylinder(radius, height)",
+        "description": "surface area cylinder \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "surface_area_sphere",
+        "aliases": [
+          "surface area sphere",
+          "surfaceAreaSphere"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius"
+        ],
+        "signature": "surface_area_sphere(radius)",
+        "description": "surface area sphere \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "volume_cone",
+        "aliases": [
+          "volume cone",
+          "volumeCone"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius",
+          "height"
+        ],
+        "signature": "volume_cone(radius, height)",
+        "description": "volume cone \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "volume_cube",
+        "aliases": [
+          "volume cube",
+          "volumeCube"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "side"
+        ],
+        "signature": "volume_cube(side)",
+        "description": "volume cube \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "volume_cylinder",
+        "aliases": [
+          "volume cylinder",
+          "volumeCylinder"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius",
+          "height"
+        ],
+        "signature": "volume_cylinder(radius, height)",
+        "description": "volume cylinder \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "volume_sphere",
+        "aliases": [
+          "volume sphere",
+          "volumeSphere"
+        ],
+        "module": "geometry",
+        "parameters": [
+          "radius"
+        ],
+        "signature": "volume_sphere(radius)",
+        "description": "volume sphere \u2014 geometry standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "args",
+        "aliases": [],
+        "module": "io",
+        "parameters": [],
+        "signature": "args()",
+        "description": "Return a copy of the script arguments supplied after --.",
+        "browserSafe": true
+      },
+      {
+        "name": "print",
+        "aliases": [],
+        "module": "io",
+        "parameters": [
+          "value"
+        ],
+        "signature": "print(value)",
+        "description": "Write a value using the host's output callback.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_add",
+        "aliases": [
+          "matrix add",
+          "matrixAdd"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "matrix_add(a, b)",
+        "description": "matrix add \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_create",
+        "aliases": [
+          "matrix create",
+          "matrixCreate"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "rows",
+          "cols",
+          "fill?"
+        ],
+        "signature": "matrix_create(rows, cols, fill?)",
+        "description": "matrix create \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_determinant",
+        "aliases": [
+          "matrix determinant",
+          "matrixDeterminant",
+          "det"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix"
+        ],
+        "signature": "matrix_determinant(matrix)",
+        "description": "matrix determinant \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_elementwise_mult",
+        "aliases": [
+          "matrix elementwise mult",
+          "matrixElementwiseMult"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "matrix_elementwise_mult(a, b)",
+        "description": "matrix elementwise mult \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_eye",
+        "aliases": [
+          "matrix eye",
+          "matrixEye",
+          "np_eye",
+          "eye"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "size"
+        ],
+        "signature": "matrix_eye(size)",
+        "description": "matrix eye \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_inverse_2x2",
+        "aliases": [
+          "matrix inverse 2x2",
+          "matrixInverse2x2",
+          "inv"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix"
+        ],
+        "signature": "matrix_inverse_2x2(matrix)",
+        "description": "matrix inverse 2x2 \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_mult",
+        "aliases": [
+          "matrix mult",
+          "matrixMult",
+          "matmul",
+          "np_matmul"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "matrix_mult(a, b)",
+        "description": "matrix mult \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_ones",
+        "aliases": [
+          "matrix ones",
+          "matrixOnes",
+          "np_ones",
+          "ones"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "rows",
+          "cols"
+        ],
+        "signature": "matrix_ones(rows, cols)",
+        "description": "matrix ones \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_random",
+        "aliases": [
+          "matrix random",
+          "matrixRandom"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "rows",
+          "cols",
+          "min?",
+          "max?"
+        ],
+        "signature": "matrix_random(rows, cols, min?, max?)",
+        "description": "matrix random \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_reshape",
+        "aliases": [
+          "matrix reshape",
+          "matrixReshape",
+          "reshape"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix",
+          "newRows",
+          "newCols"
+        ],
+        "signature": "matrix_reshape(matrix, newRows, newCols)",
+        "description": "matrix reshape \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_scale",
+        "aliases": [
+          "matrix scale",
+          "matrixScale"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix",
+          "scalar"
+        ],
+        "signature": "matrix_scale(matrix, scalar)",
+        "description": "matrix scale \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_shape",
+        "aliases": [
+          "matrix shape",
+          "matrixShape",
+          "shape"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix"
+        ],
+        "signature": "matrix_shape(matrix)",
+        "description": "matrix shape \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_sub",
+        "aliases": [
+          "matrix sub",
+          "matrixSub"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "matrix_sub(a, b)",
+        "description": "matrix sub \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_trace",
+        "aliases": [
+          "matrix trace",
+          "matrixTrace"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix"
+        ],
+        "signature": "matrix_trace(matrix)",
+        "description": "matrix trace \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_transpose",
+        "aliases": [
+          "matrix transpose",
+          "matrixTranspose",
+          "transpose"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix"
+        ],
+        "signature": "matrix_transpose(matrix)",
+        "description": "matrix transpose \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_vector_mult",
+        "aliases": [
+          "matrix vector mult",
+          "matrixVectorMult"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "matrix",
+          "vector"
+        ],
+        "signature": "matrix_vector_mult(matrix, vector)",
+        "description": "matrix vector mult \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "matrix_zeros",
+        "aliases": [
+          "matrix zeros",
+          "matrixZeros",
+          "np_zeros",
+          "zeros"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "rows",
+          "cols"
+        ],
+        "signature": "matrix_zeros(rows, cols)",
+        "description": "matrix zeros \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "solve_system_2x2",
+        "aliases": [
+          "solve system 2x2",
+          "solveSystem2x2"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b",
+          "e",
+          "c",
+          "d",
+          "f"
+        ],
+        "signature": "solve_system_2x2(a, b, e, c, d, f)",
+        "description": "solve system 2x2 \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_angle_deg",
+        "aliases": [
+          "vector angle deg",
+          "vectorAngleDeg"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "vector_angle_deg(a, b)",
+        "description": "vector angle deg \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_angle_rad",
+        "aliases": [
+          "vector angle rad",
+          "vectorAngleRad"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "vector_angle_rad(a, b)",
+        "description": "vector angle rad \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_cross_3d",
+        "aliases": [
+          "vector cross 3d",
+          "vectorCross3d"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "vector_cross_3d(a, b)",
+        "description": "vector cross 3d \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_distance",
+        "aliases": [
+          "vector distance",
+          "vectorDistance"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "vector_distance(a, b)",
+        "description": "vector distance \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_dot",
+        "aliases": [
+          "vector dot",
+          "vectorDot",
+          "np_dot",
+          "dot"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "vector_dot(a, b)",
+        "description": "vector dot \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_lerp",
+        "aliases": [
+          "vector lerp",
+          "vectorLerp"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "a",
+          "b",
+          "t"
+        ],
+        "signature": "vector_lerp(a, b, t)",
+        "description": "vector lerp \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_magnitude",
+        "aliases": [
+          "vector magnitude",
+          "vectorMagnitude"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "v"
+        ],
+        "signature": "vector_magnitude(v)",
+        "description": "vector magnitude \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "vector_normalize",
+        "aliases": [
+          "vector normalize",
+          "vectorNormalize"
+        ],
+        "module": "linear_algebra",
+        "parameters": [
+          "v"
+        ],
+        "signature": "vector_normalize(v)",
+        "description": "vector normalize \u2014 linear algebra standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "adjacent_pairs",
+        "aliases": [
+          "adjacent pairs",
+          "adjacentPairs"
+        ],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "adjacent_pairs(val)",
+        "description": "adjacent pairs \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "average",
+        "aliases": [
+          "avg",
+          "mean"
+        ],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "average(val)",
+        "description": "average \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "chunk",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val",
+          "size"
+        ],
+        "signature": "chunk(val, size)",
+        "description": "chunk \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "count",
+        "aliases": [
+          "size"
+        ],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "count(val)",
+        "description": "Count the elements of a list.",
+        "browserSafe": true
+      },
+      {
+        "name": "difference",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "listA",
+          "listB"
+        ],
+        "signature": "difference(listA, listB)",
+        "description": "difference \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "drop",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val",
+          "count"
+        ],
+        "signature": "drop(val, count)",
+        "description": "drop \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "enumerate",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "enumerate(val)",
+        "description": "enumerate \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "fill_list",
+        "aliases": [
+          "fill list",
+          "fillList"
+        ],
+        "module": "list",
+        "parameters": [
+          "val",
+          "count"
+        ],
+        "signature": "fill_list(val, count)",
+        "description": "fill list \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "find_index",
+        "aliases": [
+          "find index",
+          "findIndex"
+        ],
+        "module": "list",
+        "parameters": [
+          "list",
+          "item"
+        ],
+        "signature": "find_index(list, item)",
+        "description": "find index \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "first",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "first(val)",
+        "description": "first \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "flatten",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "flatten(val)",
+        "description": "flatten \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "group_by",
+        "aliases": [
+          "group by",
+          "groupBy"
+        ],
+        "module": "list",
+        "parameters": [
+          "val",
+          "key"
+        ],
+        "signature": "group_by(val, key)",
+        "description": "group by \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "highest",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "highest(val)",
+        "description": "highest \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "insert_at",
+        "aliases": [
+          "insert at",
+          "insertAt"
+        ],
+        "module": "list",
+        "parameters": [
+          "list",
+          "index",
+          "item"
+        ],
+        "signature": "insert_at(list, index, item)",
+        "description": "insert at \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "interleave",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "left",
+          "right"
+        ],
+        "signature": "interleave(left, right)",
+        "description": "interleave \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "intersection",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "listA",
+          "listB"
+        ],
+        "signature": "intersection(listA, listB)",
+        "description": "intersection \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_empty",
+        "aliases": [
+          "is empty",
+          "isEmpty"
+        ],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "is_empty(val)",
+        "description": "is empty \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_sorted",
+        "aliases": [
+          "is sorted",
+          "isSorted"
+        ],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "is_sorted(val)",
+        "description": "is sorted \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "item_of",
+        "aliases": [
+          "item of",
+          "itemOf"
+        ],
+        "module": "list",
+        "parameters": [
+          "index",
+          "list"
+        ],
+        "signature": "item_of(index, list)",
+        "description": "Read a list item using PLAIN's English-style one-based indexing.",
+        "browserSafe": true
+      },
+      {
+        "name": "last",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "last(val)",
+        "description": "last \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "lowest",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "lowest(val)",
+        "description": "lowest \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "range_list",
+        "aliases": [
+          "range list",
+          "rangeList"
+        ],
+        "module": "list",
+        "parameters": [
+          "start",
+          "end",
+          "step?"
+        ],
+        "signature": "range_list(start, end, step?)",
+        "description": "Create an inclusive numeric range with an optional step.",
+        "browserSafe": true
+      },
+      {
+        "name": "reverse",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "reverse(val)",
+        "description": "reverse \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "rotate",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val",
+          "places?"
+        ],
+        "signature": "rotate(val, places?)",
+        "description": "rotate \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sample",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "sample(val)",
+        "description": "sample \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "shuffle",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "shuffle(val)",
+        "description": "shuffle \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "slice_list",
+        "aliases": [
+          "slice list",
+          "sliceList"
+        ],
+        "module": "list",
+        "parameters": [
+          "list",
+          "start",
+          "end?"
+        ],
+        "signature": "slice_list(list, start, end?)",
+        "description": "slice list \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sort",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "sort(val)",
+        "description": "sort \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sum",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "sum(val)",
+        "description": "sum \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "take",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val",
+          "count"
+        ],
+        "signature": "take(val, count)",
+        "description": "take \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "union",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "listA",
+          "listB"
+        ],
+        "signature": "union(listA, listB)",
+        "description": "union \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "unique",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "val"
+        ],
+        "signature": "unique(val)",
+        "description": "unique \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "zip",
+        "aliases": [],
+        "module": "list",
+        "parameters": [
+          "listA",
+          "listB"
+        ],
+        "signature": "zip(listA, listB)",
+        "description": "zip \u2014 list standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "absolute",
+        "aliases": [
+          "abs"
+        ],
+        "module": "math",
+        "parameters": [
+          "num"
+        ],
+        "signature": "absolute(num)",
+        "description": "absolute \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "arccosine",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "val"
+        ],
+        "signature": "arccosine(val)",
+        "description": "arccosine \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "arcsine",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "val"
+        ],
+        "signature": "arcsine(val)",
+        "description": "arcsine \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "arctangent",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "val"
+        ],
+        "signature": "arctangent(val)",
+        "description": "arctangent \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ceiling",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "num"
+        ],
+        "signature": "ceiling(num)",
+        "description": "ceiling \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "clamp",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "val",
+          "min",
+          "max"
+        ],
+        "signature": "clamp(val, min, max)",
+        "description": "clamp \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "combinations",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n",
+          "r"
+        ],
+        "signature": "combinations(n, r)",
+        "description": "combinations \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "compound_interest",
+        "aliases": [
+          "compound interest",
+          "compoundInterest"
+        ],
+        "module": "math",
+        "parameters": [
+          "p",
+          "r",
+          "t",
+          "n?"
+        ],
+        "signature": "compound_interest(p, r, t, n?)",
+        "description": "compound interest \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "cosine",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "deg"
+        ],
+        "signature": "cosine(deg)",
+        "description": "Return the cosine of an angle in degrees.",
+        "browserSafe": true
+      },
+      {
+        "name": "cube",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "cube(n)",
+        "description": "cube \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "cube_root",
+        "aliases": [
+          "cube root",
+          "cubeRoot",
+          "cbrt"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "cube_root(n)",
+        "description": "cube root \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "euler_e",
+        "aliases": [
+          "euler e",
+          "eulerE"
+        ],
+        "module": "math",
+        "parameters": [],
+        "signature": "euler_e()",
+        "description": "euler e \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "exp",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "exp(n)",
+        "description": "exp \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "factorial",
+        "aliases": [
+          "fact"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "factorial(n)",
+        "description": "factorial \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "factors",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "factors(n)",
+        "description": "factors \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "floor",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "num"
+        ],
+        "signature": "floor(num)",
+        "description": "floor \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "gcd",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "gcd(a, b)",
+        "description": "gcd \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_even",
+        "aliases": [
+          "is even",
+          "isEven"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "is_even(n)",
+        "description": "is even \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_odd",
+        "aliases": [
+          "is odd",
+          "isOdd"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "is_odd(n)",
+        "description": "is odd \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_prime",
+        "aliases": [
+          "is prime",
+          "isPrime"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "is_prime(n)",
+        "description": "is prime \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "lcm",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "a",
+          "b"
+        ],
+        "signature": "lcm(a, b)",
+        "description": "lcm \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "log",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "log(n)",
+        "description": "log \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "log10",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "log10(n)",
+        "description": "log10 \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "log2",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "log2(n)",
+        "description": "log2 \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "maximum",
+        "aliases": [
+          "max"
+        ],
+        "module": "math",
+        "parameters": [
+          "...args"
+        ],
+        "signature": "maximum(...args)",
+        "description": "maximum \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "minimum",
+        "aliases": [
+          "min"
+        ],
+        "module": "math",
+        "parameters": [
+          "...args"
+        ],
+        "signature": "minimum(...args)",
+        "description": "minimum \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "next_prime",
+        "aliases": [
+          "next prime",
+          "nextPrime"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "next_prime(n)",
+        "description": "next prime \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "percent_change",
+        "aliases": [
+          "percent change",
+          "percentChange"
+        ],
+        "module": "math",
+        "parameters": [
+          "old",
+          "new"
+        ],
+        "signature": "percent_change(old, new)",
+        "description": "percent change \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "percentage",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "part",
+          "total"
+        ],
+        "signature": "percentage(part, total)",
+        "description": "percentage \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "permutations",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n",
+          "r"
+        ],
+        "signature": "permutations(n, r)",
+        "description": "permutations \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "pi",
+        "aliases": [],
+        "module": "math",
+        "parameters": [],
+        "signature": "pi()",
+        "description": "pi \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "power",
+        "aliases": [
+          "pow"
+        ],
+        "module": "math",
+        "parameters": [
+          "base",
+          "exp"
+        ],
+        "signature": "power(base, exp)",
+        "description": "power \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "primes_up_to",
+        "aliases": [
+          "primes up to",
+          "primesUpTo"
+        ],
+        "module": "math",
+        "parameters": [
+          "limit"
+        ],
+        "signature": "primes_up_to(limit)",
+        "description": "primes up to \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "quadratic_roots",
+        "aliases": [
+          "quadratic roots",
+          "quadraticRoots"
+        ],
+        "module": "math",
+        "parameters": [
+          "a",
+          "b",
+          "c"
+        ],
+        "signature": "quadratic_roots(a, b, c)",
+        "description": "quadratic roots \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "random_between",
+        "aliases": [
+          "random between",
+          "randomBetween"
+        ],
+        "module": "math",
+        "parameters": [
+          "min",
+          "max"
+        ],
+        "signature": "random_between(min, max)",
+        "description": "random between \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "round",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "num"
+        ],
+        "signature": "round(num)",
+        "description": "round \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sign",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "sign(n)",
+        "description": "sign \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "simple_interest",
+        "aliases": [
+          "simple interest",
+          "simpleInterest"
+        ],
+        "module": "math",
+        "parameters": [
+          "principal",
+          "ratePercent",
+          "timeYears"
+        ],
+        "signature": "simple_interest(principal, ratePercent, timeYears)",
+        "description": "simple interest \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sine",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "deg"
+        ],
+        "signature": "sine(deg)",
+        "description": "Return the sine of an angle in degrees.",
+        "browserSafe": true
+      },
+      {
+        "name": "square",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "square(n)",
+        "description": "square \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "square_root",
+        "aliases": [
+          "square root",
+          "squareRoot",
+          "sqrt"
+        ],
+        "module": "math",
+        "parameters": [
+          "n"
+        ],
+        "signature": "square_root(n)",
+        "description": "Return the nonnegative square root of a number.",
+        "browserSafe": true
+      },
+      {
+        "name": "tangent",
+        "aliases": [],
+        "module": "math",
+        "parameters": [
+          "deg"
+        ],
+        "signature": "tangent(deg)",
+        "description": "Return the tangent of an angle in degrees.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_degrees",
+        "aliases": [
+          "to degrees",
+          "toDegrees"
+        ],
+        "module": "math",
+        "parameters": [
+          "rad"
+        ],
+        "signature": "to_degrees(rad)",
+        "description": "to degrees \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_number",
+        "aliases": [
+          "to number",
+          "toNumber"
+        ],
+        "module": "math",
+        "parameters": [
+          "val"
+        ],
+        "signature": "to_number(val)",
+        "description": "Convert a number or numeric text to a number; reject nonnumeric input.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_radians",
+        "aliases": [
+          "to radians",
+          "toRadians"
+        ],
+        "module": "math",
+        "parameters": [
+          "deg"
+        ],
+        "signature": "to_radians(deg)",
+        "description": "to radians \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_text",
+        "aliases": [
+          "to text",
+          "toText"
+        ],
+        "module": "math",
+        "parameters": [
+          "val"
+        ],
+        "signature": "to_text(val)",
+        "description": "to text \u2014 math standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "fetch_json",
+        "aliases": [
+          "fetch json",
+          "fetchJson"
+        ],
+        "module": "network",
+        "parameters": [
+          "url"
+        ],
+        "signature": "fetch_json(url)",
+        "description": "fetch json \u2014 network standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "fetch_text",
+        "aliases": [
+          "fetch text",
+          "fetchText"
+        ],
+        "module": "network",
+        "parameters": [
+          "url"
+        ],
+        "signature": "fetch_text(url)",
+        "description": "fetch text \u2014 network standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "is_valid_url",
+        "aliases": [
+          "is valid url",
+          "isValidUrl"
+        ],
+        "module": "network",
+        "parameters": [
+          "url"
+        ],
+        "signature": "is_valid_url(url)",
+        "description": "is valid url \u2014 network standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "url_decode",
+        "aliases": [
+          "url decode",
+          "urlDecode"
+        ],
+        "module": "network",
+        "parameters": [
+          "text"
+        ],
+        "signature": "url_decode(text)",
+        "description": "url decode \u2014 network standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "url_encode",
+        "aliases": [
+          "url encode",
+          "urlEncode"
+        ],
+        "module": "network",
+        "parameters": [
+          "text"
+        ],
+        "signature": "url_encode(text)",
+        "description": "url encode \u2014 network standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "capacitors_parallel",
+        "aliases": [
+          "capacitors parallel",
+          "capacitorsParallel"
+        ],
+        "module": "physics",
+        "parameters": [
+          "capacitors"
+        ],
+        "signature": "capacitors_parallel(capacitors)",
+        "description": "capacitors parallel \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "capacitors_series",
+        "aliases": [
+          "capacitors series",
+          "capacitorsSeries"
+        ],
+        "module": "physics",
+        "parameters": [
+          "capacitors"
+        ],
+        "signature": "capacitors_series(capacitors)",
+        "description": "capacitors series \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "carnot_efficiency",
+        "aliases": [
+          "carnot efficiency",
+          "carnotEfficiency"
+        ],
+        "module": "physics",
+        "parameters": [
+          "tempColdKelvin",
+          "tempHotKelvin"
+        ],
+        "signature": "carnot_efficiency(tempColdKelvin, tempHotKelvin)",
+        "description": "carnot efficiency \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "centripetal_acceleration",
+        "aliases": [
+          "centripetal acceleration",
+          "centripetalAcceleration"
+        ],
+        "module": "physics",
+        "parameters": [
+          "velocity",
+          "radius"
+        ],
+        "signature": "centripetal_acceleration(velocity, radius)",
+        "description": "centripetal acceleration \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "centripetal_force",
+        "aliases": [
+          "centripetal force",
+          "centripetalForce"
+        ],
+        "module": "physics",
+        "parameters": [
+          "mass",
+          "velocity",
+          "radius"
+        ],
+        "signature": "centripetal_force(mass, velocity, radius)",
+        "description": "centripetal force \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "coulombs_law",
+        "aliases": [
+          "coulombs law",
+          "coulombsLaw"
+        ],
+        "module": "physics",
+        "parameters": [
+          "q1",
+          "q2",
+          "distance"
+        ],
+        "signature": "coulombs_law(q1, q2, distance)",
+        "description": "coulombs law \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "de_broglie_wavelength",
+        "aliases": [
+          "de broglie wavelength",
+          "deBroglieWavelength"
+        ],
+        "module": "physics",
+        "parameters": [
+          "mass",
+          "velocity"
+        ],
+        "signature": "de_broglie_wavelength(mass, velocity)",
+        "description": "de broglie wavelength \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "electric_field",
+        "aliases": [
+          "electric field",
+          "electricField"
+        ],
+        "module": "physics",
+        "parameters": [
+          "charge",
+          "distance"
+        ],
+        "signature": "electric_field(charge, distance)",
+        "description": "electric field \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "escape_velocity",
+        "aliases": [
+          "escape velocity",
+          "escapeVelocity"
+        ],
+        "module": "physics",
+        "parameters": [
+          "planetMass",
+          "planetRadius"
+        ],
+        "signature": "escape_velocity(planetMass, planetRadius)",
+        "description": "escape velocity \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "gravitational_force",
+        "aliases": [
+          "gravitational force",
+          "gravitationalForce"
+        ],
+        "module": "physics",
+        "parameters": [
+          "m1",
+          "m2",
+          "distance"
+        ],
+        "signature": "gravitational_force(m1, m2, distance)",
+        "description": "gravitational force \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "gravitational_potential_energy",
+        "aliases": [
+          "gravitational potential energy",
+          "gravitationalPotentialEnergy"
+        ],
+        "module": "physics",
+        "parameters": [
+          "mass",
+          "height",
+          "g?"
+        ],
+        "signature": "gravitational_potential_energy(mass, height, g?)",
+        "description": "gravitational potential energy \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "heat_transfer_conduction",
+        "aliases": [
+          "heat transfer conduction",
+          "heatTransferConduction"
+        ],
+        "module": "physics",
+        "parameters": [
+          "thermalCond",
+          "area",
+          "tempDiff",
+          "thickness"
+        ],
+        "signature": "heat_transfer_conduction(thermalCond, area, tempDiff, thickness)",
+        "description": "heat transfer conduction \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "hookes_law_force",
+        "aliases": [
+          "hookes law force",
+          "hookesLawForce"
+        ],
+        "module": "physics",
+        "parameters": [
+          "springConstant",
+          "displacement"
+        ],
+        "signature": "hookes_law_force(springConstant, displacement)",
+        "description": "hookes law force \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ideal_gas_pressure",
+        "aliases": [
+          "ideal gas pressure",
+          "idealGasPressure"
+        ],
+        "module": "physics",
+        "parameters": [
+          "moles",
+          "kelvin",
+          "volumeCubicMeters"
+        ],
+        "signature": "ideal_gas_pressure(moles, kelvin, volumeCubicMeters)",
+        "description": "ideal gas pressure \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "kinetic_energy",
+        "aliases": [
+          "kinetic energy",
+          "kineticEnergy"
+        ],
+        "module": "physics",
+        "parameters": [
+          "mass",
+          "velocity"
+        ],
+        "signature": "kinetic_energy(mass, velocity)",
+        "description": "kinetic energy \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "length_contraction",
+        "aliases": [
+          "length contraction",
+          "lengthContraction"
+        ],
+        "module": "physics",
+        "parameters": [
+          "properLength",
+          "velocity"
+        ],
+        "signature": "length_contraction(properLength, velocity)",
+        "description": "length contraction \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "lorentz_factor",
+        "aliases": [
+          "lorentz factor",
+          "lorentzFactor"
+        ],
+        "module": "physics",
+        "parameters": [
+          "velocity"
+        ],
+        "signature": "lorentz_factor(velocity)",
+        "description": "lorentz factor \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "momentum",
+        "aliases": [],
+        "module": "physics",
+        "parameters": [
+          "mass",
+          "velocity"
+        ],
+        "signature": "momentum(mass, velocity)",
+        "description": "momentum \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ohms_law_current",
+        "aliases": [
+          "ohms law current",
+          "ohmsLawCurrent"
+        ],
+        "module": "physics",
+        "parameters": [
+          "voltageVolts",
+          "resistanceOhms"
+        ],
+        "signature": "ohms_law_current(voltageVolts, resistanceOhms)",
+        "description": "ohms law current \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ohms_law_resistance",
+        "aliases": [
+          "ohms law resistance",
+          "ohmsLawResistance"
+        ],
+        "module": "physics",
+        "parameters": [
+          "voltageVolts",
+          "currentAmps"
+        ],
+        "signature": "ohms_law_resistance(voltageVolts, currentAmps)",
+        "description": "ohms law resistance \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ohms_law_voltage",
+        "aliases": [
+          "ohms law voltage",
+          "ohmsLawVoltage"
+        ],
+        "module": "physics",
+        "parameters": [
+          "currentAmps",
+          "resistanceOhms"
+        ],
+        "signature": "ohms_law_voltage(currentAmps, resistanceOhms)",
+        "description": "ohms law voltage \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "orbital_period_kepler",
+        "aliases": [
+          "orbital period kepler",
+          "orbitalPeriodKepler"
+        ],
+        "module": "physics",
+        "parameters": [
+          "planetMass",
+          "orbitRadius"
+        ],
+        "signature": "orbital_period_kepler(planetMass, orbitRadius)",
+        "description": "orbital period kepler \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "orbital_velocity",
+        "aliases": [
+          "orbital velocity",
+          "orbitalVelocity"
+        ],
+        "module": "physics",
+        "parameters": [
+          "planetMass",
+          "orbitRadius"
+        ],
+        "signature": "orbital_velocity(planetMass, orbitRadius)",
+        "description": "orbital velocity \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "pendulum_period",
+        "aliases": [
+          "pendulum period",
+          "pendulumPeriod"
+        ],
+        "module": "physics",
+        "parameters": [
+          "lengthMeters",
+          "g?"
+        ],
+        "signature": "pendulum_period(lengthMeters, g?)",
+        "description": "pendulum period \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "photon_energy",
+        "aliases": [
+          "photon energy",
+          "photonEnergy"
+        ],
+        "module": "physics",
+        "parameters": [
+          "frequencyHz"
+        ],
+        "signature": "photon_energy(frequencyHz)",
+        "description": "photon energy \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "power_watts",
+        "aliases": [
+          "power watts",
+          "powerWatts"
+        ],
+        "module": "physics",
+        "parameters": [
+          "work",
+          "timeSeconds"
+        ],
+        "signature": "power_watts(work, timeSeconds)",
+        "description": "power watts \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "relativistic_energy",
+        "aliases": [
+          "relativistic energy",
+          "relativisticEnergy"
+        ],
+        "module": "physics",
+        "parameters": [
+          "restMass",
+          "velocity?"
+        ],
+        "signature": "relativistic_energy(restMass, velocity?)",
+        "description": "relativistic energy \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "resistors_parallel",
+        "aliases": [
+          "resistors parallel",
+          "resistorsParallel"
+        ],
+        "module": "physics",
+        "parameters": [
+          "resistors"
+        ],
+        "signature": "resistors_parallel(resistors)",
+        "description": "resistors parallel \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "resistors_series",
+        "aliases": [
+          "resistors series",
+          "resistorsSeries"
+        ],
+        "module": "physics",
+        "parameters": [
+          "resistors"
+        ],
+        "signature": "resistors_series(resistors)",
+        "description": "resistors series \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "reynolds_number",
+        "aliases": [
+          "reynolds number",
+          "reynoldsNumber"
+        ],
+        "module": "physics",
+        "parameters": [
+          "density",
+          "velocity",
+          "charLength",
+          "dynamicViscosity"
+        ],
+        "signature": "reynolds_number(density, velocity, charLength, dynamicViscosity)",
+        "description": "reynolds number \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "rlc_resonant_frequency",
+        "aliases": [
+          "rlc resonant frequency",
+          "rlcResonantFrequency"
+        ],
+        "module": "physics",
+        "parameters": [
+          "inductanceHenries",
+          "capacitanceFarads"
+        ],
+        "signature": "rlc_resonant_frequency(inductanceHenries, capacitanceFarads)",
+        "description": "rlc resonant frequency \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "schwarzschild_radius",
+        "aliases": [
+          "schwarzschild radius",
+          "schwarzschildRadius"
+        ],
+        "module": "physics",
+        "parameters": [
+          "mass"
+        ],
+        "signature": "schwarzschild_radius(mass)",
+        "description": "schwarzschild radius \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "spring_potential_energy",
+        "aliases": [
+          "spring potential energy",
+          "springPotentialEnergy"
+        ],
+        "module": "physics",
+        "parameters": [
+          "springConstant",
+          "displacement"
+        ],
+        "signature": "spring_potential_energy(springConstant, displacement)",
+        "description": "spring potential energy \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "stefan_boltzmann_radiation",
+        "aliases": [
+          "stefan boltzmann radiation",
+          "stefanBoltzmannRadiation"
+        ],
+        "module": "physics",
+        "parameters": [
+          "emissivity",
+          "area",
+          "tempKelvin"
+        ],
+        "signature": "stefan_boltzmann_radiation(emissivity, area, tempKelvin)",
+        "description": "stefan boltzmann radiation \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "time_dilation",
+        "aliases": [
+          "time dilation",
+          "timeDilation"
+        ],
+        "module": "physics",
+        "parameters": [
+          "properTime",
+          "velocity"
+        ],
+        "signature": "time_dilation(properTime, velocity)",
+        "description": "time dilation \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "work_done",
+        "aliases": [
+          "work done",
+          "workDone"
+        ],
+        "module": "physics",
+        "parameters": [
+          "force",
+          "distance",
+          "angleDeg?"
+        ],
+        "signature": "work_done(force, distance, angleDeg?)",
+        "description": "work done \u2014 physics standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "acceleration",
+        "aliases": [],
+        "module": "science",
+        "parameters": [
+          "vInit",
+          "vFinal",
+          "time"
+        ],
+        "signature": "acceleration(vInit, vFinal, time)",
+        "description": "acceleration \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "atomic_mass",
+        "aliases": [
+          "atomic mass",
+          "atomicMass"
+        ],
+        "module": "science",
+        "parameters": [
+          "query"
+        ],
+        "signature": "atomic_mass(query)",
+        "description": "atomic mass \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "atomic_number",
+        "aliases": [
+          "atomic number",
+          "atomicNumber"
+        ],
+        "module": "science",
+        "parameters": [
+          "query"
+        ],
+        "signature": "atomic_number(query)",
+        "description": "atomic number \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "density",
+        "aliases": [],
+        "module": "science",
+        "parameters": [
+          "mass",
+          "volume"
+        ],
+        "signature": "density(mass, volume)",
+        "description": "density \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "electrical_power",
+        "aliases": [
+          "electrical power",
+          "electricalPower"
+        ],
+        "module": "science",
+        "parameters": [
+          "voltage",
+          "current"
+        ],
+        "signature": "electrical_power(voltage, current)",
+        "description": "electrical power \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "element_name",
+        "aliases": [
+          "element name",
+          "elementName"
+        ],
+        "module": "science",
+        "parameters": [
+          "query"
+        ],
+        "signature": "element_name(query)",
+        "description": "element name \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "force",
+        "aliases": [],
+        "module": "science",
+        "parameters": [
+          "mass",
+          "accel"
+        ],
+        "signature": "force(mass, accel)",
+        "description": "force \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "free_fall_time",
+        "aliases": [
+          "free fall time",
+          "freeFallTime"
+        ],
+        "module": "science",
+        "parameters": [
+          "height",
+          "g?"
+        ],
+        "signature": "free_fall_time(height, g?)",
+        "description": "free fall time \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "kinetic_energy",
+        "aliases": [
+          "kinetic energy",
+          "kineticEnergy"
+        ],
+        "module": "science",
+        "parameters": [
+          "mass",
+          "velocity"
+        ],
+        "signature": "kinetic_energy(mass, velocity)",
+        "description": "kinetic energy \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "momentum",
+        "aliases": [],
+        "module": "science",
+        "parameters": [
+          "mass",
+          "velocity"
+        ],
+        "signature": "momentum(mass, velocity)",
+        "description": "momentum \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ohms_current",
+        "aliases": [
+          "ohms current",
+          "ohmsCurrent"
+        ],
+        "module": "science",
+        "parameters": [
+          "voltage",
+          "resistance"
+        ],
+        "signature": "ohms_current(voltage, resistance)",
+        "description": "ohms current \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ohms_resistance",
+        "aliases": [
+          "ohms resistance",
+          "ohmsResistance"
+        ],
+        "module": "science",
+        "parameters": [
+          "voltage",
+          "current"
+        ],
+        "signature": "ohms_resistance(voltage, current)",
+        "description": "ohms resistance \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ohms_voltage",
+        "aliases": [
+          "ohms voltage",
+          "ohmsVoltage"
+        ],
+        "module": "science",
+        "parameters": [
+          "current",
+          "resistance"
+        ],
+        "signature": "ohms_voltage(current, resistance)",
+        "description": "ohms voltage \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "potential_energy",
+        "aliases": [
+          "potential energy",
+          "potentialEnergy"
+        ],
+        "module": "science",
+        "parameters": [
+          "mass",
+          "height",
+          "g?"
+        ],
+        "signature": "potential_energy(mass, height, g?)",
+        "description": "potential energy \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "power_watts",
+        "aliases": [
+          "power watts",
+          "powerWatts"
+        ],
+        "module": "science",
+        "parameters": [
+          "work",
+          "time"
+        ],
+        "signature": "power_watts(work, time)",
+        "description": "power watts \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "projectile_range",
+        "aliases": [
+          "projectile range",
+          "projectileRange"
+        ],
+        "module": "science",
+        "parameters": [
+          "v0",
+          "angleDeg",
+          "g?"
+        ],
+        "signature": "projectile_range(v0, angleDeg, g?)",
+        "description": "projectile range \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "speed",
+        "aliases": [],
+        "module": "science",
+        "parameters": [
+          "distance",
+          "time"
+        ],
+        "signature": "speed(distance, time)",
+        "description": "speed \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "work_done",
+        "aliases": [
+          "work done",
+          "workDone"
+        ],
+        "module": "science",
+        "parameters": [
+          "force",
+          "distance"
+        ],
+        "signature": "work_done(force, distance)",
+        "description": "work done \u2014 science standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "cors_headers",
+        "aliases": [
+          "cors headers",
+          "corsHeaders"
+        ],
+        "module": "server",
+        "parameters": [
+          "origin?"
+        ],
+        "signature": "cors_headers(origin?)",
+        "description": "cors headers \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "deploy_server",
+        "aliases": [
+          "deploy server",
+          "deployServer",
+          "deploy"
+        ],
+        "module": "server",
+        "parameters": [
+          "port",
+          "handlerOrRouter?",
+          "host?"
+        ],
+        "signature": "deploy_server(port, handlerOrRouter?, host?)",
+        "description": "Start a local HTTP server; pass an explicit bind address for LAN access.",
+        "browserSafe": false
+      },
+      {
+        "name": "get_all_ips",
+        "aliases": [
+          "get all ips",
+          "getAllIps"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "get_all_ips()",
+        "description": "get all ips \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "get_hostname",
+        "aliases": [
+          "get hostname",
+          "getHostname"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "get_hostname()",
+        "description": "get hostname \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "get_local_ip",
+        "aliases": [
+          "get local ip",
+          "getLocalIp",
+          "local_ip"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "get_local_ip()",
+        "description": "get local ip \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "get_public_ip",
+        "aliases": [
+          "get public ip",
+          "getPublicIp",
+          "public_ip"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "get_public_ip()",
+        "description": "get public ip \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "html_response",
+        "aliases": [
+          "html response",
+          "htmlResponse"
+        ],
+        "module": "server",
+        "parameters": [
+          "html",
+          "status?"
+        ],
+        "signature": "html_response(html, status?)",
+        "description": "html response \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "json_response",
+        "aliases": [
+          "json response",
+          "jsonResponse"
+        ],
+        "module": "server",
+        "parameters": [
+          "data",
+          "status?"
+        ],
+        "signature": "json_response(data, status?)",
+        "description": "json response \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "parse_cookies",
+        "aliases": [
+          "parse cookies",
+          "parseCookies"
+        ],
+        "module": "server",
+        "parameters": [
+          "cookieHeader"
+        ],
+        "signature": "parse_cookies(cookieHeader)",
+        "description": "parse cookies \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "parse_query_string",
+        "aliases": [
+          "parse query string",
+          "parseQueryString"
+        ],
+        "module": "server",
+        "parameters": [
+          "query"
+        ],
+        "signature": "parse_query_string(query)",
+        "description": "parse query string \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "redirect_response",
+        "aliases": [
+          "redirect response",
+          "redirectResponse"
+        ],
+        "module": "server",
+        "parameters": [
+          "url",
+          "status?"
+        ],
+        "signature": "redirect_response(url, status?)",
+        "description": "redirect response \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "server_memory_usage",
+        "aliases": [
+          "server memory usage",
+          "serverMemoryUsage"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "server_memory_usage()",
+        "description": "server memory usage \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "server_uptime",
+        "aliases": [
+          "server uptime",
+          "serverUptime"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "server_uptime()",
+        "description": "server uptime \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "status_code_text",
+        "aliases": [
+          "status code text",
+          "statusCodeText"
+        ],
+        "module": "server",
+        "parameters": [
+          "code"
+        ],
+        "signature": "status_code_text(code)",
+        "description": "status code text \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "stop_deployed_server",
+        "aliases": [
+          "stop deployed server",
+          "stopDeployedServer"
+        ],
+        "module": "server",
+        "parameters": [],
+        "signature": "stop_deployed_server()",
+        "description": "stop deployed server \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "text_response",
+        "aliases": [
+          "text response",
+          "textResponse"
+        ],
+        "module": "server",
+        "parameters": [
+          "text",
+          "status?"
+        ],
+        "signature": "text_response(text, status?)",
+        "description": "text response \u2014 server standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "correlation",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "listA",
+          "listB"
+        ],
+        "signature": "correlation(listA, listB)",
+        "description": "correlation \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "covariance",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "listA",
+          "listB"
+        ],
+        "signature": "covariance(listA, listB)",
+        "description": "covariance \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "cumulative_sum",
+        "aliases": [
+          "cumulative sum",
+          "cumulativeSum"
+        ],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "cumulative_sum(list)",
+        "description": "cumulative sum \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "frequency_table",
+        "aliases": [
+          "frequency table",
+          "frequencyTable"
+        ],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "frequency_table(list)",
+        "description": "frequency table \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "iqr",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "iqr(list)",
+        "description": "iqr \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "linear_regression",
+        "aliases": [
+          "linear regression",
+          "linearRegression"
+        ],
+        "module": "stats",
+        "parameters": [
+          "xList",
+          "yList"
+        ],
+        "signature": "linear_regression(xList, yList)",
+        "description": "linear regression \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "mean",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "mean(list)",
+        "description": "mean \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "median",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "median(list)",
+        "description": "median \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "mode",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "mode(list)",
+        "description": "mode \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "percentile",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list",
+          "p"
+        ],
+        "signature": "percentile(list, p)",
+        "description": "percentile \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "product_of",
+        "aliases": [
+          "product of",
+          "productOf"
+        ],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "product_of(list)",
+        "description": "product of \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "quartiles",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "quartiles(list)",
+        "description": "quartiles \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "range_of",
+        "aliases": [
+          "range of",
+          "rangeOf"
+        ],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "range_of(list)",
+        "description": "range of \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "standard_deviation",
+        "aliases": [
+          "standard deviation",
+          "standardDeviation",
+          "stdev"
+        ],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "standard_deviation(list)",
+        "description": "standard deviation \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "variance",
+        "aliases": [],
+        "module": "stats",
+        "parameters": [
+          "list"
+        ],
+        "signature": "variance(list)",
+        "description": "variance \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "z_score",
+        "aliases": [
+          "z score",
+          "zScore"
+        ],
+        "module": "stats",
+        "parameters": [
+          "value",
+          "mean",
+          "stdev"
+        ],
+        "signature": "z_score(value, mean, stdev)",
+        "description": "z score \u2014 stats standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "celsius_to_fahrenheit",
+        "aliases": [
+          "celsius to fahrenheit",
+          "celsiusToFahrenheit"
+        ],
+        "module": "student",
+        "parameters": [
+          "c"
+        ],
+        "signature": "celsius_to_fahrenheit(c)",
+        "description": "celsius to fahrenheit \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "celsius_to_kelvin",
+        "aliases": [
+          "celsius to kelvin",
+          "celsiusToKelvin"
+        ],
+        "module": "student",
+        "parameters": [
+          "c"
+        ],
+        "signature": "celsius_to_kelvin(c)",
+        "description": "celsius to kelvin \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "cm_to_inches",
+        "aliases": [
+          "cm to inches",
+          "cmToInches"
+        ],
+        "module": "student",
+        "parameters": [
+          "cm"
+        ],
+        "signature": "cm_to_inches(cm)",
+        "description": "cm to inches \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "fahrenheit_to_celsius",
+        "aliases": [
+          "fahrenheit to celsius",
+          "fahrenheitToCelsius"
+        ],
+        "module": "student",
+        "parameters": [
+          "f"
+        ],
+        "signature": "fahrenheit_to_celsius(f)",
+        "description": "fahrenheit to celsius \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "feet_to_meters",
+        "aliases": [
+          "feet to meters",
+          "feetToMeters"
+        ],
+        "module": "student",
+        "parameters": [
+          "ft"
+        ],
+        "signature": "feet_to_meters(ft)",
+        "description": "feet to meters \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "gallons_to_liters",
+        "aliases": [
+          "gallons to liters",
+          "gallonsToLiters"
+        ],
+        "module": "student",
+        "parameters": [
+          "gal"
+        ],
+        "signature": "gallons_to_liters(gal)",
+        "description": "gallons to liters \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "gpa_from_grades",
+        "aliases": [
+          "gpa from grades",
+          "gpaFromGrades"
+        ],
+        "module": "student",
+        "parameters": [
+          "gradesList",
+          "creditsList"
+        ],
+        "signature": "gpa_from_grades(gradesList, creditsList)",
+        "description": "gpa from grades \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "gpa_from_percentage",
+        "aliases": [
+          "gpa from percentage",
+          "gpaFromPercentage"
+        ],
+        "module": "student",
+        "parameters": [
+          "percentage"
+        ],
+        "signature": "gpa_from_percentage(percentage)",
+        "description": "gpa from percentage \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "grams_to_ounces",
+        "aliases": [
+          "grams to ounces",
+          "gramsToOunces"
+        ],
+        "module": "student",
+        "parameters": [
+          "g"
+        ],
+        "signature": "grams_to_ounces(g)",
+        "description": "grams to ounces \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "hours_to_minutes",
+        "aliases": [
+          "hours to minutes",
+          "hoursToMinutes"
+        ],
+        "module": "student",
+        "parameters": [
+          "h"
+        ],
+        "signature": "hours_to_minutes(h)",
+        "description": "hours to minutes \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "inches_to_cm",
+        "aliases": [
+          "inches to cm",
+          "inchesToCm"
+        ],
+        "module": "student",
+        "parameters": [
+          "in"
+        ],
+        "signature": "inches_to_cm(in)",
+        "description": "inches to cm \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "kelvin_to_celsius",
+        "aliases": [
+          "kelvin to celsius",
+          "kelvinToCelsius"
+        ],
+        "module": "student",
+        "parameters": [
+          "k"
+        ],
+        "signature": "kelvin_to_celsius(k)",
+        "description": "kelvin to celsius \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "kg_to_pounds",
+        "aliases": [
+          "kg to pounds",
+          "kgToPounds"
+        ],
+        "module": "student",
+        "parameters": [
+          "kg"
+        ],
+        "signature": "kg_to_pounds(kg)",
+        "description": "kg to pounds \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "km_to_miles",
+        "aliases": [
+          "km to miles",
+          "kmToMiles"
+        ],
+        "module": "student",
+        "parameters": [
+          "km"
+        ],
+        "signature": "km_to_miles(km)",
+        "description": "km to miles \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "letter_grade",
+        "aliases": [
+          "letter grade",
+          "letterGrade"
+        ],
+        "module": "student",
+        "parameters": [
+          "percentage"
+        ],
+        "signature": "letter_grade(percentage)",
+        "description": "letter grade \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "liters_to_gallons",
+        "aliases": [
+          "liters to gallons",
+          "litersToGallons"
+        ],
+        "module": "student",
+        "parameters": [
+          "l"
+        ],
+        "signature": "liters_to_gallons(l)",
+        "description": "liters to gallons \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "meters_to_feet",
+        "aliases": [
+          "meters to feet",
+          "metersToFeet"
+        ],
+        "module": "student",
+        "parameters": [
+          "m"
+        ],
+        "signature": "meters_to_feet(m)",
+        "description": "meters to feet \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "miles_to_km",
+        "aliases": [
+          "miles to km",
+          "milesToKm"
+        ],
+        "module": "student",
+        "parameters": [
+          "miles"
+        ],
+        "signature": "miles_to_km(miles)",
+        "description": "miles to km \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "minutes_to_seconds",
+        "aliases": [
+          "minutes to seconds",
+          "minutesToSeconds"
+        ],
+        "module": "student",
+        "parameters": [
+          "m"
+        ],
+        "signature": "minutes_to_seconds(m)",
+        "description": "minutes to seconds \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ounces_to_grams",
+        "aliases": [
+          "ounces to grams",
+          "ouncesToGrams"
+        ],
+        "module": "student",
+        "parameters": [
+          "oz"
+        ],
+        "signature": "ounces_to_grams(oz)",
+        "description": "ounces to grams \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "pounds_to_kg",
+        "aliases": [
+          "pounds to kg",
+          "poundsToKg"
+        ],
+        "module": "student",
+        "parameters": [
+          "lbs"
+        ],
+        "signature": "pounds_to_kg(lbs)",
+        "description": "pounds to kg \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "weighted_score",
+        "aliases": [
+          "weighted score",
+          "weightedScore"
+        ],
+        "module": "student",
+        "parameters": [
+          "scoresList",
+          "weightsList"
+        ],
+        "signature": "weighted_score(scoresList, weightsList)",
+        "description": "weighted score \u2014 student standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "banner",
+        "aliases": [],
+        "module": "system",
+        "parameters": [
+          "style?"
+        ],
+        "signature": "banner(style?)",
+        "description": "banner \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "beep",
+        "aliases": [],
+        "module": "system",
+        "parameters": [],
+        "signature": "beep()",
+        "description": "beep \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "cpu_count",
+        "aliases": [
+          "cpu count",
+          "cpuCount"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "cpu_count()",
+        "description": "cpu count \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "deck_of_cards",
+        "aliases": [
+          "deck of cards",
+          "deckOfCards"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "deck_of_cards()",
+        "description": "deck of cards \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "define_word",
+        "aliases": [
+          "define word",
+          "defineWord"
+        ],
+        "module": "system",
+        "parameters": [
+          "word"
+        ],
+        "signature": "define_word(word)",
+        "description": "define word \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "flashcard",
+        "aliases": [],
+        "module": "system",
+        "parameters": [],
+        "signature": "flashcard()",
+        "description": "flashcard \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "flip_coin",
+        "aliases": [
+          "flip coin",
+          "flipCoin"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "flip_coin()",
+        "description": "flip coin \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "from_json",
+        "aliases": [
+          "from json",
+          "fromJson"
+        ],
+        "module": "system",
+        "parameters": [
+          "json"
+        ],
+        "signature": "from_json(json)",
+        "description": "from json \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "generate_password",
+        "aliases": [
+          "generate password",
+          "generatePassword"
+        ],
+        "module": "system",
+        "parameters": [
+          "length?"
+        ],
+        "signature": "generate_password(length?)",
+        "description": "generate password \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "get_env",
+        "aliases": [
+          "get env",
+          "getEnv"
+        ],
+        "module": "system",
+        "parameters": [
+          "key"
+        ],
+        "signature": "get_env(key)",
+        "description": "get env \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "hash_text",
+        "aliases": [
+          "hash text",
+          "hashText"
+        ],
+        "module": "system",
+        "parameters": [
+          "text",
+          "algo?"
+        ],
+        "signature": "hash_text(text, algo?)",
+        "description": "hash text \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "memory_usage",
+        "aliases": [
+          "memory usage",
+          "memoryUsage"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "memory_usage()",
+        "description": "memory usage \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "os_arch",
+        "aliases": [
+          "os arch",
+          "osArch"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "os_arch()",
+        "description": "os arch \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "os_platform",
+        "aliases": [
+          "os platform",
+          "osPlatform"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "os_platform()",
+        "description": "os platform \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "pick_card",
+        "aliases": [
+          "pick card",
+          "pickCard"
+        ],
+        "module": "system",
+        "parameters": [],
+        "signature": "pick_card()",
+        "description": "pick card \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "random_id",
+        "aliases": [
+          "random id",
+          "randomId"
+        ],
+        "module": "system",
+        "parameters": [
+          "length?"
+        ],
+        "signature": "random_id(length?)",
+        "description": "random id \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "roll_dice",
+        "aliases": [
+          "roll dice",
+          "rollDice"
+        ],
+        "module": "system",
+        "parameters": [
+          "sides?",
+          "count?"
+        ],
+        "signature": "roll_dice(sides?, count?)",
+        "description": "roll dice \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "to_json",
+        "aliases": [
+          "to json",
+          "toJson"
+        ],
+        "module": "system",
+        "parameters": [
+          "value"
+        ],
+        "signature": "to_json(value)",
+        "description": "to json \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "uuid",
+        "aliases": [],
+        "module": "system",
+        "parameters": [],
+        "signature": "uuid()",
+        "description": "uuid \u2014 system standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "pearson_correlation",
+        "aliases": [
+          "pearson correlation",
+          "pearsonCorrelation"
+        ],
+        "module": "tables",
+        "parameters": [
+          "x",
+          "y"
+        ],
+        "signature": "pearson_correlation(x, y)",
+        "description": "pearson correlation \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "series_cumulative_sum",
+        "aliases": [
+          "series cumulative sum",
+          "seriesCumulativeSum"
+        ],
+        "module": "tables",
+        "parameters": [
+          "series"
+        ],
+        "signature": "series_cumulative_sum(series)",
+        "description": "series cumulative sum \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "series_pct_change",
+        "aliases": [
+          "series pct change",
+          "seriesPctChange"
+        ],
+        "module": "tables",
+        "parameters": [
+          "series"
+        ],
+        "signature": "series_pct_change(series)",
+        "description": "series pct change \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "series_rolling_mean",
+        "aliases": [
+          "series rolling mean",
+          "seriesRollingMean"
+        ],
+        "module": "tables",
+        "parameters": [
+          "series",
+          "windowSize?"
+        ],
+        "signature": "series_rolling_mean(series, windowSize?)",
+        "description": "series rolling mean \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "series_rolling_sum",
+        "aliases": [
+          "series rolling sum",
+          "seriesRollingSum"
+        ],
+        "module": "tables",
+        "parameters": [
+          "series",
+          "windowSize?"
+        ],
+        "signature": "series_rolling_sum(series, windowSize?)",
+        "description": "series rolling sum \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "series_z_score",
+        "aliases": [
+          "series z score",
+          "seriesZScore"
+        ],
+        "module": "tables",
+        "parameters": [
+          "series"
+        ],
+        "signature": "series_z_score(series)",
+        "description": "series z score \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "student_t_test_one_sample",
+        "aliases": [
+          "student t test one sample",
+          "studentTTestOneSample"
+        ],
+        "module": "tables",
+        "parameters": [
+          "sample",
+          "mu?"
+        ],
+        "signature": "student_t_test_one_sample(sample, mu?)",
+        "description": "student t test one sample \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_add_column",
+        "aliases": [
+          "table add column",
+          "tableAddColumn"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "colName",
+          "values"
+        ],
+        "signature": "table_add_column(table, colName, values)",
+        "description": "table add column \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_column_names",
+        "aliases": [
+          "table column names",
+          "tableColumnNames",
+          "columns"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table"
+        ],
+        "signature": "table_column_names(table)",
+        "description": "table column names \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_deduplicate",
+        "aliases": [
+          "table deduplicate",
+          "tableDeduplicate"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table"
+        ],
+        "signature": "table_deduplicate(table)",
+        "description": "table deduplicate \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_drop_column",
+        "aliases": [
+          "table drop column",
+          "tableDropColumn"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "colName"
+        ],
+        "signature": "table_drop_column(table, colName)",
+        "description": "table drop column \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_drop_nulls",
+        "aliases": [
+          "table drop nulls",
+          "tableDropNulls",
+          "drop_nulls"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table"
+        ],
+        "signature": "table_drop_nulls(table)",
+        "description": "table drop nulls \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_fill_nulls",
+        "aliases": [
+          "table fill nulls",
+          "tableFillNulls",
+          "fill_nulls"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "fallback?"
+        ],
+        "signature": "table_fill_nulls(table, fallback?)",
+        "description": "table fill nulls \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_group_by_count",
+        "aliases": [
+          "table group by count",
+          "tableGroupByCount"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "groupCol"
+        ],
+        "signature": "table_group_by_count(table, groupCol)",
+        "description": "table group by count \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_group_by_sum",
+        "aliases": [
+          "table group by sum",
+          "tableGroupBySum"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "groupCol",
+          "sumCol"
+        ],
+        "signature": "table_group_by_sum(table, groupCol, sumCol)",
+        "description": "table group by sum \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_head",
+        "aliases": [
+          "table head",
+          "tableHead",
+          "head"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "n?"
+        ],
+        "signature": "table_head(table, n?)",
+        "description": "table head \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_join_inner",
+        "aliases": [
+          "table join inner",
+          "tableJoinInner",
+          "inner_join"
+        ],
+        "module": "tables",
+        "parameters": [
+          "tableA",
+          "tableB",
+          "keyCol"
+        ],
+        "signature": "table_join_inner(tableA, tableB, keyCol)",
+        "description": "table join inner \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_select_columns",
+        "aliases": [
+          "table select columns",
+          "tableSelectColumns"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "colNames"
+        ],
+        "signature": "table_select_columns(table, colNames)",
+        "description": "table select columns \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "table_tail",
+        "aliases": [
+          "table tail",
+          "tableTail",
+          "tail"
+        ],
+        "module": "tables",
+        "parameters": [
+          "table",
+          "n?"
+        ],
+        "signature": "table_tail(table, n?)",
+        "description": "table tail \u2014 tables standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "assert",
+        "aliases": [],
+        "module": "testing",
+        "parameters": [
+          "condition",
+          "message?"
+        ],
+        "signature": "assert(condition, message?)",
+        "description": "Fail the current program when the condition is false.",
+        "browserSafe": true
+      },
+      {
+        "name": "assert_equal",
+        "aliases": [
+          "assert equal",
+          "assertEqual"
+        ],
+        "module": "testing",
+        "parameters": [
+          "actual",
+          "expected",
+          "message?"
+        ],
+        "signature": "assert_equal(actual, expected, message?)",
+        "description": "Require two values to be deeply equal, including lists and dictionaries.",
+        "browserSafe": true
+      },
+      {
+        "name": "assert_not_equal",
+        "aliases": [
+          "assert not equal",
+          "assertNotEqual"
+        ],
+        "module": "testing",
+        "parameters": [
+          "actual",
+          "expected",
+          "message?"
+        ],
+        "signature": "assert_not_equal(actual, expected, message?)",
+        "description": "Require two values to differ.",
+        "browserSafe": true
+      },
+      {
+        "name": "base64_decode",
+        "aliases": [
+          "base64 decode",
+          "base64Decode"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "base64_decode(target)",
+        "description": "Decode Base64 into UTF-8 text.",
+        "browserSafe": true
+      },
+      {
+        "name": "base64_encode",
+        "aliases": [
+          "base64 encode",
+          "base64Encode"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "base64_encode(target)",
+        "description": "Encode UTF-8 text as Base64.",
+        "browserSafe": true
+      },
+      {
+        "name": "bool",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "bool(val)",
+        "description": "bool \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "caesar_cipher",
+        "aliases": [
+          "caesar cipher",
+          "caesarCipher"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "shift"
+        ],
+        "signature": "caesar_cipher(target, shift)",
+        "description": "caesar cipher \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "camel_case",
+        "aliases": [
+          "camel case",
+          "camelCase"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "camel_case(target)",
+        "description": "camel case \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "char_count",
+        "aliases": [
+          "char count",
+          "charCount"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "char"
+        ],
+        "signature": "char_count(target, char)",
+        "description": "char count \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "contains",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "target",
+          "part"
+        ],
+        "signature": "contains(target, part)",
+        "description": "contains \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "count_consonants",
+        "aliases": [
+          "count consonants",
+          "countConsonants"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "count_consonants(target)",
+        "description": "count consonants \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "count_substring",
+        "aliases": [
+          "count substring",
+          "countSubstring"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "needle"
+        ],
+        "signature": "count_substring(target, needle)",
+        "description": "count substring \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "count_vowels",
+        "aliases": [
+          "count vowels",
+          "countVowels"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "count_vowels(target)",
+        "description": "count vowels \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "ends_with",
+        "aliases": [
+          "ends with",
+          "endsWith"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "part"
+        ],
+        "signature": "ends_with(target, part)",
+        "description": "ends with \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "escape_html",
+        "aliases": [
+          "escape html",
+          "escapeHtml"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "escape_html(target)",
+        "description": "escape html \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "float",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "float(val)",
+        "description": "float \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "int",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "int(val)",
+        "description": "int \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_alpha",
+        "aliases": [
+          "is alpha",
+          "isAlpha"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "is_alpha(target)",
+        "description": "is alpha \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_alphanumeric",
+        "aliases": [
+          "is alphanumeric",
+          "isAlphanumeric"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "is_alphanumeric(target)",
+        "description": "is alphanumeric \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_digit",
+        "aliases": [
+          "is digit",
+          "isDigit"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "is_digit(target)",
+        "description": "is digit \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_lowercase",
+        "aliases": [
+          "is lowercase",
+          "isLowercase"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "is_lowercase(target)",
+        "description": "is lowercase \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_palindrome",
+        "aliases": [
+          "is palindrome",
+          "isPalindrome"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "is_palindrome(target)",
+        "description": "is palindrome \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_uppercase",
+        "aliases": [
+          "is uppercase",
+          "isUppercase"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "is_uppercase(target)",
+        "description": "is uppercase \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "join",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "...args"
+        ],
+        "signature": "join(...args)",
+        "description": "join \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "kebab_case",
+        "aliases": [
+          "kebab case",
+          "kebabCase"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "kebab_case(target)",
+        "description": "kebab case \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "length",
+        "aliases": [
+          "len"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "length(val)",
+        "description": "Count characters in text or elements in a list.",
+        "browserSafe": true
+      },
+      {
+        "name": "line_count",
+        "aliases": [
+          "line count",
+          "lineCount"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "line_count(target)",
+        "description": "line count \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "lines",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "lines(target)",
+        "description": "lines \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "lowercase",
+        "aliases": [
+          "lower"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "lowercase(val)",
+        "description": "lowercase \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "normalize_whitespace",
+        "aliases": [
+          "normalize whitespace",
+          "normalizeWhitespace"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "normalize_whitespace(target)",
+        "description": "normalize whitespace \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "pad_end",
+        "aliases": [
+          "pad end",
+          "padEnd"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "len",
+          "pad?"
+        ],
+        "signature": "pad_end(target, len, pad?)",
+        "description": "pad end \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "pad_start",
+        "aliases": [
+          "pad start",
+          "padStart"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "len",
+          "pad?"
+        ],
+        "signature": "pad_start(target, len, pad?)",
+        "description": "pad start \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "remove_punctuation",
+        "aliases": [
+          "remove punctuation",
+          "removePunctuation"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "remove_punctuation(target)",
+        "description": "remove punctuation \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "repeat_text",
+        "aliases": [
+          "repeat text",
+          "repeatText"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "times"
+        ],
+        "signature": "repeat_text(target, times)",
+        "description": "repeat text \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "replace",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "target",
+          "oldPart",
+          "newPart"
+        ],
+        "signature": "replace(target, oldPart, newPart)",
+        "description": "replace \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "reverse_text",
+        "aliases": [
+          "reverse text",
+          "reverseText"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "reverse_text(target)",
+        "description": "reverse text \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "slice_text",
+        "aliases": [
+          "slice text",
+          "sliceText"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "start",
+          "end?"
+        ],
+        "signature": "slice_text(target, start, end?)",
+        "description": "slice text \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "slugify",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "slugify(target)",
+        "description": "slugify \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "snake_case",
+        "aliases": [
+          "snake case",
+          "snakeCase"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "snake_case(target)",
+        "description": "snake case \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "split_text",
+        "aliases": [
+          "split text",
+          "splitText"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "delimiter"
+        ],
+        "signature": "split_text(target, delimiter)",
+        "description": "split text \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "starts_with",
+        "aliases": [
+          "starts with",
+          "startsWith"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "part"
+        ],
+        "signature": "starts_with(target, part)",
+        "description": "starts with \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "str",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "str(val)",
+        "description": "Convert a PLAIN value to readable text.",
+        "browserSafe": true
+      },
+      {
+        "name": "string",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "string(val)",
+        "description": "string \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "strip_prefix",
+        "aliases": [
+          "strip prefix",
+          "stripPrefix"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "prefix"
+        ],
+        "signature": "strip_prefix(target, prefix)",
+        "description": "strip prefix \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "strip_suffix",
+        "aliases": [
+          "strip suffix",
+          "stripSuffix"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "suffix"
+        ],
+        "signature": "strip_suffix(target, suffix)",
+        "description": "strip suffix \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "title_case",
+        "aliases": [
+          "title case",
+          "titleCase",
+          "capitalize"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "title_case(target)",
+        "description": "title case \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_bool",
+        "aliases": [
+          "to bool",
+          "toBool"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "to_bool(val)",
+        "description": "to bool \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_float",
+        "aliases": [
+          "to float",
+          "toFloat"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "to_float(val)",
+        "description": "to float \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_int",
+        "aliases": [
+          "to int",
+          "toInt"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "to_int(val)",
+        "description": "to int \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "to_string",
+        "aliases": [
+          "to string",
+          "toString"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "to_string(val)",
+        "description": "to string \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "trim",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "trim(target)",
+        "description": "trim \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "truncate_text",
+        "aliases": [
+          "truncate text",
+          "truncateText"
+        ],
+        "module": "text",
+        "parameters": [
+          "target",
+          "length",
+          "suffix?"
+        ],
+        "signature": "truncate_text(target, length, suffix?)",
+        "description": "truncate text \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "type",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "type(val)",
+        "description": "Return a value's runtime type name.",
+        "browserSafe": true
+      },
+      {
+        "name": "unescape_html",
+        "aliases": [
+          "unescape html",
+          "unescapeHtml"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "unescape_html(target)",
+        "description": "unescape html \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "uppercase",
+        "aliases": [
+          "upper"
+        ],
+        "module": "text",
+        "parameters": [
+          "val"
+        ],
+        "signature": "uppercase(val)",
+        "description": "uppercase \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "word_count",
+        "aliases": [
+          "word count",
+          "wordCount"
+        ],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "word_count(target)",
+        "description": "word count \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "words",
+        "aliases": [],
+        "module": "text",
+        "parameters": [
+          "target"
+        ],
+        "signature": "words(target)",
+        "description": "words \u2014 text standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "add_days",
+        "aliases": [
+          "add days",
+          "addDays"
+        ],
+        "module": "time",
+        "parameters": [
+          "date",
+          "days"
+        ],
+        "signature": "add_days(date, days)",
+        "description": "add days \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_day",
+        "aliases": [
+          "current day",
+          "currentDay"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_day()",
+        "description": "current day \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_hour",
+        "aliases": [
+          "current hour",
+          "currentHour"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_hour()",
+        "description": "current hour \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_minute",
+        "aliases": [
+          "current minute",
+          "currentMinute"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_minute()",
+        "description": "current minute \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_month",
+        "aliases": [
+          "current month",
+          "currentMonth"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_month()",
+        "description": "current month \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_month_name",
+        "aliases": [
+          "current month name",
+          "currentMonthName"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_month_name()",
+        "description": "current month name \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_second",
+        "aliases": [
+          "current second",
+          "currentSecond"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_second()",
+        "description": "current second \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_time",
+        "aliases": [
+          "current time",
+          "currentTime",
+          "now"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_time()",
+        "description": "current time \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "current_year",
+        "aliases": [
+          "current year",
+          "currentYear"
+        ],
+        "module": "time",
+        "parameters": [],
+        "signature": "current_year()",
+        "description": "current year \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "day_of_week",
+        "aliases": [
+          "day of week",
+          "dayOfWeek"
+        ],
+        "module": "time",
+        "parameters": [
+          "date?"
+        ],
+        "signature": "day_of_week(date?)",
+        "description": "day of week \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "days_between",
+        "aliases": [
+          "days between",
+          "daysBetween"
+        ],
+        "module": "time",
+        "parameters": [
+          "d1",
+          "d2"
+        ],
+        "signature": "days_between(d1, d2)",
+        "description": "days between \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "days_in_month",
+        "aliases": [
+          "days in month",
+          "daysInMonth"
+        ],
+        "module": "time",
+        "parameters": [
+          "year",
+          "month"
+        ],
+        "signature": "days_in_month(year, month)",
+        "description": "days in month \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "format_date",
+        "aliases": [
+          "format date",
+          "formatDate"
+        ],
+        "module": "time",
+        "parameters": [
+          "date",
+          "format"
+        ],
+        "signature": "format_date(date, format)",
+        "description": "format date \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "is_leap_year",
+        "aliases": [
+          "is leap year",
+          "isLeapYear"
+        ],
+        "module": "time",
+        "parameters": [
+          "year?"
+        ],
+        "signature": "is_leap_year(year?)",
+        "description": "is leap year \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "sleep",
+        "aliases": [
+          "wait"
+        ],
+        "module": "time",
+        "parameters": [
+          "seconds"
+        ],
+        "signature": "sleep(seconds)",
+        "description": "Pause execution for a number of seconds.",
+        "browserSafe": true
+      },
+      {
+        "name": "timestamp",
+        "aliases": [],
+        "module": "time",
+        "parameters": [],
+        "signature": "timestamp()",
+        "description": "timestamp \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "today",
+        "aliases": [],
+        "module": "time",
+        "parameters": [],
+        "signature": "today()",
+        "description": "today \u2014 time standard library.",
+        "browserSafe": true
+      },
+      {
+        "name": "author_name",
+        "aliases": [
+          "author name",
+          "authorName"
+        ],
+        "module": "updater",
+        "parameters": [],
+        "signature": "author_name()",
+        "description": "author name \u2014 updater standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "check_for_updates",
+        "aliases": [
+          "check for updates",
+          "checkForUpdates"
+        ],
+        "module": "updater",
+        "parameters": [],
+        "signature": "check_for_updates()",
+        "description": "check for updates \u2014 updater standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "plain_version",
+        "aliases": [
+          "plain version",
+          "plainVersion",
+          "version"
+        ],
+        "module": "updater",
+        "parameters": [],
+        "signature": "plain_version()",
+        "description": "plain version \u2014 updater standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "update_software",
+        "aliases": [
+          "update software",
+          "updateSoftware",
+          "update",
+          "upgrade"
+        ],
+        "module": "updater",
+        "parameters": [],
+        "signature": "update_software()",
+        "description": "update software \u2014 updater standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "html_page",
+        "aliases": [
+          "html page",
+          "htmlPage"
+        ],
+        "module": "web",
+        "parameters": [
+          "title",
+          "body"
+        ],
+        "signature": "html_page(title, body)",
+        "description": "html page \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "html_table",
+        "aliases": [
+          "html table",
+          "htmlTable"
+        ],
+        "module": "web",
+        "parameters": [
+          "headers",
+          "rows"
+        ],
+        "signature": "html_table(headers, rows)",
+        "description": "html table \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "html_tag",
+        "aliases": [
+          "html tag",
+          "htmlTag"
+        ],
+        "module": "web",
+        "parameters": [
+          "tag",
+          "content?",
+          "attrs?"
+        ],
+        "signature": "html_tag(tag, content?, attrs?)",
+        "description": "html tag \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "http_get",
+        "aliases": [
+          "http get",
+          "httpGet"
+        ],
+        "module": "web",
+        "parameters": [
+          "url",
+          "headers?"
+        ],
+        "signature": "http_get(url, headers?)",
+        "description": "http get \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "http_post",
+        "aliases": [
+          "http post",
+          "httpPost"
+        ],
+        "module": "web",
+        "parameters": [
+          "url",
+          "body",
+          "headers?"
+        ],
+        "signature": "http_post(url, body, headers?)",
+        "description": "http post \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "parse_query_string",
+        "aliases": [
+          "parse query string",
+          "parseQueryString"
+        ],
+        "module": "web",
+        "parameters": [
+          "query"
+        ],
+        "signature": "parse_query_string(query)",
+        "description": "parse query string \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "render_template",
+        "aliases": [
+          "render template",
+          "renderTemplate"
+        ],
+        "module": "web",
+        "parameters": [
+          "template",
+          "data"
+        ],
+        "signature": "render_template(template, data)",
+        "description": "render template \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "send_webhook",
+        "aliases": [
+          "send webhook",
+          "sendWebhook"
+        ],
+        "module": "web",
+        "parameters": [
+          "url",
+          "payload"
+        ],
+        "signature": "send_webhook(url, payload)",
+        "description": "send webhook \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "serve_static_files",
+        "aliases": [
+          "serve static files",
+          "serveStaticFiles"
+        ],
+        "module": "web",
+        "parameters": [
+          "port",
+          "folder"
+        ],
+        "signature": "serve_static_files(port, folder)",
+        "description": "serve static files \u2014 web standard library.",
+        "browserSafe": false
+      },
+      {
+        "name": "start_server",
+        "aliases": [
+          "start server",
+          "startServer"
+        ],
+        "module": "web",
+        "parameters": [
+          "port",
+          "handler"
+        ],
+        "signature": "start_server(port, handler)",
+        "description": "Start an HTTP server that invokes a PLAIN request handler.",
+        "browserSafe": false
+      },
+      {
+        "name": "stop_server",
+        "aliases": [
+          "stop server",
+          "stopServer"
+        ],
+        "module": "web",
+        "parameters": [],
+        "signature": "stop_server()",
+        "description": "stop server \u2014 web standard library.",
+        "browserSafe": false
+      }
+    ];
+  }
+});
+
+// src/tooling/catalog.ts
+function getModuleBuiltins(module2) {
+  const canonical = canonicalModuleName(module2);
+  if (!canonical) return [];
+  const groups = {
+    ai: ["ai", "ai_training"],
+    data: ["data", "tables"],
+    math: ["math", "geometry"],
+    server: ["server", "web"]
+  };
+  const modules = groups[canonical] || [canonical];
+  return BUILTIN_CATALOG.filter((entry) => modules.includes(entry.module));
+}
+function getBuiltin(name) {
+  const normalized = name.toLowerCase();
+  const separator = normalized.indexOf(".");
+  if (separator !== -1) {
+    const module2 = canonicalModuleName(normalized.slice(0, separator));
+    if (!module2) return void 0;
+    const functionName = normalized.slice(separator + 1);
+    return byQualifiedName.get(`${module2}.${functionName}`) || getModuleBuiltins(module2).find((entry) => [entry.name, ...entry.aliases].some((alias) => alias.toLowerCase() === functionName));
+  }
+  return byName.get(normalized);
+}
+var BUILTIN_CATALOG, byName, byQualifiedName;
+var init_catalog = __esm({
+  "src/tooling/catalog.ts"() {
+    "use strict";
+    init_catalog_data();
+    init_manifest();
+    BUILTIN_CATALOG = catalogData;
+    byName = /* @__PURE__ */ new Map();
+    byQualifiedName = /* @__PURE__ */ new Map();
+    for (const entry of BUILTIN_CATALOG) {
+      for (const name of [entry.name, ...entry.aliases]) {
+        const key = name.toLowerCase();
+        byQualifiedName.set(`${entry.module}.${key}`, entry);
+        const previous = byName.get(key);
+        const owner = GLOBAL_BUILTIN_OWNERS[entry.name];
+        if (!previous || name === entry.name && previous.name !== name || owner === entry.module) {
+          byName.set(key, entry);
+        }
+      }
+    }
+  }
+});
+
+// src/builtins/registry.ts
+function createIoBuiltins(options) {
+  return {
+    print: (value) => {
+      (options.onSay || ((text) => console.log(text)))(plainToString(value));
+    },
+    args: () => [...options.args || []]
+  };
+}
+function registerBuiltinModules(modules) {
+  const environment = new Environment();
+  const moduleObjects = /* @__PURE__ */ new Map();
+  const globals = /* @__PURE__ */ new Map();
+  for (const [moduleName, implementations] of Object.entries(modules)) {
+    const module2 = moduleName;
+    const members = /* @__PURE__ */ Object.create(null);
+    moduleObjects.set(module2, members);
+    for (const [name, implementation] of Object.entries(implementations)) {
+      const metadata = getBuiltin(`${module2}.${name}`);
+      const value = {
+        type: "function",
+        name,
+        parameters: metadata?.parameters || [],
+        nativeFn: implementation
+      };
+      for (const variant of builtinNameVariants(name)) {
+        const key = variant.toLowerCase();
+        members[key] = value;
+        const previous = globals.get(key);
+        const owner = GLOBAL_BUILTIN_OWNERS[name];
+        if (previous && previous.module !== module2 && !owner) {
+          throw new Error(`Built-in '${name}' is defined in both '${previous.module}' and '${module2}' without an explicit global owner.`);
+        }
+        if (!previous || owner === module2) globals.set(key, { module: module2, canonical: name, value });
+      }
+    }
+  }
+  for (const alias of BUILTIN_ALIASES) {
+    const members = moduleObjects.get(alias.module);
+    const value = members?.[alias.target.toLowerCase()];
+    if (!value) continue;
+    members[alias.name.toLowerCase()] = value;
+    const key = alias.name.toLowerCase();
+    const previous = globals.get(key);
+    if (!previous || previous.canonical === alias.target) {
+      globals.set(key, { module: alias.module, canonical: alias.target, value });
+    }
+  }
+  for (const [name, entry] of globals) environment.define(name, entry.value);
+  environments.set(environment, moduleObjects);
+  return environment;
+}
+function getRegisteredModule(name, environment) {
+  const canonical = canonicalModuleName(name);
+  if (!canonical) return void 0;
+  const modules = environments.get(environment);
+  if (!modules) return void 0;
+  const requested = modules.get(canonical);
+  if (!requested) return void 0;
+  const result = Object.assign(/* @__PURE__ */ Object.create(null), requested);
+  const extras = {
+    ai: ["ai_training"],
+    data: ["tables"],
+    math: ["geometry"],
+    server: ["web"]
+  };
+  for (const extra of extras[canonical] || []) Object.assign(result, modules.get(extra));
+  return result;
+}
+var environments;
+var init_registry = __esm({
+  "src/builtins/registry.ts"() {
+    "use strict";
+    init_environment();
+    init_values();
+    init_manifest();
+    init_catalog();
+    environments = /* @__PURE__ */ new WeakMap();
+  }
+});
+
 // src/builtins/index.ts
 var builtins_exports = {};
 __export(builtins_exports, {
-  createStandardEnvironment: () => createStandardEnvironment
+  createStandardEnvironment: () => createStandardEnvironment,
+  getBuiltinModule: () => getBuiltinModule
 });
-function createStandardEnvironment(options) {
-  const env = new Environment();
-  const fileSandbox = new FileSystemSandbox(options?.baseDir);
-  const register = (name, fn) => {
-    const plainFn = {
-      type: "function",
-      name,
-      parameters: [],
-      nativeFn: fn
-    };
-    env.define(name, plainFn);
+function createStandardEnvironment(options = {}) {
+  const files = new FileSystemSandbox(options.baseDir);
+  const resolve9 = (value = ".") => files.resolvePath(plainToString(value));
+  const automation = {
+    ...automationBuiltins,
+    walk_directory: (directory) => automationBuiltins.walk_directory(resolve9(directory)),
+    find_files: (directory, pattern) => automationBuiltins.find_files(resolve9(directory), pattern),
+    copy_file: (source, destination) => automationBuiltins.copy_file(resolve9(source), resolve9(destination)),
+    move_file: (source, destination) => automationBuiltins.move_file(resolve9(source), resolve9(destination)),
+    batch_rename: (directory, find, replacement) => {
+      const value = plainToString(replacement);
+      if (value.includes("/") || value.includes("\\")) throw new Error("A replacement filename cannot contain directory separators.");
+      return automationBuiltins.batch_rename(resolve9(directory), find, replacement);
+    },
+    batch_delete: (directory, pattern) => automationBuiltins.batch_delete(resolve9(directory), pattern),
+    parse_env_file: (filename) => automationBuiltins.parse_env_file(resolve9(filename)),
+    checksum_file: (filename, algorithm) => automationBuiltins.checksum_file(resolve9(filename), algorithm),
+    log_info: (message) => (options.onSay || console.log)(`[INFO] ${plainToString(message)}`),
+    log_warn: (message) => (options.onSay || console.warn)(`[WARN] ${plainToString(message)}`),
+    log_error: (message) => (options.onSay || console.error)(`[ERROR] ${plainToString(message)}`)
   };
-  const registerModule = (moduleObj) => {
-    for (const [name, fn] of Object.entries(moduleObj)) {
-      register(name, fn);
-      if (name.includes("_")) {
-        const spaceAlias = name.replace(/_/g, " ");
-        register(spaceAlias, fn);
-        const camelCase = name.replace(/_([a-z0-9])/g, (_, c) => c.toUpperCase());
-        register(camelCase, fn);
-      }
-    }
+  const data = {
+    ...datascienceBuiltins,
+    read_csv: (filename) => datascienceBuiltins.read_csv(resolve9(filename)),
+    write_csv: (filename, table) => datascienceBuiltins.write_csv(resolve9(filename), table),
+    export_html_chart: (title, type, labels, values, filename) => datascienceBuiltins.export_html_chart(title, type, labels, values, resolve9(filename))
   };
-  registerModule(mathBuiltins);
-  registerModule(geometryBuiltins);
-  registerModule(statsBuiltins);
-  registerModule(scienceBuiltins);
-  registerModule(studentBuiltins);
-  registerModule(textBuiltins);
-  registerModule(listBuiltins);
-  registerModule(timeBuiltins);
-  registerModule(systemBuiltins);
-  registerModule(networkBuiltins);
-  const webBuiltins = createWebBuiltins({ invokeFunction: options?.invokeFunction });
-  registerModule(webBuiltins);
-  registerModule(datascienceBuiltins);
-  registerModule(aiBuiltins);
-  registerModule(automationBuiltins);
-  registerModule(aiTrainingBuiltins);
-  const serverDeployer = createServerDeployer({ invokeFunction: options?.invokeFunction });
-  registerModule(serverDeployer);
-  registerModule(linearAlgebraBuiltins);
-  registerModule(cryptoSecurityBuiltins);
-  registerModule(cyberSecurityBuiltins);
-  registerModule(dataProcessingBuiltins);
-  registerModule(engineeringPhysicsBuiltins);
-  registerModule(algorithmsBuiltins);
-  registerModule(updaterBuiltins);
-  const fileOperations = {
-    read_file: (path9) => fileSandbox.readFile(path9),
-    write_file: (path9, content) => fileSandbox.writeFile(path9, content),
-    append_file: (path9, content) => fileSandbox.appendFile(path9, content),
-    file_exists: (path9) => fileSandbox.fileExists(path9),
-    delete_file: (path9) => fileSandbox.deleteFile(path9),
-    list_files: (dir) => fileSandbox.listFiles(dir),
-    file_size: (path9) => fileSandbox.fileSize(path9),
-    create_folder: (dir) => fileSandbox.createFolder(dir),
-    folder_exists: (dir) => fileSandbox.folderExists(dir)
+  const file = {
+    read_file: (filename) => files.readFile(filename),
+    write_file: (filename, content) => files.writeFile(filename, content),
+    append_file: (filename, content) => files.appendFile(filename, content),
+    file_exists: (filename) => files.fileExists(filename),
+    delete_file: (filename) => files.deleteFile(filename),
+    list_files: (directory) => files.listFiles(directory),
+    file_size: (filename) => files.fileSize(filename),
+    create_folder: (directory) => files.createFolder(directory),
+    folder_exists: (directory) => files.folderExists(directory)
   };
-  registerModule(fileOperations);
-  register("print", (val) => options?.onSay ? options.onSay(plainToString(val)) : console.log(plainToString(val)));
-  register("wait", (sec) => timeBuiltins.sleep(sec));
-  register("sleep", (sec) => timeBuiltins.sleep(sec));
-  register("sqrt", mathBuiltins.square_root);
-  register("cbrt", mathBuiltins.cube_root);
-  register("pow", mathBuiltins.power);
-  register("fact", mathBuiltins.factorial);
-  register("abs", mathBuiltins.absolute);
-  register("min", mathBuiltins.minimum);
-  register("max", mathBuiltins.maximum);
-  register("avg", listBuiltins.average);
-  register("mean", listBuiltins.average);
-  register("median", statsBuiltins.median);
-  register("mode", statsBuiltins.mode);
-  register("len", textBuiltins.length);
-  register("size", listBuiltins.count);
-  register("upper", textBuiltins.uppercase);
-  register("lower", textBuiltins.lowercase);
-  register("capitalize", textBuiltins.title_case);
-  register("stdev", statsBuiltins.standard_deviation);
-  register("now", timeBuiltins.current_time);
-  register("bar_chart", datascienceBuiltins.ascii_bar_chart);
-  register("histogram", datascienceBuiltins.ascii_histogram);
-  register("exec_shell", automationBuiltins.run_command);
-  register("shell", automationBuiltins.run_command);
-  register("knn", aiBuiltins.knn_classify);
-  register("kmeans", aiBuiltins.kmeans_cluster);
-  register("np_zeros", linearAlgebraBuiltins.matrix_zeros);
-  register("zeros", linearAlgebraBuiltins.matrix_zeros);
-  register("np_ones", linearAlgebraBuiltins.matrix_ones);
-  register("ones", linearAlgebraBuiltins.matrix_ones);
-  register("np_eye", linearAlgebraBuiltins.matrix_eye);
-  register("eye", linearAlgebraBuiltins.matrix_eye);
-  register("np_dot", linearAlgebraBuiltins.vector_dot);
-  register("dot", linearAlgebraBuiltins.vector_dot);
-  register("matmul", linearAlgebraBuiltins.matrix_mult);
-  register("np_matmul", linearAlgebraBuiltins.matrix_mult);
-  register("transpose", linearAlgebraBuiltins.matrix_transpose);
-  register("det", linearAlgebraBuiltins.matrix_determinant);
-  register("inv", linearAlgebraBuiltins.matrix_inverse_2x2);
-  register("shape", linearAlgebraBuiltins.matrix_shape);
-  register("reshape", linearAlgebraBuiltins.matrix_reshape);
-  register("head", dataProcessingBuiltins.table_head);
-  register("tail", dataProcessingBuiltins.table_tail);
-  register("columns", dataProcessingBuiltins.table_column_names);
-  register("drop_nulls", dataProcessingBuiltins.table_drop_nulls);
-  register("fill_nulls", dataProcessingBuiltins.table_fill_nulls);
-  register("inner_join", dataProcessingBuiltins.table_join_inner);
-  register("nn_create", aiTrainingBuiltins.create_neural_network);
-  register("nn_train", aiTrainingBuiltins.train_neural_network);
-  register("nn_predict", aiTrainingBuiltins.predict_neural_network);
-  register("load_dataset", aiTrainingBuiltins.load_ai_dataset);
-  register("mse", aiTrainingBuiltins.mean_squared_error_loss);
-  register("mae", aiTrainingBuiltins.mean_absolute_error_loss);
-  register("cross_entropy", aiTrainingBuiltins.binary_cross_entropy_loss);
-  register("log_reg", aiTrainingBuiltins.train_logistic_regression);
-  register("deploy", serverDeployer.deploy_server);
-  register("local_ip", serverDeployer.get_local_ip);
-  register("public_ip", serverDeployer.get_public_ip);
-  register("hash_sha256", cryptoSecurityBuiltins.sha256);
-  register("hash_md5", cryptoSecurityBuiltins.md5);
-  register("uuid", cryptoSecurityBuiltins.generate_uuid);
-  register("jwt_sign", cryptoSecurityBuiltins.create_jwt);
-  register("jwt_verify", cryptoSecurityBuiltins.verify_jwt);
-  register("scan", cyberSecurityBuiltins.port_scan);
-  register("audit", cyberSecurityBuiltins.audit_security_headers);
-  register("sqli_check", cyberSecurityBuiltins.detect_sql_injection);
-  register("xss_check", cyberSecurityBuiltins.detect_xss);
-  register("entropy", cyberSecurityBuiltins.calculate_entropy);
-  register("magic_bytes", cyberSecurityBuiltins.detect_file_signature);
-  register("cve", cyberSecurityBuiltins.cve_lookup);
-  register("pwd_strength", cyberSecurityBuiltins.check_password_strength);
-  register("subnet", cyberSecurityBuiltins.subnet_calculator);
-  register("ping", cyberSecurityBuiltins.ping_host);
-  register("banner", cyberSecurityBuiltins.banner_grab);
-  register("sort", algorithmsBuiltins.quick_sort);
-  register("binary_search", algorithmsBuiltins.binary_search);
-  register("bfs", algorithmsBuiltins.graph_bfs);
-  register("dfs", algorithmsBuiltins.graph_dfs);
-  register("dijkstra", algorithmsBuiltins.graph_dijkstra);
-  register("fib", algorithmsBuiltins.fibonacci_nth);
-  register("update", updaterBuiltins.update_software);
-  register("upgrade", updaterBuiltins.update_software);
-  register("version", updaterBuiltins.plain_version);
-  return env;
+  return registerBuiltinModules({
+    math: mathBuiltins,
+    geometry: geometryBuiltins,
+    stats: statsBuiltins,
+    science: scienceBuiltins,
+    student: studentBuiltins,
+    text: textBuiltins,
+    list: listBuiltins,
+    time: timeBuiltins,
+    system: systemBuiltins,
+    network: networkBuiltins,
+    web: createWebBuiltins({ invokeFunction: options.invokeFunction }),
+    data,
+    ai: aiBuiltins,
+    automation,
+    ai_training: aiTrainingBuiltins,
+    server: createServerDeployer({ invokeFunction: options.invokeFunction }),
+    linear_algebra: linearAlgebraBuiltins,
+    crypto: cryptoSecurityBuiltins,
+    cyber: cyberSecurityBuiltins,
+    tables: dataProcessingBuiltins,
+    physics: engineeringPhysicsBuiltins,
+    algorithms: algorithmsBuiltins,
+    updater: updaterBuiltins,
+    file,
+    testing: testingBuiltins,
+    io: createIoBuiltins(options)
+  });
+}
+function getBuiltinModule(name, environment) {
+  return getRegisteredModule(name, environment);
 }
 var init_builtins = __esm({
   "src/builtins/index.ts"() {
     "use strict";
-    init_environment();
+    init_values();
     init_text();
     init_math();
     init_geometry();
@@ -6280,7 +14012,8 @@ var init_builtins = __esm({
     init_engineering_physics();
     init_algorithms();
     init_updater();
-    init_values();
+    init_testing();
+    init_registry();
   }
 });
 
@@ -6292,6 +14025,7 @@ __export(cli_exports, {
 module.exports = __toCommonJS(cli_exports);
 var fs8 = __toESM(require("fs"));
 var path8 = __toESM(require("path"));
+var import_crypto = require("crypto");
 var import_child_process3 = require("child_process");
 
 // src/lexer/lexer.ts
@@ -6346,7 +14080,9 @@ var KEYWORDS = {
   def: "Def" /* Def */,
   fn: "Def" /* Def */,
   function: "Def" /* Def */,
-  return: "Return" /* Return */
+  return: "Return" /* Return */,
+  break: "Break" /* Break */,
+  continue: "Continue" /* Continue */
 };
 var Lexer = class {
   source;
@@ -6403,6 +14139,25 @@ var Lexer = class {
         continue;
       }
       const loc = this.currentLocation();
+      const threeChars = this.source.slice(this.pos, this.pos + 3);
+      if (threeChars === "**=" || threeChars === "//=") {
+        this.advance();
+        this.advance();
+        this.advance();
+        tokens.push({
+          type: threeChars === "**=" ? "StarStarEqual" /* StarStarEqual */ : "SlashSlashEqual" /* SlashSlashEqual */,
+          value: threeChars,
+          raw: threeChars,
+          location: loc
+        });
+        continue;
+      }
+      if (char === "%" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: "PercentEqual" /* PercentEqual */, value: "%=", raw: "%=", location: loc });
+        continue;
+      }
       if (char === "=" && this.peekNext() === "=") {
         this.advance();
         this.advance();
@@ -6670,7 +14425,7 @@ var Lexer = class {
     if (lower === "nothing" || lower === "null") {
       return { type: "Nothing" /* Nothing */, value: null, raw, location: loc };
     }
-    if (KEYWORDS[lower]) {
+    if (Object.prototype.hasOwnProperty.call(KEYWORDS, lower)) {
       return {
         type: KEYWORDS[lower],
         value: lower,
@@ -6736,6 +14491,7 @@ var Parser = class {
   current = 0;
   source;
   sourceFile;
+  loopDepth = 0;
   constructor(tokens, source, sourceFile) {
     this.tokens = tokens;
     this.source = source;
@@ -6801,13 +14557,9 @@ var Parser = class {
         return this.parseListRemoveStatement();
       case "Wait" /* Wait */:
         return this.parseWaitStatement();
-      case "Identifier" /* Identifier */: {
-        const next = this.peekNext();
-        if (next && (next.type === "Equal" /* Equal */ || next.type === "PlusEqual" /* PlusEqual */ || next.type === "MinusEqual" /* MinusEqual */ || next.type === "StarEqual" /* StarEqual */ || next.type === "SlashEqual" /* SlashEqual */)) {
-          return this.parseAssignmentStatement();
-        }
-        return this.parseExpressionStatement();
-      }
+      case "Break" /* Break */:
+      case "Continue" /* Continue */:
+        return this.parseLoopControlStatement();
       default:
         return this.parseExpressionStatement();
     }
@@ -6825,8 +14577,8 @@ var Parser = class {
         }
       );
     }
-    const nameToken = this.advance();
-    const varName = nameToken.raw || nameToken.value;
+    const target = this.requireAssignmentTarget(this.parsePostfix());
+    const varName = target.type === "Identifier" ? target.name : "target";
     if (this.match("Equal" /* Equal */) || this.match("To" /* To */) || this.match("EqualEqual" /* EqualEqual */)) {
     } else {
       throw new PlainError(
@@ -6854,44 +14606,82 @@ var Parser = class {
     this.expectStatementEnd();
     return {
       type: "SetStatement",
-      name: varName,
+      name: target.type === "Identifier" ? target.name : "",
+      target,
       value,
       location: setToken.location
     };
   }
-  parseAssignmentStatement() {
-    const nameToken = this.advance();
-    const opToken = this.advance();
-    let operator = "=";
-    switch (opToken.type) {
-      case "Equal" /* Equal */:
-        operator = "=";
-        break;
-      case "PlusEqual" /* PlusEqual */:
-        operator = "+=";
-        break;
-      case "MinusEqual" /* MinusEqual */:
-        operator = "-=";
-        break;
-      case "StarEqual" /* StarEqual */:
-        operator = "*=";
-        break;
-      case "SlashEqual" /* SlashEqual */:
-        operator = "/=";
-        break;
-      default:
-        operator = "=";
-        break;
-    }
+  parseAssignmentStatement(expression) {
+    const target = this.requireAssignmentTarget(expression);
+    const operator = this.assignmentOperator(this.advance().type);
     const value = this.parseExpression();
     this.expectStatementEnd();
     return {
       type: "AssignmentStatement",
-      name: nameToken.raw || nameToken.value,
+      name: target.type === "Identifier" ? target.name : "",
+      target,
       operator,
       value,
-      location: nameToken.location
+      location: target.location
     };
+  }
+  assignmentOperator(type) {
+    switch (type) {
+      case "Equal" /* Equal */:
+        return "=";
+      case "PlusEqual" /* PlusEqual */:
+        return "+=";
+      case "MinusEqual" /* MinusEqual */:
+        return "-=";
+      case "StarEqual" /* StarEqual */:
+        return "*=";
+      case "SlashEqual" /* SlashEqual */:
+        return "/=";
+      case "PercentEqual" /* PercentEqual */:
+        return "%=";
+      case "StarStarEqual" /* StarStarEqual */:
+        return "**=";
+      case "SlashSlashEqual" /* SlashSlashEqual */:
+        return "//=";
+      default:
+        return void 0;
+    }
+  }
+  requireAssignmentTarget(expression) {
+    if (expression.type === "Identifier" || expression.type === "MemberAccessExpression" || expression.type === "IndexExpression") {
+      return expression;
+    }
+    throw new PlainError("Invalid assignment target. Assign to a variable, dictionary member, or list/dictionary index.", expression.location, {
+      kind: "ParserError",
+      sourceCode: this.source
+    });
+  }
+  parseLoopControlStatement() {
+    const token = this.advance();
+    if (this.loopDepth === 0) {
+      throw new PlainError(`'${token.value}' can only be used inside a loop in the same function.`, token.location, {
+        kind: "ParserError",
+        sourceCode: this.source
+      });
+    }
+    this.expectStatementEnd();
+    return { type: token.type === "Break" /* Break */ ? "BreakStatement" : "ContinueStatement", location: token.location };
+  }
+  parseLoopBody() {
+    const body = [];
+    this.loopDepth++;
+    try {
+      while (!this.isAtEnd() && !this.check("End" /* End */)) {
+        this.skipNewlines();
+        if (this.isAtEnd() || this.check("End" /* End */)) break;
+        body.push(this.parseStatement());
+        this.skipNewlines();
+      }
+    } finally {
+      this.loopDepth--;
+    }
+    return body;
   }
   parseImportStatement() {
     const importToken = this.advance();
@@ -6913,9 +14703,10 @@ var Parser = class {
     }
     let alias;
     if (this.match("As" /* As */)) {
-      if (this.isWord(this.peek())) {
-        alias = this.advance().raw;
+      if (!this.isWord(this.peek())) {
+        throw new PlainError("Expected an alias name after 'as'.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
       }
+      alias = this.advance().raw;
     }
     this.expectStatementEnd();
     return {
@@ -6955,13 +14746,7 @@ var Parser = class {
       this.advance();
     }
     this.expectStatementEnd();
-    const body = [];
-    while (!this.isAtEnd() && !this.check("End" /* End */)) {
-      this.skipNewlines();
-      if (this.check("End" /* End */)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
-    }
+    const body = this.parseLoopBody();
     if (!this.match("End" /* End */)) {
       throw new PlainError(
         `You started a 'while' loop on line ${token.location.line}, but didn't close it with 'end'.`,
@@ -7176,13 +14961,7 @@ var Parser = class {
     if (this.match("While" /* While */)) {
       const condition = this.parseExpression();
       this.expectStatementEnd();
-      const body2 = [];
-      while (!this.isAtEnd() && !this.check("End" /* End */)) {
-        this.skipNewlines();
-        if (this.check("End" /* End */)) break;
-        body2.push(this.parseStatement());
-        this.skipNewlines();
-      }
+      const body2 = this.parseLoopBody();
       if (!this.match("End" /* End */)) {
         throw new PlainError(
           `You started a 'repeat while' loop on line ${token.location.line}, but didn't close it with 'end'.`,
@@ -7221,13 +15000,7 @@ var Parser = class {
       );
     }
     this.expectStatementEnd();
-    const body = [];
-    while (!this.isAtEnd() && !this.check("End" /* End */)) {
-      this.skipNewlines();
-      if (this.check("End" /* End */)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
-    }
+    const body = this.parseLoopBody();
     if (!this.match("End" /* End */)) {
       throw new PlainError(
         `You started a 'repeat' loop on line ${token.location.line}, but didn't close it with 'end'.`,
@@ -7276,13 +15049,7 @@ var Parser = class {
     const list = this.parseExpression();
     if (this.check("Colon" /* Colon */)) this.advance();
     this.expectStatementEnd();
-    const body = [];
-    while (!this.isAtEnd() && !this.check("End" /* End */)) {
-      this.skipNewlines();
-      if (this.check("End" /* End */)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
-    }
+    const body = this.parseLoopBody();
     if (!this.match("End" /* End */)) {
       throw new PlainError(
         `You started a 'for each' loop on line ${token.location.line}, but didn't close it with 'end'.`,
@@ -7354,11 +15121,17 @@ var Parser = class {
     }
     this.expectStatementEnd();
     const body = [];
-    while (!this.isAtEnd() && !this.check("End" /* End */)) {
-      this.skipNewlines();
-      if (this.check("End" /* End */)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
+    const enclosingLoopDepth = this.loopDepth;
+    this.loopDepth = 0;
+    try {
+      while (!this.isAtEnd() && !this.check("End" /* End */)) {
+        this.skipNewlines();
+        if (this.isAtEnd() || this.check("End" /* End */)) break;
+        body.push(this.parseStatement());
+        this.skipNewlines();
+      }
+    } finally {
+      this.loopDepth = enclosingLoopDepth;
     }
     if (!this.match("End" /* End */)) {
       throw new PlainError(
@@ -7490,6 +15263,9 @@ var Parser = class {
   }
   parseExpressionStatement() {
     const expr = this.parseExpression();
+    if (this.assignmentOperator(this.peek().type)) {
+      return this.parseAssignmentStatement(expr);
+    }
     this.expectStatementEnd();
     return {
       type: "ExpressionStatement",
@@ -7519,7 +15295,7 @@ var Parser = class {
     return left;
   }
   parseLogicalAnd() {
-    let left = this.parseComparison();
+    let left = this.parseLogicalNot();
     while (this.check("And" /* And */)) {
       const next = this.peekNext();
       if (next && next.type === "Save" /* Save */) {
@@ -7527,7 +15303,7 @@ var Parser = class {
       }
       this.advance();
       const opToken = this.previous();
-      const right = this.parseComparison();
+      const right = this.parseLogicalNot();
       left = {
         type: "BinaryExpression",
         operator: "and",
@@ -7537,6 +15313,18 @@ var Parser = class {
       };
     }
     return left;
+  }
+  parseLogicalNot() {
+    if (this.match("Not" /* Not */)) {
+      const token = this.previous();
+      return {
+        type: "UnaryExpression",
+        operator: "not",
+        argument: this.parseLogicalNot(),
+        location: token.location
+      };
+    }
+    return this.parseComparison();
   }
   parseComparison() {
     let left = this.parseAdditive();
@@ -7643,11 +15431,6 @@ var Parser = class {
   parseMultiplicative() {
     let left = this.parseUnary();
     while (true) {
-      if (this.match("StarStar" /* StarStar */)) {
-        const right = this.parseUnary();
-        left = { type: "BinaryExpression", operator: "**", left, right, location: left.location };
-        continue;
-      }
       if (this.match("SlashSlash" /* SlashSlash */)) {
         const right = this.parseUnary();
         left = { type: "BinaryExpression", operator: "//", left, right, location: left.location };
@@ -7690,16 +15473,6 @@ var Parser = class {
     return left;
   }
   parseUnary() {
-    if (this.match("Not" /* Not */)) {
-      const token = this.previous();
-      const argument = this.parseUnary();
-      return {
-        type: "UnaryExpression",
-        operator: "not",
-        argument,
-        location: token.location
-      };
-    }
     if (this.match("MinusSign" /* MinusSign */)) {
       const token = this.previous();
       const argument = this.parseUnary();
@@ -7710,7 +15483,16 @@ var Parser = class {
         location: token.location
       };
     }
-    return this.parsePostfix();
+    return this.parsePower();
+  }
+  parsePower() {
+    const left = this.parsePostfix();
+    if (this.match("StarStar" /* StarStar */)) {
+      const token = this.previous();
+      const right = this.parseUnary();
+      return { type: "BinaryExpression", operator: "**", left, right, location: token.location };
+    }
+    return left;
   }
   parsePostfix() {
     let expr = this.parsePrimary();
@@ -8102,6 +15884,7 @@ var Parser = class {
 var readline = __toESM(require("readline"));
 var fs5 = __toESM(require("fs"));
 var path5 = __toESM(require("path"));
+var import_async_hooks = require("async_hooks");
 init_environment();
 init_values();
 init_plain_error();
@@ -8109,15 +15892,27 @@ init_math();
 init_list();
 init_time();
 init_builtins();
+init_registry();
 var ReturnSignal = class {
   value;
   constructor(value) {
     this.value = value;
   }
 };
+var BreakSignal = class {
+};
+var ContinueSignal = class {
+};
 var Interpreter = class _Interpreter {
   globalEnv;
-  currentEnv;
+  rootEnv;
+  executionEnv = new import_async_hooks.AsyncLocalStorage();
+  get currentEnv() {
+    return this.executionEnv.getStore() || this.rootEnv;
+  }
+  set currentEnv(value) {
+    this.rootEnv = value;
+  }
   sourceCode;
   sourceFile;
   baseDir;
@@ -8125,6 +15920,7 @@ var Interpreter = class _Interpreter {
   onShow;
   onAsk;
   onClear;
+  moduleCache = /* @__PURE__ */ new Map();
   constructor(options) {
     this.sourceCode = options?.sourceCode;
     this.sourceFile = options?.sourceFile;
@@ -8146,6 +15942,7 @@ var Interpreter = class _Interpreter {
     this.onClear = options?.onClear || (() => console.clear());
     this.globalEnv = createStandardEnvironment({
       baseDir: options?.baseDir,
+      args: options?.args,
       onSay: this.onSay,
       onShow: this.onShow,
       onAsk: this.onAsk,
@@ -8215,6 +16012,10 @@ var Interpreter = class _Interpreter {
       case "ExpressionStatement":
         await this.evaluate(statement.expression);
         break;
+      case "BreakStatement":
+        throw new BreakSignal();
+      case "ContinueStatement":
+        throw new ContinueSignal();
     }
   }
   async executeSet(stmt) {
@@ -8224,20 +16025,23 @@ var Interpreter = class _Interpreter {
     } else {
       value = await this.evaluate(stmt.value);
     }
-    this.currentEnv.assign(stmt.name, value);
+    const target = await this.prepareTarget(stmt.target || { type: "Identifier", name: stmt.name, location: stmt.location }, stmt.location);
+    target.write(value);
   }
   async executeAssignment(stmt) {
     let rhs;
-    if (stmt.operator === "=" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+    const target = stmt.target || { type: "Identifier", name: stmt.name, location: stmt.location };
+    const prepared = await this.prepareTarget(target, stmt.location);
+    if (stmt.operator === "=" && target.type === "Identifier" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
       rhs = stmt.value.name;
     } else {
       rhs = await this.evaluate(stmt.value);
     }
     if (stmt.operator === "=") {
-      this.currentEnv.assign(stmt.name, rhs);
+      prepared.write(rhs);
       return;
     }
-    const current = this.currentEnv.lookup(stmt.name, stmt.location, this.sourceCode);
+    const current = prepared.read();
     let finalVal = rhs;
     if (stmt.operator === "+=") {
       if (typeof current === "string" || typeof rhs === "string") {
@@ -8255,8 +16059,53 @@ var Interpreter = class _Interpreter {
         throw new PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
       }
       finalVal = mathBuiltins.to_number(current) / divisor;
+    } else if (stmt.operator === "%=") {
+      const divisor = mathBuiltins.to_number(rhs);
+      if (divisor === 0) throw new PlainError("Cannot use modulo with zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      finalVal = mathBuiltins.to_number(current) % divisor;
+    } else if (stmt.operator === "**=") {
+      finalVal = mathBuiltins.to_number(current) ** mathBuiltins.to_number(rhs);
+    } else if (stmt.operator === "//=") {
+      const divisor = mathBuiltins.to_number(rhs);
+      if (divisor === 0) throw new PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      finalVal = Math.floor(mathBuiltins.to_number(current) / divisor);
     }
-    this.currentEnv.assign(stmt.name, finalVal);
+    prepared.write(finalVal);
+  }
+  async prepareTarget(target, location) {
+    if (target.type === "Identifier") return {
+      read: () => this.currentEnv.lookup(target.name, location, this.sourceCode),
+      write: (value) => this.currentEnv.assign(target.name, value)
+    };
+    if (target.type === "MemberAccessExpression") {
+      const object2 = await this.evaluate(target.object);
+      if (!isPlainObject(object2)) throw new PlainError("A member assignment requires a dictionary.", location, { kind: "TypeError", sourceCode: this.sourceCode });
+      return {
+        read: () => object2[target.property] ?? null,
+        write: (value) => setOwnProperty(object2, target.property, value)
+      };
+    }
+    const object = await this.evaluate(target.object);
+    const rawIndex = await this.evaluate(target.index);
+    if (Array.isArray(object)) {
+      const index = Math.trunc(mathBuiltins.to_number(rawIndex));
+      const normalized = index < 0 ? object.length + index : index;
+      if (normalized < 0 || normalized >= object.length) throw new PlainError("List assignment index is out of range.", location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+      return {
+        read: () => object[normalized],
+        write: (value) => {
+          object[normalized] = value;
+        }
+      };
+    }
+    if (isPlainObject(object)) {
+      const key = plainToString(rawIndex);
+      return {
+        read: () => object[key] ?? null,
+        write: (value) => setOwnProperty(object, key, value)
+      };
+    }
+    throw new PlainError("An index assignment requires a list or dictionary.", location, { kind: "TypeError", sourceCode: this.sourceCode });
   }
   async executeImport(stmt) {
     const source = stmt.source.trim();
@@ -8266,47 +16115,47 @@ var Interpreter = class _Interpreter {
       localFilePath = path5.resolve(this.baseDir, source + ".plain");
     }
     if (fs5.existsSync(localFilePath) && fs5.statSync(localFilePath).isFile()) {
-      const code = fs5.readFileSync(localFilePath, "utf-8");
-      const lexer = new Lexer(code, localFilePath);
-      const tokens = lexer.tokenize();
-      const parser = new Parser(tokens, code, localFilePath);
-      const ast = parser.parse();
-      const subInterpreter = new _Interpreter({
-        baseDir: path5.dirname(localFilePath),
-        onSay: this.onSay,
-        onShow: this.onShow,
-        onAsk: this.onAsk,
-        onClear: this.onClear
-      });
-      for (const s of ast.body) {
-        await subInterpreter.executeStatement(s);
-      }
-      const moduleExport = {};
-      const exportedNames = subInterpreter.getGlobalEnvironment().getAllVariableNames();
-      for (const name of exportedNames) {
-        const val = subInterpreter.getGlobalEnvironment().lookup(name);
-        moduleExport[name] = val;
-        if (stmt.symbols && stmt.symbols.includes(name)) {
-          this.currentEnv.assign(name, val);
+      const absolutePath = path5.resolve(localFilePath);
+      let moduleExport = this.moduleCache.get(absolutePath);
+      if (!moduleExport) {
+        const code = fs5.readFileSync(absolutePath, "utf-8");
+        const ast = new Parser(new Lexer(code, absolutePath).tokenize(), code, absolutePath).parse();
+        const subInterpreter = new _Interpreter({ baseDir: path5.dirname(absolutePath), onSay: this.onSay, onShow: this.onShow, onAsk: this.onAsk, onClear: this.onClear });
+        for (const statement of ast.body) await subInterpreter.executeStatement(statement);
+        moduleExport = createPlainObject();
+        const moduleEnv = subInterpreter.getGlobalEnvironment();
+        const exports2 = /* @__PURE__ */ new Set();
+        for (const statement of ast.body) {
+          if (statement.type === "SetStatement") {
+            if (statement.target?.type === "Identifier") exports2.add(statement.target.name.toLowerCase());
+            else if (!statement.target && statement.name) exports2.add(statement.name.toLowerCase());
+          } else if (statement.type === "AssignmentStatement") {
+            if (statement.target?.type === "Identifier") exports2.add(statement.target.name.toLowerCase());
+            else if (!statement.target && statement.name) exports2.add(statement.name.toLowerCase());
+          } else if (statement.type === "FunctionDefStatement") exports2.add(statement.name.toLowerCase());
+          else if (statement.type === "ImportStatement" && statement.alias) exports2.add(statement.alias.toLowerCase());
         }
+        for (const name of exports2) if (moduleEnv.has(name)) setOwnProperty(moduleExport, name, moduleEnv.lookup(name));
+        this.moduleCache.set(absolutePath, moduleExport);
       }
-      if (!stmt.symbols || stmt.symbols.length === 0) {
-        this.currentEnv.assign(alias, moduleExport);
-      }
+      if (stmt.symbols?.length) {
+        for (const name of stmt.symbols) {
+          const key = name.toLowerCase();
+          if (!Object.prototype.hasOwnProperty.call(moduleExport, key)) throw new PlainError(`Module '${source}' does not export '${name}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+          this.currentEnv.assign(name, moduleExport[key]);
+        }
+      } else this.currentEnv.assign(alias, moduleExport);
       return;
     }
-    const allVars = this.globalEnv.getAllVariableNames();
-    const matchingModuleObj = {};
-    for (const name of allVars) {
-      const val = this.globalEnv.lookup(name);
-      matchingModuleObj[name] = val;
-      if (stmt.symbols && stmt.symbols.includes(name)) {
-        this.currentEnv.assign(name, val);
+    const module2 = getRegisteredModule(source, this.globalEnv);
+    if (!module2) throw new PlainError(`Cannot find module '${source}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+    if (stmt.symbols?.length) {
+      for (const name of stmt.symbols) {
+        const key = name.toLowerCase();
+        if (!Object.prototype.hasOwnProperty.call(module2, key)) throw new PlainError(`Module '${source}' does not export '${name}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+        this.currentEnv.assign(name, module2[key]);
       }
-    }
-    if (!stmt.symbols || stmt.symbols.length === 0) {
-      this.currentEnv.assign(alias, matchingModuleObj);
-    }
+    } else this.currentEnv.assign(alias, module2);
   }
   async executeSay(stmt) {
     const value = await this.evaluate(stmt.value);
@@ -8358,15 +16207,23 @@ var Interpreter = class _Interpreter {
       );
     }
     for (let i = 0; i < count; i++) {
-      for (const s of stmt.body) {
-        await this.executeStatement(s);
+      try {
+        for (const s of stmt.body) await this.executeStatement(s);
+      } catch (signal) {
+        if (signal instanceof BreakSignal) break;
+        if (signal instanceof ContinueSignal) continue;
+        throw signal;
       }
     }
   }
   async executeRepeatWhile(stmt) {
     while (plainToBoolean(await this.evaluate(stmt.condition))) {
-      for (const s of stmt.body) {
-        await this.executeStatement(s);
+      try {
+        for (const s of stmt.body) await this.executeStatement(s);
+      } catch (signal) {
+        if (signal instanceof BreakSignal) break;
+        if (signal instanceof ContinueSignal) continue;
+        throw signal;
       }
     }
   }
@@ -8385,8 +16242,12 @@ var Interpreter = class _Interpreter {
     }
     for (const item of listVal) {
       this.currentEnv.assign(stmt.itemVariable, item);
-      for (const s of stmt.body) {
-        await this.executeStatement(s);
+      try {
+        for (const s of stmt.body) await this.executeStatement(s);
+      } catch (signal) {
+        if (signal instanceof BreakSignal) break;
+        if (signal instanceof ContinueSignal) continue;
+        throw signal;
       }
     }
   }
@@ -8469,9 +16330,9 @@ var Interpreter = class _Interpreter {
         return elements;
       }
       case "DictionaryLiteral": {
-        const obj = {};
+        const obj = createPlainObject();
         for (const entry of expr.entries) {
-          obj[entry.key] = await this.evaluate(entry.value);
+          setOwnProperty(obj, entry.key, await this.evaluate(entry.value));
         }
         return obj;
       }
@@ -8491,14 +16352,14 @@ var Interpreter = class _Interpreter {
         }
         if (isPlainObject(target)) {
           const key = plainToString(idxVal);
-          return target[key] ?? null;
+          return getOwnProperty(target, key);
         }
         return null;
       }
       case "MemberAccessExpression": {
         const target = await this.evaluate(expr.object);
         if (isPlainObject(target)) {
-          return target[expr.property] ?? null;
+          return getOwnProperty(target, expr.property);
         }
         return null;
       }
@@ -8670,28 +16531,25 @@ var Interpreter = class _Interpreter {
         );
       }
     }
-    if (calleeVal.body) {
+    const body = calleeVal.body;
+    if (body) {
       const callEnv = new Environment(calleeVal.closure || this.globalEnv);
       for (let i = 0; i < calleeVal.parameters.length; i++) {
         const paramName = calleeVal.parameters[i];
         const argVal = i < evaluatedArgs.length ? evaluatedArgs[i] : null;
         callEnv.define(paramName, argVal);
       }
-      const previousEnv = this.currentEnv;
-      this.currentEnv = callEnv;
-      try {
-        for (const s of calleeVal.body) {
+      return this.executionEnv.run(callEnv, async () => {
+        for (const s of body) {
           await this.executeStatement(s);
         }
         return null;
-      } catch (signal) {
+      }).catch((signal) => {
         if (signal instanceof ReturnSignal) {
           return signal.value;
         }
         throw signal;
-      } finally {
-        this.currentEnv = previousEnv;
-      }
+      });
     }
     return null;
   }
@@ -8764,6 +16622,7 @@ async function runPlain(source, options) {
     sourceCode: source,
     sourceFile: options?.filename,
     baseDir: options?.baseDir,
+    args: options?.args,
     onSay: options?.onSay,
     onShow: options?.onShow,
     onAsk: options?.onAsk,
@@ -8925,7 +16784,7 @@ Math with lists:
                          Author: Reuben
 ========================================================================
 PLAIN is designed to be the simplest, most powerful programming language.
-Supports symbols (+, -, *, /, =), 1,250+ functions, AI, and Cybersecurity.
+Supports Python-style expressions, blocks, modules, editor tooling, AI, and cybersecurity.
 
 COMMANDS:
   plain <file.plain>         Run a .plain script
@@ -8942,6 +16801,11 @@ COMMANDS:
   plain repl                 Start the interactive shell
   plain uninstall            Cleanly uninstall PLAIN and remove shortcuts
   plain check <file.plain>   Check syntax without executing
+  plain check --json <file> Get structured syntax diagnostics
+  plain fmt [--check] [path] Format source or check its formatting
+  plain test [path]          Run matching PLAIN test files
+  plain eval <source>        Evaluate a statement or expression
+  plain init <directory>    Create a starter project and test
   plain help <topic>         Detailed help (topics: variables, conditions,
                              loops, functions, cyber, lists)
 
@@ -8966,83 +16830,91 @@ FILE EXTENSION:
 }
 
 // src/cli/repl.ts
+function incompleteDepth(source) {
+  const tokens = new Lexer(source, "<repl>").tokenize().filter((token) => token.type !== "Newline" /* Newline */ && token.type !== "EOF" /* EOF */);
+  let blocks = 0;
+  let delimiters2 = 0;
+  let first = true;
+  for (const token of tokens) {
+    if (first && ["If" /* If */, "Repeat" /* Repeat */, "For" /* For */, "While" /* While */, "Def" /* Def */, "To" /* To */].includes(token.type)) blocks++;
+    if (token.type === "End" /* End */) blocks = Math.max(0, blocks - 1);
+    if (["LeftParen" /* LeftParen */, "LeftBracket" /* LeftBracket */, "LeftBrace" /* LeftBrace */].includes(token.type)) delimiters2++;
+    if (["RightParen" /* RightParen */, "RightBracket" /* RightBracket */, "RightBrace" /* RightBrace */].includes(token.type)) delimiters2 = Math.max(0, delimiters2 - 1);
+    if (token.location.line !== tokens[tokens.indexOf(token) + 1]?.location.line) first = true;
+    else first = false;
+  }
+  return blocks + delimiters2;
+}
 function startRepl() {
   console.log("==========================================================");
   console.log("             PLAIN Programming Language REPL              ");
-  console.log("          Super Simple \u2022 1,200+ Functions \u2022 Pythonic      ");
+  console.log("          Readable syntax \u2022 Standard library              ");
   console.log("               Created by Author: Reuben                  ");
   console.log("      Type instructions in simple English, or 'exit'.     ");
   console.log("==========================================================\n");
   const interpreter = new Interpreter();
-  const rl = readline2.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-    prompt: "plain> "
-  });
+  const rl = readline2.createInterface({ input: process.stdin, output: process.stdout, prompt: "plain> " });
   let buffer = "";
-  let blockDepth = 0;
+  let queue = Promise.resolve();
+  let hadError = false;
+  let closed = false;
   rl.prompt();
-  rl.on("line", async (line) => {
+  const processLine = async (line) => {
     const trimmed = line.trim();
-    if (blockDepth === 0) {
-      if (trimmed === "exit" || trimmed === "quit") {
-        console.log("Goodbye! Keep coding in PLAIN.");
-        rl.close();
-        return;
-      }
-      if (trimmed === "help") {
-        console.log(getHelp());
-        rl.prompt();
-        return;
-      }
-      if (trimmed === "clear") {
-        console.clear();
-        rl.prompt();
-        return;
-      }
-      if (trimmed === "") {
-        rl.prompt();
-        return;
-      }
-    }
-    const lower = trimmed.toLowerCase();
-    if (lower.startsWith("if ") || lower.startsWith("repeat ") || lower.startsWith("for each ") || lower.startsWith("for ") || lower.startsWith("while ") || lower.startsWith("def ") || lower.startsWith("to ")) {
-      blockDepth++;
-    }
-    if (lower === "end") {
-      blockDepth = Math.max(0, blockDepth - 1);
-    }
-    buffer += line + "\n";
-    if (blockDepth > 0) {
-      rl.setPrompt("...   ");
-      rl.prompt();
+    if (!buffer && (trimmed.toLowerCase() === "exit" || trimmed.toLowerCase() === "quit")) {
+      rl.close();
       return;
     }
-    const source = buffer;
-    buffer = "";
-    rl.setPrompt("plain> ");
-    try {
-      const lexer = new Lexer(source, "<repl>");
-      const tokens = lexer.tokenize();
-      const parser = new Parser(tokens, source, "<repl>");
-      const program = parser.parse();
-      for (const stmt of program.body) {
-        if (stmt.type === "ExpressionStatement") {
-          const val = await interpreter.evaluate(stmt.expression);
-          if (val !== null && val !== void 0) {
-            console.log("=> " + plainToString(val));
-          }
-        } else {
-          await interpreter.executeStatement(stmt);
-        }
-      }
-    } catch (err) {
-      console.error("\n" + formatError(err, source) + "\n");
+    if (!buffer && trimmed.toLowerCase() === "help") {
+      console.log(getHelp());
+      if (!closed) rl.prompt();
+      return;
     }
-    rl.prompt();
+    if (!buffer && trimmed.toLowerCase() === "clear") {
+      console.clear();
+      if (!closed) rl.prompt();
+      return;
+    }
+    buffer += line + "\n";
+    try {
+      const depth = incompleteDepth(buffer);
+      if (depth > 0) {
+        rl.setPrompt("...   ");
+        if (!closed) rl.prompt();
+        return;
+      }
+      const source = buffer;
+      buffer = "";
+      rl.setPrompt("plain> ");
+      console.log();
+      const program = new Parser(new Lexer(source, "<repl>").tokenize(), source, "<repl>").parse();
+      for (const statement of program.body) {
+        if (statement.type === "ExpressionStatement") {
+          const value = await interpreter.evaluate(statement.expression);
+          if (value !== null && value !== void 0) console.log("=> " + plainToString(value));
+        } else await interpreter.executeStatement(statement);
+      }
+    } catch (error) {
+      hadError = true;
+      console.error("\n" + formatError(error, buffer) + "\n");
+      buffer = "";
+      rl.setPrompt("plain> ");
+    }
+    if (!closed) rl.prompt();
+  };
+  rl.on("line", (line) => {
+    queue = queue.then(() => processLine(line));
   });
   rl.on("close", () => {
-    process.exit(0);
+    if (closed) return;
+    closed = true;
+    queue = queue.then(() => {
+      if (buffer.trim()) {
+        console.error("Incomplete input: expected 'end' or a closing delimiter before end of input.");
+        hadError = true;
+      }
+      if (hadError) process.exitCode = 1;
+    });
   });
 }
 
@@ -9587,7 +17459,7 @@ $startShortcut.Save()
     console.log("");
     console.log("\u2554\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2557");
     console.log("\u2551         \u{1F6E0}\uFE0F  PLAIN LANGUAGE APPLICATION SETUP WIZARD          \u2551");
-    console.log("\u2551           Super Simple \u2022 1,235 Functions \u2022 Pythonic          \u2551");
+    console.log("\u2551       PLAIN \u2022 500+ Standard-Library Functions \u2022 Pythonic     \u2551");
     console.log("\u2551                     Author: Reuben                           \u2551");
     console.log("\u255A\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u255D");
     console.log("");
@@ -9730,7 +17602,7 @@ function startPlainIde(port = 4200, initialFilePath) {
   const examplesDir = examplesDirCandidates.find((d) => fs7.existsSync(d)) || "";
   let initialCode = `# ==========================================================
 # Welcome to PLAIN IDE (Python IDLE Equivalent)
-# Author: Reuben \u2022 1,235 Functions Built-In
+# Author: Reuben \u2022 500+ Standard-Library Functions
 # Press [F5] or click 'Run' to execute code!
 # ==========================================================
 
@@ -10220,7 +18092,7 @@ function getIdeHtml(initialCode, initialPath) {
     </div>
     <div class="toolbar-right">
       <button class="btn" id="doctorBtn">\u{1FA7A} Diagnostics</button>
-      <button class="btn" id="functionsBtn">\u{1F4DA} 1,235 Functions</button>
+      <button class="btn" id="functionsBtn">\u{1F4DA} 500+ Functions</button>
       <button class="btn" id="clearBtn">Clear Shell</button>
     </div>
   </div>
@@ -10247,7 +18119,7 @@ function getIdeHtml(initialCode, initialPath) {
       </div>
       <div class="console-output" id="consoleOutput">PLAIN Interactive Shell (v1.1.0)
 Type code in the editor and press Run (F5) or type commands below.
-Author: Reuben \u2022 All 1,235 Functions Loaded.
+Author: Reuben \u2022 Standard library ready.
 ----------------------------------------------------------------------
 </div>
       <div class="console-input-row">
@@ -10261,7 +18133,7 @@ Author: Reuben \u2022 All 1,235 Functions Loaded.
   <div class="statusbar">
     <div class="status-item">
       <span class="pulse-dot"></span>
-      <span id="statusMessage">PLAIN Engine Ready (1,235 Built-in Functions)</span>
+      <span id="statusMessage">PLAIN Engine Ready (500+ Standard-Library Functions)</span>
     </div>
     <div class="status-item">
       <span>UTF-8 \u2022 PLAIN Language \u2022 Author: Reuben</span>
@@ -10272,7 +18144,7 @@ Author: Reuben \u2022 All 1,235 Functions Loaded.
   <div class="modal" id="fnModal">
     <div class="modal-content">
       <div class="modal-header">
-        <span>PLAIN Standard Library Reference (1,235 Functions)</span>
+      <span>PLAIN Standard Library Reference (500+ Functions)</span>
         <button class="btn" id="closeFnModal">Close</button>
       </div>
       <div class="modal-body">
@@ -10486,22 +18358,717 @@ Author: Reuben \u2022 All 1,235 Functions Loaded.
 
 // src/cli/cli.ts
 init_cyber_security();
-init_crypto_security();
+
+// src/tooling/analyzer.ts
+init_plain_error();
+init_catalog();
+
+// src/tooling/source.ts
+init_plain_error();
+function sourceLines(source) {
+  const lines = [];
+  const pattern = /([^\r\n]*)(\r\n|\n|\r|$)/g;
+  let match;
+  while (match = pattern.exec(source)) {
+    lines.push({ text: match[1], newline: match[2], start: match.index });
+    if (!match[2]) break;
+  }
+  return lines;
+}
+function getLineStarts(source) {
+  const starts = [0];
+  for (let i = 0; i < source.length; i++) {
+    if (source[i] === "\r") {
+      if (source[i + 1] === "\n") i++;
+      starts.push(i + 1);
+    } else if (source[i] === "\n") {
+      starts.push(i + 1);
+    }
+  }
+  return starts;
+}
+function finiteInteger(value, fallback = 0) {
+  return Number.isFinite(value) ? Math.trunc(value) : fallback;
+}
+function lineEnd(source, starts, line) {
+  let end = starts[line + 1] ?? source.length;
+  if (end > starts[line] && source[end - 1] === "\n") end--;
+  if (end > starts[line] && source[end - 1] === "\r") end--;
+  return end;
+}
+function pointAt(source, starts, value) {
+  const offset = Math.max(0, Math.min(source.length, finiteInteger(value, source.length)));
+  let low = 0;
+  let high = starts.length - 1;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    if (starts[middle] <= offset) low = middle;
+    else high = middle - 1;
+  }
+  return { line: low, character: Math.min(offset, lineEnd(source, starts, low)) - starts[low], offset };
+}
+function offsetForPosition(source, starts, position) {
+  if (typeof position === "number") return pointAt(source, starts, position).offset;
+  const line = Math.max(0, finiteInteger(position.line));
+  if (line >= starts.length) return source.length;
+  return Math.min(lineEnd(source, starts, line), starts[line] + Math.max(0, finiteInteger(position.character)));
+}
+function rangeAt(source, starts, start, end) {
+  return { start: pointAt(source, starts, start), end: pointAt(source, starts, Math.max(start, end)) };
+}
+function tokenizeForTooling(source, filename) {
+  let masked = source.startsWith("\uFEFF") ? " " + source.slice(1) : source;
+  const issues = [];
+  const starts = getLineStarts(source);
+  for (let attempt = 0; attempt < 32; attempt++) {
+    try {
+      return { tokens: new Lexer(masked, filename).tokenize(), issues };
+    } catch (error) {
+      const location = error instanceof PlainError ? error.location : void 0;
+      const start = Math.max(0, Math.min(source.length, location?.start ?? offsetForPosition(source, starts, {
+        line: (location?.line ?? 1) - 1,
+        character: (location?.column ?? 1) - 1
+      })));
+      let end = Math.min(source.length, start + (source.codePointAt(start) > 65535 ? 2 : 1));
+      if (masked[start] === '"' || masked[start] === "'") {
+        const newline = masked.indexOf("\n", start);
+        end = newline < 0 ? source.length : newline;
+        if (end > start && source[end - 1] === "\r") end--;
+      }
+      issues.push({ error, start, end });
+      if (end <= start) break;
+      masked = masked.slice(0, start) + masked.slice(start, end).replace(/[^\r\n]/g, " ") + masked.slice(end);
+    }
+  }
+  const last = issues[issues.length - 1];
+  const prefix = last ? masked.slice(0, last.start) : "";
+  try {
+    const tokens = new Lexer(prefix, filename).tokenize();
+    const eof = pointAt(source, starts, source.length);
+    tokens[tokens.length - 1] = {
+      type: "EOF" /* EOF */,
+      value: "",
+      raw: "",
+      location: { line: eof.line + 1, column: eof.character + 1, start: eof.offset, sourceFile: filename }
+    };
+    return { tokens, issues };
+  } catch {
+    return { tokens: [{ type: "EOF" /* EOF */, value: "", raw: "", location: { line: 1, column: 1, start: 0, sourceFile: filename } }], issues };
+  }
+}
+function isOpeningDelimiter(type) {
+  return type === "LeftParen" /* LeftParen */ || type === "LeftBracket" /* LeftBracket */ || type === "LeftBrace" /* LeftBrace */;
+}
+function isClosingDelimiter(type) {
+  return type === "RightParen" /* RightParen */ || type === "RightBracket" /* RightBracket */ || type === "RightBrace" /* RightBrace */;
+}
+function matchingDelimiter(open, close) {
+  return open === "LeftParen" /* LeftParen */ && close === "RightParen" /* RightParen */ || open === "LeftBracket" /* LeftBracket */ && close === "RightBracket" /* RightBracket */ || open === "LeftBrace" /* LeftBrace */ && close === "RightBrace" /* RightBrace */;
+}
+function isFunctionWord(token) {
+  return !!token && [
+    "Identifier" /* Identifier */,
+    "Add" /* Add */,
+    "Remove" /* Remove */,
+    "Item" /* Item */,
+    "Ask" /* Ask */,
+    "Show" /* Show */,
+    "Wait" /* Wait */,
+    "Clear" /* Clear */
+  ].includes(token.type);
+}
+function logicalStatements(tokens) {
+  const statements = [];
+  let current = [];
+  const delimiters2 = [];
+  const flush = () => {
+    if (current.length) statements.push(current);
+    current = [];
+  };
+  for (const token of tokens) {
+    if (token.type === "EOF" /* EOF */) {
+      flush();
+      break;
+    }
+    if (token.type === "Newline" /* Newline */) {
+      if (!delimiters2.length) flush();
+      continue;
+    }
+    if (!delimiters2.length && (token.type === "End" /* End */ || token.type === "Otherwise" /* Otherwise */ || token.raw.toLowerCase() === "elif")) {
+      flush();
+    }
+    current.push(token);
+    if (isOpeningDelimiter(token.type)) delimiters2.push(token.type);
+    else if (isClosingDelimiter(token.type) && matchingDelimiter(delimiters2[delimiters2.length - 1], token.type)) delimiters2.pop();
+    if (!delimiters2.length && token.type === "End" /* End */) flush();
+  }
+  flush();
+  return statements;
+}
+
+// src/tooling/analyzer.ts
+var indexes = /* @__PURE__ */ new WeakMap();
+var assignmentTypes = /* @__PURE__ */ new Set(["Equal" /* Equal */, "PlusEqual" /* PlusEqual */, "MinusEqual" /* MinusEqual */, "StarEqual" /* StarEqual */, "SlashEqual" /* SlashEqual */]);
+var naturalCalls = /* @__PURE__ */ new Set(["to number", "to text", "starts with", "ends with", "random between", "days between", "current time", "read file", "write file", "file exists"]);
+function positionAt(result, offset) {
+  return pointAt(result.source, result.lineStarts, offset);
+}
+function offsetAt(result, position) {
+  return offsetForPosition(result.source, result.lineStarts, position);
+}
+function span(result, start, end) {
+  return rangeAt(result.source, result.lineStarts, start, end);
+}
+function diagnosticFor(result, error, start, end) {
+  const plain = error instanceof PlainError ? error : void 0;
+  const location = plain?.location;
+  start ??= location?.start ?? offsetAt(result, { line: (location?.line ?? 1) - 1, character: (location?.column ?? 1) - 1 });
+  const token = result.tokens.find((candidate) => candidate.range.start.offset === start);
+  end ??= location?.end ?? token?.range.end.offset ?? Math.min(result.source.length, start + 1);
+  return {
+    message: error instanceof Error ? error.message : String(error),
+    severity: "error",
+    code: plain?.kind ?? "AnalysisError",
+    range: span(result, start, end),
+    filename: result.filename,
+    ...plain?.suggestion ? { suggestion: plain.suggestion } : {}
+  };
+}
+function analyzeSource(source, filename) {
+  const result = {
+    source,
+    filename,
+    diagnostics: [],
+    tokens: [],
+    symbols: [],
+    references: [],
+    scopes: [],
+    foldingRanges: [],
+    lineStarts: getLineStarts(source)
+  };
+  const lexical = tokenizeForTooling(source, filename);
+  result.tokens = lexical.tokens.map((token) => {
+    const start = token.location.start ?? offsetAt(result, { line: token.location.line - 1, character: token.location.column - 1 });
+    const end = token.type === "EOF" /* EOF */ ? start : Math.min(source.length, start + token.raw.length);
+    return { ...token, range: span(result, start, end) };
+  });
+  for (const issue of lexical.issues) result.diagnostics.push(diagnosticFor(result, issue.error, issue.start, issue.end));
+  if (!lexical.issues.length) {
+    try {
+      result.ast = new Parser(lexical.tokens, source, filename).parse();
+    } catch (error) {
+      result.diagnostics.push(diagnosticFor(result, error));
+    }
+  }
+  indexDocument(result);
+  return result;
+}
+function lookup(data, name, scopeId, before, renamed) {
+  const key = name.toLowerCase();
+  let scope = data.scopes.get(scopeId);
+  while (scope) {
+    const bindings = data.bindings.get(scope.id);
+    let symbol;
+    if (renamed) {
+      symbol = [...bindings.values()].find((entry) => (entry.id === renamed.id ? renamed.name : entry.name).toLowerCase() === key);
+    } else symbol = bindings.get(key);
+    if (symbol && (before === void 0 || (data.visibleFrom.get(symbol.id) ?? 0) <= before)) return symbol;
+    scope = scope.parentId ? data.scopes.get(scope.parentId) : void 0;
+  }
+  return void 0;
+}
+function indexDocument(result) {
+  const data = {
+    bindings: /* @__PURE__ */ new Map(),
+    scopes: /* @__PURE__ */ new Map(),
+    symbols: /* @__PURE__ */ new Map(),
+    visibleFrom: /* @__PURE__ */ new Map(),
+    fallbackReferences: /* @__PURE__ */ new Set(),
+    importedNames: /* @__PURE__ */ new Map()
+  };
+  indexes.set(result, data);
+  const documentScope = { id: "document", kind: "document", range: span(result, 0, result.source.length), symbolIds: [] };
+  const addScope = (scope2) => {
+    data.scopes.set(scope2.id, scope2);
+    data.bindings.set(scope2.id, /* @__PURE__ */ new Map());
+    result.scopes.push(scope2);
+  };
+  addScope(documentScope);
+  let scope = documentScope;
+  const blocks = [];
+  const fold = (startLine, endLine, kind = "region") => {
+    if (endLine > startLine) result.foldingRanges.push({ startLine, endLine, kind });
+  };
+  const finishBlock = (block, end) => {
+    const endPosition = positionAt(result, end);
+    fold(block.token.range.start.line, endPosition.line);
+    if (block.branchLine !== void 0) fold(block.branchLine, Math.max(block.branchLine, endPosition.line - 1));
+    if (block.scope) {
+      block.scope.range = span(result, block.token.range.start.offset, end);
+      if (block.symbol) block.symbol.range = block.scope.range;
+      scope = data.scopes.get(block.scope.parentId);
+    }
+  };
+  function bind(token, kind, declarationRange, forceLocal = false, visibleFrom = declarationRange.end.offset) {
+    const key = token.raw.toLowerCase();
+    let symbol = forceLocal ? data.bindings.get(scope.id).get(key) : lookup(data, token.raw, scope.id);
+    const isDeclaration = !symbol;
+    if (!symbol) {
+      symbol = {
+        id: `${scope.id}:${token.range.start.offset}:${key}`,
+        name: token.raw,
+        kind,
+        range: declarationRange,
+        selectionRange: token.range,
+        scopeId: scope.id
+      };
+      data.bindings.get(scope.id).set(key, symbol);
+      data.symbols.set(symbol.id, symbol);
+      data.visibleFrom.set(symbol.id, visibleFrom);
+      scope.symbolIds.push(symbol.id);
+      result.symbols.push(symbol);
+    }
+    result.references.push({
+      name: token.raw,
+      range: token.range,
+      scopeId: scope.id,
+      symbolId: symbol.id,
+      isDeclaration,
+      isWrite: true
+    });
+    return symbol;
+  }
+  for (const statement of logicalStatements(result.tokens)) {
+    const first = statement[0];
+    const last = statement[statement.length - 1];
+    const statementRange = span(result, first.range.start.offset, last.range.end.offset);
+    const consumed = /* @__PURE__ */ new Set();
+    const writes = /* @__PURE__ */ new Set();
+    const lower = first.raw.toLowerCase();
+    if (first.type === "End" /* End */) {
+      const block = blocks.pop();
+      if (block) finishBlock(block, first.range.end.offset);
+      continue;
+    }
+    const isBranch = first.type === "Otherwise" /* Otherwise */ || lower === "elif";
+    if (isBranch) {
+      const block = blocks[blocks.length - 1];
+      if (block?.kind === "if") {
+        fold(block.branchLine ?? block.token.range.start.line, first.range.start.line - 1);
+        block.branchLine = first.range.start.line;
+      }
+      consumed.add(first);
+    }
+    if (first.type === "Def" /* Def */ || first.type === "To" /* To */) {
+      const name = statement[1];
+      if (isFunctionWord(name)) {
+        const symbol = bind(name, "function", statementRange, true, first.range.start.offset);
+        const child = {
+          id: `function:${first.range.start.offset}`,
+          parentId: scope.id,
+          kind: "function",
+          range: span(result, first.range.start.offset, result.source.length),
+          symbolIds: []
+        };
+        addScope(child);
+        scope = child;
+        blocks.push({ token: first, kind: "function", scope: child, symbol });
+        const parameters = [];
+        let index = statement[2]?.type === "LeftParen" /* LeftParen */ ? 3 : 2;
+        let expectName = true;
+        for (; index < statement.length; index++) {
+          const token = statement[index];
+          if (token.type === "RightParen" /* RightParen */ || token.type === "Colon" /* Colon */) break;
+          if (expectName && isFunctionWord(token)) {
+            parameters.push(token.raw);
+            bind(token, "parameter", token.range, true, first.range.start.offset);
+            expectName = false;
+          } else if (!expectName && (token.type === "Comma" /* Comma */ || token.type === "And" /* And */)) expectName = true;
+          else break;
+        }
+        symbol.parameters = parameters;
+      }
+      continue;
+    }
+    if (first.type === "Import" /* Import */ || first.type === "From" /* From */) {
+      const sourceToken = statement[1];
+      const module2 = sourceToken?.type === "String" /* String */ ? String(sourceToken.value) : sourceToken?.raw;
+      if (module2) {
+        if (first.type === "Import" /* Import */) {
+          const asIndex = statement.findIndex((token) => token.type === "As" /* As */);
+          const name = asIndex >= 0 ? statement[asIndex + 1] : isFunctionWord(sourceToken) ? sourceToken : void 0;
+          if (name && isFunctionWord(name)) {
+            const symbol = bind(name, "import", statementRange);
+            symbol.module = module2;
+          }
+        } else {
+          const importIndex = statement.findIndex((token) => token.type === "Import" /* Import */);
+          for (let i = importIndex + 1; importIndex >= 0 && i < statement.length; i++) {
+            const original = statement[i];
+            if (!original || !isFunctionWord(original)) continue;
+            let name = original;
+            if (statement[i + 1]?.type === "As" /* As */ && isFunctionWord(statement[i + 2])) {
+              name = statement[i + 2];
+              i += 2;
+            }
+            const symbol = bind(name, "import", statementRange);
+            symbol.module = module2;
+            const qualifiedName = `${module2}.${original.raw}`;
+            data.importedNames.set(symbol.id, qualifiedName);
+            const builtin = getBuiltin(qualifiedName);
+            if (builtin) symbol.parameters = [...builtin.parameters];
+          }
+        }
+      }
+      continue;
+    }
+    let assignmentName;
+    let rhsIndex = -1;
+    let fallbackAllowed = false;
+    if (first.type === "Set" /* Set */ && statement[1]?.type === "Identifier" /* Identifier */) {
+      assignmentName = statement[1];
+      rhsIndex = 3;
+      fallbackAllowed = ["Equal" /* Equal */, "EqualEqual" /* EqualEqual */, "To" /* To */].includes(statement[2]?.type);
+    } else if (first.type === "Identifier" /* Identifier */ && assignmentTypes.has(statement[1]?.type)) {
+      assignmentName = first;
+      rhsIndex = 2;
+      fallbackAllowed = statement[1].type === "Equal" /* Equal */;
+    }
+    if (assignmentName) {
+      bind(assignmentName, "variable", statementRange);
+      consumed.add(assignmentName);
+      if (fallbackAllowed && statement.length === rhsIndex + 1 && statement[rhsIndex]?.type === "Identifier" /* Identifier */) {
+        data.fallbackReferences.add(statement[rhsIndex].range.start.offset);
+      }
+    } else if (first.type === "Identifier" /* Identifier */ && statement[1]?.type === "LeftBracket" /* LeftBracket */) {
+      if (statement.some((token) => assignmentTypes.has(token.type))) writes.add(first);
+    }
+    if (first.type === "For" /* For */) {
+      const name = statement[first.type === "For" /* For */ && statement[1]?.type === "Each" /* Each */ ? 2 : 1];
+      if (name?.type === "Identifier" /* Identifier */) {
+        bind(name, "variable", statementRange);
+        consumed.add(name);
+      }
+    }
+    if (first.type === "Ask" /* Ask */) {
+      const asIndex = statement.findIndex((token, i) => token.type === "As" /* As */ && statement[i - 1]?.type === "Save" /* Save */);
+      const name = statement[asIndex + 1];
+      if (asIndex >= 0 && name?.type === "Identifier" /* Identifier */) {
+        bind(name, "variable", statementRange);
+        consumed.add(name);
+      }
+    }
+    if (first.type === "Add" /* Add */ || first.type === "Remove" /* Remove */) {
+      const separator = first.type === "Add" /* Add */ ? "To" /* To */ : "From" /* From */;
+      const index = statement.findIndex((token) => token.type === separator);
+      if (index >= 0 && statement[index + 1]) writes.add(statement[index + 1]);
+    }
+    const delimiters2 = [];
+    for (let i = 0; i < statement.length; i++) {
+      const token = statement[i];
+      if (isOpeningDelimiter(token.type)) {
+        delimiters2.push(token.type);
+        continue;
+      }
+      if (isClosingDelimiter(token.type)) {
+        if (matchingDelimiter(delimiters2[delimiters2.length - 1], token.type)) delimiters2.pop();
+        continue;
+      }
+      if (consumed.has(token)) continue;
+      if (token.type !== "Identifier" /* Identifier */ && !isFunctionWord(token)) continue;
+      if (i === 0 && token.type !== "Identifier" /* Identifier */) continue;
+      if (statement[i - 1]?.type === "Dot" /* Dot */) continue;
+      if (delimiters2[delimiters2.length - 1] === "LeftBrace" /* LeftBrace */ && statement[i + 1]?.type === "Colon" /* Colon */) continue;
+      const pair = `${token.raw.toLowerCase()} ${statement[i + 1]?.raw.toLowerCase()}`;
+      if (naturalCalls.has(pair) && !consumed.has(statement[i + 1])) {
+        result.references.push({
+          name: pair,
+          range: span(result, token.range.start.offset, statement[i + 1].range.end.offset),
+          scopeId: scope.id,
+          isDeclaration: false,
+          isWrite: false
+        });
+        i++;
+        continue;
+      }
+      if (token.type === "Item" /* Item */ && statement[i + 1]?.type !== "LeftParen" /* LeftParen */) continue;
+      result.references.push({ name: token.raw, range: token.range, scopeId: scope.id, isDeclaration: false, isWrite: writes.has(token) });
+    }
+    if (!isBranch) {
+      if (first.type === "If" /* If */) blocks.push({ token: first, kind: "if" });
+      else if (["Repeat" /* Repeat */, "For" /* For */, "While" /* While */].includes(first.type)) blocks.push({ token: first, kind: "loop" });
+    }
+  }
+  while (blocks.length) finishBlock(blocks.pop(), result.source.length);
+  for (const reference of result.references) {
+    if (reference.symbolId) continue;
+    const before = data.fallbackReferences.has(reference.range.start.offset) ? reference.range.start.offset : void 0;
+    reference.symbolId = lookup(data, reference.name, reference.scopeId, before)?.id;
+  }
+  result.references.sort((a, b) => a.range.start.offset - b.range.start.offset);
+  const delimiterStack = [];
+  for (const token of result.tokens) {
+    if (isOpeningDelimiter(token.type)) delimiterStack.push(token);
+    else if (isClosingDelimiter(token.type) && matchingDelimiter(delimiterStack[delimiterStack.length - 1]?.type, token.type)) {
+      fold(delimiterStack.pop().range.start.line, token.range.end.line);
+    }
+  }
+  let commentStart = -1;
+  const lines = sourceLines(result.source);
+  for (let i = 0; i <= lines.length; i++) {
+    const comment = i < lines.length && /^\s*#/.test(lines[i].text);
+    if (comment && commentStart < 0) commentStart = i;
+    if (!comment && commentStart >= 0) {
+      fold(commentStart, i - 1, "comment");
+      commentStart = -1;
+    }
+  }
+  result.foldingRanges = result.foldingRanges.filter(
+    (range, index, all) => all.findIndex((other) => other.startLine === range.startLine && other.endLine === range.endLine && other.kind === range.kind) === index
+  ).sort((a, b) => a.startLine - b.startLine || b.endLine - a.endLine);
+}
+
+// src/tooling/formatter.ts
+function codeBeforeComment(line) {
+  let quote = "";
+  let escaped = false;
+  for (let i = 0; i < line.length; i++) {
+    const char = line[i];
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === quote) quote = "";
+    } else if (char === "'" || char === '"') quote = char;
+    else if (char === "#") return line.slice(0, i);
+  }
+  return line;
+}
+function delimiters(line) {
+  const code = codeBeforeComment(line);
+  let quote = "";
+  let escaped = false;
+  let opens = 0;
+  let closes = 0;
+  for (const char of code) {
+    if (quote) {
+      if (escaped) escaped = false;
+      else if (char === "\\") escaped = true;
+      else if (char === quote) quote = "";
+    } else if (char === "'" || char === '"') quote = char;
+    else if (char === "[" || char === "{" || char === "(") opens++;
+    else if (char === "]" || char === "}" || char === ")") closes++;
+  }
+  return { opens, closes };
+}
+function blockKind(code) {
+  const first = code.trim().toLowerCase();
+  if (!first) return void 0;
+  if (/^end\b/.test(first)) return "close";
+  if (/^(?:else\b|elif\b|otherwise\b)/.test(first)) return "branch";
+  if (/^(?:if\b|def\b|to\b|for\b|while\b|repeat\b)/.test(first)) return "open";
+  return void 0;
+}
+function formatSource(source, options = {}) {
+  if (!source) return source;
+  const unit = options.insertSpaces === false ? "	" : " ".repeat(Math.max(1, Math.floor(options.tabSize ?? 4)));
+  const lines = source.match(/[^\r\n]*(?:\r\n|\n|\r|$)/g)?.filter((line, index, all) => line.length > 0 || index < all.length - 1) ?? [source];
+  let blockDepth = 0;
+  let delimiterDepth = 0;
+  let pendingOpen = false;
+  const result = [];
+  for (const rawLine of lines) {
+    const ending = rawLine.endsWith("\r\n") ? "\r\n" : rawLine.endsWith("\n") ? "\n" : rawLine.endsWith("\r") ? "\r" : "";
+    const line = ending ? rawLine.slice(0, -ending.length) : rawLine;
+    const bom = result.length === 0 && line.startsWith("\uFEFF") ? "\uFEFF" : "";
+    const content = bom ? line.slice(1) : line;
+    const body = content.replace(/^[\t ]+/, "");
+    if (!body.trim()) {
+      result.push(line + ending);
+      continue;
+    }
+    const code = codeBeforeComment(body);
+    const kind = blockKind(code);
+    if (kind === "close") blockDepth = Math.max(0, blockDepth - 1);
+    const depthBeforeLine = Math.max(0, delimiterDepth - (delimiters(code).closes > 0 && /^[\])}]/.test(code.trim()) ? 1 : 0));
+    const indentDepth = Math.max(0, blockDepth + depthBeforeLine - (kind === "branch" ? 1 : 0));
+    result.push(bom + unit.repeat(indentDepth) + body + ending);
+    const counts = delimiters(code);
+    delimiterDepth = Math.max(0, delimiterDepth + counts.opens - counts.closes);
+    if (kind === "open") {
+      if (delimiterDepth > 0) pendingOpen = true;
+      else blockDepth++;
+    }
+    if (pendingOpen && delimiterDepth === 0) {
+      blockDepth++;
+      pendingOpen = false;
+    }
+  }
+  return result.join("");
+}
+
+// src/cli/cli.ts
+function validPort(value, fallback) {
+  if (value === void 0) return fallback;
+  if (!/^\d+$/.test(value)) return void 0;
+  const port = Number(value);
+  return port >= 1 && port <= 65535 ? port : void 0;
+}
+function plainTestFiles(directory) {
+  if (!fs8.existsSync(directory)) return [];
+  return fs8.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const full = path8.join(directory, entry.name);
+    if (entry.isDirectory()) return plainTestFiles(full);
+    return entry.isFile() && /^(?:test_.+|.+\.test)\.plain$/i.test(entry.name) ? [full] : [];
+  }).sort((a, b) => a.localeCompare(b));
+}
+function collectPlainFiles(directory) {
+  return fs8.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const full = path8.join(directory, entry.name);
+    return entry.isDirectory() ? collectPlainFiles(full) : entry.isFile() && entry.name.toLowerCase().endsWith(".plain") ? [full] : [];
+  });
+}
 async function main() {
   const args = process.argv.slice(2);
   if (args.length === 0) {
-    await promptUpdateIfAvailable();
     startRepl();
     return;
   }
   const command = args[0];
+  if (command === "init") {
+    if (args.length !== 2 || args[1].startsWith("-")) {
+      console.error("Usage: plain init <directory>");
+      process.exitCode = 1;
+      return;
+    }
+    const directory = path8.resolve(process.cwd(), args[1]);
+    fs8.mkdirSync(path8.join(directory, "tests"), { recursive: true });
+    const starter = path8.join(directory, "main.plain");
+    const starterTest = path8.join(directory, "tests", "test_main.plain");
+    if (!fs8.existsSync(starter)) fs8.writeFileSync(starter, 'say "Hello from PLAIN!"\n');
+    if (!fs8.existsSync(starterTest)) fs8.writeFileSync(starterTest, "assert_equal(2 + 2, 4)\n");
+    console.log(`Created PLAIN project at ${directory}`);
+    return;
+  }
+  if (command === "eval") {
+    const code = args.slice(1).join(" ");
+    if (!code) {
+      console.error("Usage: plain eval <source>");
+      process.exitCode = 1;
+      return;
+    }
+    try {
+      const interpreter = await runPlain(code, { filename: "<eval>", baseDir: process.cwd() });
+      const program = new Parser(new Lexer(code, "<eval>").tokenize(), code, "<eval>").parse();
+      const last = program.body[program.body.length - 1];
+      if (last?.type === "ExpressionStatement") console.log(String(await interpreter.evaluate(last.expression)));
+    } catch (error) {
+      console.error(formatError(error, code));
+      process.exitCode = 1;
+    }
+    return;
+  }
+  if (command === "check") {
+    const flags = args.slice(1).filter((arg) => arg.startsWith("-"));
+    const positional = args.slice(1).filter((arg) => !arg.startsWith("-"));
+    const json = flags.includes("--json");
+    const filename2 = positional[0];
+    const error = flags.some((flag) => flag !== "--json") || positional.length !== 1 || !filename2 ? "Usage: plain check [--json] <file.plain>" : void 0;
+    const filePath2 = filename2 ? path8.resolve(process.cwd(), filename2) : "";
+    const diagnostics = error ? [] : fs8.existsSync(filePath2) ? analyzeSource(fs8.readFileSync(filePath2, "utf8"), filename2).diagnostics : [{ message: `File not found: ${filename2}`, severity: "error", code: "FileNotFound", range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } }];
+    if (json) console.log(JSON.stringify({ ok: !error && diagnostics.length === 0, file: filename2, diagnostics: error ? [{ message: error, severity: "error", code: "UsageError" }] : diagnostics }));
+    else if (error) console.error(error);
+    else if (diagnostics.length) diagnostics.forEach((diagnostic) => console.error(`${filename2}: ${diagnostic.message}`));
+    else console.log(`Syntax OK: ${filename2}`);
+    if (error || diagnostics.length) process.exitCode = 1;
+    return;
+  }
+  if (command === "fmt") {
+    const flags = args.slice(1).filter((arg) => arg.startsWith("-"));
+    const paths = args.slice(1).filter((arg) => !arg.startsWith("-"));
+    const checkOnly = flags.includes("--check");
+    if (flags.some((flag) => flag !== "--check") || checkOnly && flags.length !== 1) {
+      console.error("Usage: plain fmt [--check] [file-or-directory ...]");
+      process.exitCode = 1;
+      return;
+    }
+    const targets = paths.length ? paths.map((target) => path8.resolve(process.cwd(), target)) : [process.cwd()];
+    const files = targets.flatMap((target) => fs8.existsSync(target) ? fs8.statSync(target).isDirectory() ? collectPlainFiles(target) : [target] : [target]);
+    let changed = false;
+    let hadError = false;
+    for (const file of [...new Set(files)].sort()) {
+      if (!fs8.existsSync(file) || !fs8.statSync(file).isFile()) {
+        console.error(`File not found: ${file}`);
+        changed = true;
+        hadError = true;
+        continue;
+      }
+      const source2 = fs8.readFileSync(file, "utf8");
+      const formatted = formatSource(source2);
+      if (formatted !== source2) {
+        changed = true;
+        if (!checkOnly) fs8.writeFileSync(file, formatted);
+      }
+    }
+    if (checkOnly && changed) console.error("Some files need formatting.");
+    if (!checkOnly && changed) console.log("Formatted PLAIN source files.");
+    if (checkOnly && changed || hadError) process.exitCode = 1;
+    return;
+  }
+  if (command === "test") {
+    const flags = args.slice(1).filter((arg) => arg.startsWith("-"));
+    const extra = args.slice(1).filter((arg) => !arg.startsWith("-"));
+    if (flags.length || extra.length > 1) {
+      console.error("Usage: plain test [file-or-directory]");
+      process.exitCode = 1;
+      return;
+    }
+    const target = extra[0] ? path8.resolve(process.cwd(), extra[0]) : process.cwd();
+    if (!fs8.existsSync(target)) {
+      console.error(`File not found: ${extra[0]}`);
+      process.exitCode = 1;
+      return;
+    }
+    const files = fs8.statSync(target).isDirectory() ? plainTestFiles(target) : [target];
+    if (!files.length) {
+      console.error("No PLAIN test files found.");
+      process.exitCode = 1;
+      return;
+    }
+    let passed = 0;
+    let failed = 0;
+    for (const file of files) {
+      const source2 = fs8.readFileSync(file, "utf8");
+      try {
+        await runPlain(source2, { filename: file, baseDir: path8.dirname(file) });
+        passed++;
+        console.log(`PASS ${path8.relative(process.cwd(), file)}`);
+      } catch (error) {
+        failed++;
+        console.error(`FAIL ${path8.relative(process.cwd(), file)}
+${formatError(error, source2)}`);
+      }
+    }
+    console.log(`${passed} passed, ${failed} failed`);
+    if (failed) process.exitCode = 1;
+    return;
+  }
   if (command === "--version" || command === "-v" || command === "version") {
+    if (args.length !== 1) {
+      console.error("Usage: plain version");
+      process.exitCode = 1;
+      return;
+    }
     console.log(`PLAIN Language version ${CURRENT_PLAIN_VERSION}`);
     console.log("Author: Reuben");
     console.log("Copyright (C) 2026 Reuben. All rights reserved.");
     return;
   }
   if (command === "ide" || command === "idle") {
+    if (args.length > 2 || args[1] === "--port" && !validPort(args[2], 4200)) {
+      console.error("Usage: plain ide [file.plain] or plain ide --port <1-65535>");
+      process.exitCode = 1;
+      return;
+    }
     const fileArg = args[1] ? path8.resolve(process.cwd(), args[1]) : void 0;
     const ideCandidates = [
       path8.join(process.env.LOCALAPPDATA || "", "PLAIN", "bin", "plain-ide.exe"),
@@ -10560,15 +19127,35 @@ async function main() {
     return;
   }
   if (command === "deploy") {
-    const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
+    if (args.length > 2) {
+      console.error("Usage: plain deploy [port]");
+      process.exitCode = 1;
+      return;
+    }
+    const portArg = validPort(args[1], 8080);
+    if (portArg === void 0) {
+      console.error("Port must be an integer from 1 to 65535.");
+      process.exitCode = 1;
+      return;
+    }
     const deployer = createServerDeployer();
     await deployer.deploy_server(portArg, void 0, "0.0.0.0");
     return;
   }
   if (command === "scan" || command === "portscan") {
+    if (args.length > 3) {
+      console.error("Usage: plain scan <host> [comma-separated-ports]");
+      process.exitCode = 1;
+      return;
+    }
     const target = args[1] || "127.0.0.1";
     const rawPortArgs = args.slice(2).join(",");
-    const portList = rawPortArgs ? rawPortArgs.split(",").map(Number).filter((p) => !isNaN(p) && p > 0) : void 0;
+    const portList = rawPortArgs ? rawPortArgs.split(",").map((p) => /^\d+$/.test(p) ? Number(p) : NaN) : void 0;
+    if (portList?.some((port) => !Number.isInteger(port) || port < 1 || port > 65535)) {
+      console.error("Ports must be integers from 1 to 65535.");
+      process.exitCode = 1;
+      return;
+    }
     console.log(`
 \u{1F50D} PLAIN Cybersecurity Reconnaissance: Scanning ${target}...`);
     const res = await cyberSecurityBuiltins.port_scan(target, portList);
@@ -10624,12 +19211,17 @@ RECOMMENDED REMEDIATION:`);
       console.error("Usage: plain hash <file>");
       process.exit(1);
     }
+    if (args.length !== 2) {
+      console.error("Usage: plain hash <file>");
+      process.exitCode = 1;
+      return;
+    }
     const buf = fs8.readFileSync(filename2);
     console.log(`
 File: ${filename2} (${buf.length} bytes)`);
-    console.log(`MD5:    ${cryptoSecurityBuiltins.md5(buf.toString("latin1"))}`);
-    console.log(`SHA1:   ${cryptoSecurityBuiltins.sha1(buf.toString("latin1"))}`);
-    console.log(`SHA256: ${cryptoSecurityBuiltins.sha256(buf.toString("latin1"))}
+    console.log(`MD5:    ${(0, import_crypto.createHash)("md5").update(buf).digest("hex")}`);
+    console.log(`SHA1:   ${(0, import_crypto.createHash)("sha1").update(buf).digest("hex")}`);
+    console.log(`SHA256: ${(0, import_crypto.createHash)("sha256").update(buf).digest("hex")}
 `);
     return;
   }
@@ -10696,7 +19288,17 @@ File: ${filename2} (${buf.length} bytes)`);
     return;
   }
   if (command === "playground") {
-    const port = args[1] ? parseInt(args[1], 10) : 3e3;
+    if (args.length > 2) {
+      console.error("Usage: plain playground [port]");
+      process.exitCode = 1;
+      return;
+    }
+    const port = validPort(args[1], 3e3);
+    if (port === void 0) {
+      console.error("Port must be an integer from 1 to 65535.");
+      process.exitCode = 1;
+      return;
+    }
     startPlayground(port);
     return;
   }
@@ -10724,13 +19326,14 @@ File: ${filename2} (${buf.length} bytes)`);
     }
     return;
   }
-  let filename = command;
-  if (command === "run") {
-    if (!args[1]) {
-      console.error("Error: Please provide a .plain file to run.");
-      process.exit(1);
-    }
-    filename = args[1];
+  const divider = args.indexOf("--");
+  const commandArgs = divider >= 0 ? args.slice(0, divider) : args;
+  const scriptArgs = divider >= 0 ? args.slice(divider + 1) : [];
+  const filename = command === "run" ? commandArgs[1] : command;
+  if (!filename || command === "run" && commandArgs.length !== 2 || command !== "run" && commandArgs.length !== 1 || divider >= 0 && command !== "run" || filename.startsWith("-")) {
+    console.error("Usage: plain run <file.plain> [-- script-args...]");
+    process.exitCode = 1;
+    return;
   }
   const filePath = path8.resolve(process.cwd(), filename);
   if (!fs8.existsSync(filePath)) {
@@ -10745,7 +19348,8 @@ File: ${filename2} (${buf.length} bytes)`);
   try {
     await runPlain(source, {
       filename,
-      baseDir: path8.dirname(filePath)
+      baseDir: path8.dirname(filePath),
+      args: scriptArgs
     });
   } catch (err) {
     console.error(formatError(err, source));

@@ -1,6 +1,6 @@
 # Student Science & Math Showcase in PLAIN
-# Demonstrates 150+ student built-in functions:
-# Physics, Geometry, Statistics, Unit Conversions, and Chemistry!
+# Deterministic local calculations using canonical builtins for physics,
+# geometry, statistics, unit conversions, and chemistry.
 
 say "=== PLAIN Student Science & Math Suite ==="
 

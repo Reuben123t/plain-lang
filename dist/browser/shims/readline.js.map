@@ -1,0 +1,1 @@
+{"version":3,"file":"readline.js","sourceRoot":"","sources":["../../../src/browser/shims/readline.ts"],"names":[],"mappings":";;AAAA,0CAEC;AAFD,SAAgB,eAAe;IAC7B,OAAO,EAAE,QAAQ,EAAE,CAAC,OAAO,EAAE,QAAQ,EAAE,EAAE,CAAC,QAAQ,CAAC,EAAE,CAAC,EAAE,KAAK,EAAE,GAAG,EAAE,CAAC,SAAS,EAAE,CAAC;AACnF,CAAC"}

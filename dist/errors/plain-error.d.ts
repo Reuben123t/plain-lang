@@ -5,7 +5,7 @@ export interface SourceLocation {
     end?: number;
     sourceFile?: string;
 }
-export type PlainErrorKind = "LexerError" | "ParserError" | "RuntimeError" | "TypeError" | "NameError";
+export type PlainErrorKind = "LexerError" | "ParserError" | "RuntimeError" | "ImportError" | "TypeError" | "NameError";
 export declare class PlainError extends Error {
     readonly kind: PlainErrorKind;
     readonly location: SourceLocation;

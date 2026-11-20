@@ -1,8 +1,8 @@
 # Simple Calculator in PLAIN
 # Demonstrates variables and readable English math operators.
 
-set first to 12
-set second to 8
-set answer to first plus second
+set left_value to 12
+set right_value to 8
+set answer to left_value plus right_value
 say answer
 

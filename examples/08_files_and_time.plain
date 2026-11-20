@@ -1,5 +1,6 @@
-# Files and Time in PLAIN
-# Demonstrates safe file I/O, current date/time, and pausing.
+# Opt-in Node filesystem example: writes welcome.txt beside the script.
+# Run a copy in a disposable directory; existing welcome.txt will be replaced.
+# Date/time output varies. File helpers do not sandbox all Node capabilities.
 
 say "Today is: " plus today()
 say "Current time is: " plus current_time()

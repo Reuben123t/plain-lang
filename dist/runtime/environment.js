@@ -5,8 +5,11 @@ const plain_error_1 = require("../errors/plain-error");
 class Environment {
     variables = new Map();
     parent;
-    constructor(parent) {
+    assignmentBoundary;
+    constructor(parent, assignmentBoundary = false) {
         this.parent = parent;
+        // Program/module scopes can read builtins without assigning into their host.
+        this.assignmentBoundary = assignmentBoundary;
     }
     define(name, value) {
         const key = name.toLowerCase();
@@ -14,26 +17,25 @@ class Environment {
     }
     assign(name, value) {
         const key = name.toLowerCase();
-        if (this.variables.has(key)) {
-            this.variables.set(key, value);
-            return;
-        }
-        if (this.parent) {
-            this.parent.assign(name, value);
-            return;
-        }
-        // Default to defining in current scope if not found in ancestors
-        this.variables.set(key, value);
+        const owner = this.findAssignmentOwner(key);
+        (owner || this).variables.set(key, value);
+    }
+    findAssignmentOwner(key) {
+        if (this.variables.has(key))
+            return this;
+        if (this.assignmentBoundary)
+            return undefined;
+        return this.parent?.findAssignmentOwner(key);
     }
     lookup(name, location, sourceCode) {
         const key = name.toLowerCase();
         if (this.variables.has(key)) {
             return this.variables.get(key);
         }
-        if (this.parent) {
+        if (this.parent?.has(name)) {
             return this.parent.lookup(name, location, sourceCode);
         }
-        // Not found anywhere
+        // Not found anywhere; include this scope in spelling suggestions.
         const available = this.getAllVariableNames();
         const suggestion = this.findClosestMatch(name, available);
         const loc = location || { line: 1, column: 1 };
@@ -50,6 +52,9 @@ class Environment {
         if (this.variables.has(key))
             return true;
         return this.parent ? this.parent.has(name) : false;
+    }
+    getOwnVariableNames() {
+        return Array.from(this.variables.keys());
     }
     getAllVariableNames() {
         const names = new Set();

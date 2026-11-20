@@ -36,6 +36,7 @@ async function runPlain(source, options) {
         sourceCode: source,
         sourceFile: options?.filename,
         baseDir: options?.baseDir,
+        args: options?.args,
         onSay: options?.onSay,
         onShow: options?.onShow,
         onAsk: options?.onAsk,

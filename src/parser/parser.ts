@@ -1,6 +1,10 @@
 import {
   ASTNode,
   AssignmentStatement,
+  AssignmentOperator,
+  AssignmentTarget,
+  BreakStatement,
+  ContinueStatement,
   BinaryExpression,
   BinaryOperator,
   CallExpression,
@@ -40,6 +44,7 @@ export class Parser {
   private current = 0;
   private source: string;
   private sourceFile?: string;
+  private loopDepth = 0;
 
   constructor(tokens: Token[], source: string, sourceFile?: string) {
     this.tokens = tokens;
@@ -114,20 +119,9 @@ export class Parser {
         return this.parseListRemoveStatement();
       case TokenType.Wait:
         return this.parseWaitStatement();
-      case TokenType.Identifier: {
-        const next = this.peekNext();
-        if (
-          next &&
-          (next.type === TokenType.Equal ||
-            next.type === TokenType.PlusEqual ||
-            next.type === TokenType.MinusEqual ||
-            next.type === TokenType.StarEqual ||
-            next.type === TokenType.SlashEqual)
-        ) {
-          return this.parseAssignmentStatement();
-        }
-        return this.parseExpressionStatement();
-      }
+      case TokenType.Break:
+      case TokenType.Continue:
+        return this.parseLoopControlStatement();
       default:
         // Could be an expression statement or unparenthesized function call like `greet "Alex"`
         return this.parseExpressionStatement();
@@ -149,8 +143,8 @@ export class Parser {
       );
     }
 
-    const nameToken = this.advance();
-    const varName = nameToken.raw || nameToken.value;
+    const target = this.requireAssignmentTarget(this.parsePostfix());
+    const varName = target.type === "Identifier" ? target.name : "target";
 
     // Support both '=' (preferred standard) and 'to' (or '==')
     if (this.match(TokenType.Equal) || this.match(TokenType.To) || this.match(TokenType.EqualEqual)) {
@@ -184,33 +178,78 @@ export class Parser {
 
     return {
       type: "SetStatement",
-      name: varName,
+      name: target.type === "Identifier" ? target.name : "",
+      target,
       value,
       location: setToken.location
     };
   }
 
-  private parseAssignmentStatement(): AssignmentStatement {
-    const nameToken = this.advance(); // consume identifier
-    const opToken = this.advance(); // consume =, +=, -=, *=, /=
-    let operator: "=" | "+=" | "-=" | "*=" | "/=" = "=";
-    switch (opToken.type) {
-      case TokenType.Equal: operator = "="; break;
-      case TokenType.PlusEqual: operator = "+="; break;
-      case TokenType.MinusEqual: operator = "-="; break;
-      case TokenType.StarEqual: operator = "*="; break;
-      case TokenType.SlashEqual: operator = "/="; break;
-      default: operator = "="; break;
-    }
+  private parseAssignmentStatement(expression: Expression): AssignmentStatement {
+    const target = this.requireAssignmentTarget(expression);
+    const operator = this.assignmentOperator(this.advance().type)!;
     const value = this.parseExpression();
     this.expectStatementEnd();
     return {
       type: "AssignmentStatement",
-      name: nameToken.raw || nameToken.value,
+      name: target.type === "Identifier" ? target.name : "",
+      target,
       operator,
       value,
-      location: nameToken.location
+      location: target.location
     };
+  }
+
+  private assignmentOperator(type: TokenType): AssignmentOperator | undefined {
+    switch (type) {
+      case TokenType.Equal: return "=";
+      case TokenType.PlusEqual: return "+=";
+      case TokenType.MinusEqual: return "-=";
+      case TokenType.StarEqual: return "*=";
+      case TokenType.SlashEqual: return "/=";
+      case TokenType.PercentEqual: return "%=";
+      case TokenType.StarStarEqual: return "**=";
+      case TokenType.SlashSlashEqual: return "//=";
+      default: return undefined;
+    }
+  }
+
+  private requireAssignmentTarget(expression: Expression): AssignmentTarget {
+    if (expression.type === "Identifier" || expression.type === "MemberAccessExpression" || expression.type === "IndexExpression") {
+      return expression;
+    }
+    throw new PlainError("Invalid assignment target. Assign to a variable, dictionary member, or list/dictionary index.", expression.location, {
+      kind: "ParserError",
+      sourceCode: this.source
+    });
+  }
+
+  private parseLoopControlStatement(): BreakStatement | ContinueStatement {
+    const token = this.advance();
+    if (this.loopDepth === 0) {
+      throw new PlainError(`'${token.value}' can only be used inside a loop in the same function.`, token.location, {
+        kind: "ParserError",
+        sourceCode: this.source
+      });
+    }
+    this.expectStatementEnd();
+    return { type: token.type === TokenType.Break ? "BreakStatement" : "ContinueStatement", location: token.location };
+  }
+
+  private parseLoopBody(): Statement[] {
+    const body: Statement[] = [];
+    this.loopDepth++;
+    try {
+      while (!this.isAtEnd() && !this.check(TokenType.End)) {
+        this.skipNewlines();
+        if (this.isAtEnd() || this.check(TokenType.End)) break;
+        body.push(this.parseStatement());
+        this.skipNewlines();
+      }
+    } finally {
+      this.loopDepth--;
+    }
+    return body;
   }
 
   private parseImportStatement(): ImportStatement {
@@ -234,9 +273,10 @@ export class Parser {
 
     let alias: string | undefined;
     if (this.match(TokenType.As)) {
-      if (this.isWord(this.peek())) {
-        alias = this.advance().raw;
+      if (!this.isWord(this.peek())) {
+        throw new PlainError("Expected an alias name after 'as'.", this.peek().location, { kind: "ParserError", sourceCode: this.source });
       }
+      alias = this.advance().raw;
     }
 
     this.expectStatementEnd();
@@ -282,13 +322,7 @@ export class Parser {
     }
     this.expectStatementEnd();
 
-    const body: Statement[] = [];
-    while (!this.isAtEnd() && !this.check(TokenType.End)) {
-      this.skipNewlines();
-      if (this.check(TokenType.End)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
-    }
+    const body = this.parseLoopBody();
 
     if (!this.match(TokenType.End)) {
       throw new PlainError(
@@ -540,13 +574,7 @@ export class Parser {
       const condition = this.parseExpression();
       this.expectStatementEnd();
 
-      const body: Statement[] = [];
-      while (!this.isAtEnd() && !this.check(TokenType.End)) {
-        this.skipNewlines();
-        if (this.check(TokenType.End)) break;
-        body.push(this.parseStatement());
-        this.skipNewlines();
-      }
+      const body = this.parseLoopBody();
 
       if (!this.match(TokenType.End)) {
         throw new PlainError(
@@ -593,13 +621,7 @@ export class Parser {
 
     this.expectStatementEnd();
 
-    const body: Statement[] = [];
-    while (!this.isAtEnd() && !this.check(TokenType.End)) {
-      this.skipNewlines();
-      if (this.check(TokenType.End)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
-    }
+    const body = this.parseLoopBody();
 
     if (!this.match(TokenType.End)) {
       throw new PlainError(
@@ -659,13 +681,7 @@ export class Parser {
     if (this.check(TokenType.Colon)) this.advance();
     this.expectStatementEnd();
 
-    const body: Statement[] = [];
-    while (!this.isAtEnd() && !this.check(TokenType.End)) {
-      this.skipNewlines();
-      if (this.check(TokenType.End)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
-    }
+    const body = this.parseLoopBody();
 
     if (!this.match(TokenType.End)) {
       throw new PlainError(
@@ -762,11 +778,17 @@ export class Parser {
     this.expectStatementEnd();
 
     const body: Statement[] = [];
-    while (!this.isAtEnd() && !this.check(TokenType.End)) {
-      this.skipNewlines();
-      if (this.check(TokenType.End)) break;
-      body.push(this.parseStatement());
-      this.skipNewlines();
+    const enclosingLoopDepth = this.loopDepth;
+    this.loopDepth = 0;
+    try {
+      while (!this.isAtEnd() && !this.check(TokenType.End)) {
+        this.skipNewlines();
+        if (this.isAtEnd() || this.check(TokenType.End)) break;
+        body.push(this.parseStatement());
+        this.skipNewlines();
+      }
+    } finally {
+      this.loopDepth = enclosingLoopDepth;
     }
 
     if (!this.match(TokenType.End)) {
@@ -917,8 +939,11 @@ export class Parser {
     };
   }
 
-  private parseExpressionStatement(): ExpressionStatement {
+  private parseExpressionStatement(): ExpressionStatement | AssignmentStatement {
     const expr = this.parseExpression();
+    if (this.assignmentOperator(this.peek().type)) {
+      return this.parseAssignmentStatement(expr);
+    }
     this.expectStatementEnd();
 
     return {
@@ -955,7 +980,7 @@ export class Parser {
   }
 
   private parseLogicalAnd(): Expression {
-    let left = this.parseComparison();
+    let left = this.parseLogicalNot();
 
     while (this.check(TokenType.And)) {
       const next = this.peekNext();
@@ -966,7 +991,7 @@ export class Parser {
 
       this.advance(); // consume 'and'
       const opToken = this.previous();
-      const right = this.parseComparison();
+      const right = this.parseLogicalNot();
       left = {
         type: "BinaryExpression",
         operator: "and",
@@ -977,6 +1002,19 @@ export class Parser {
     }
 
     return left;
+  }
+
+  private parseLogicalNot(): Expression {
+    if (this.match(TokenType.Not)) {
+      const token = this.previous();
+      return {
+        type: "UnaryExpression",
+        operator: "not",
+        argument: this.parseLogicalNot(),
+        location: token.location
+      };
+    }
+    return this.parseComparison();
   }
 
   private parseComparison(): Expression {
@@ -1103,11 +1141,6 @@ export class Parser {
     let left = this.parseUnary();
 
     while (true) {
-      if (this.match(TokenType.StarStar)) {
-        const right = this.parseUnary();
-        left = { type: "BinaryExpression", operator: "**", left, right, location: left.location };
-        continue;
-      }
       if (this.match(TokenType.SlashSlash)) {
         const right = this.parseUnary();
         left = { type: "BinaryExpression", operator: "//", left, right, location: left.location };
@@ -1153,17 +1186,6 @@ export class Parser {
   }
 
   private parseUnary(): Expression {
-    if (this.match(TokenType.Not)) {
-      const token = this.previous();
-      const argument = this.parseUnary();
-      return {
-        type: "UnaryExpression",
-        operator: "not",
-        argument,
-        location: token.location
-      };
-    }
-
     if (this.match(TokenType.MinusSign)) {
       const token = this.previous();
       const argument = this.parseUnary();
@@ -1175,7 +1197,18 @@ export class Parser {
       };
     }
 
-    return this.parsePostfix();
+    return this.parsePower();
+  }
+
+  private parsePower(): Expression {
+    const left = this.parsePostfix();
+    if (this.match(TokenType.StarStar)) {
+      const token = this.previous();
+      // Unary on the right permits negative exponents and recurses into power.
+      const right = this.parseUnary();
+      return { type: "BinaryExpression", operator: "**", left, right, location: token.location };
+    }
+    return left;
   }
 
   private parsePostfix(): Expression {
