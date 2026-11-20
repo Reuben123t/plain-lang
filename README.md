@@ -1,6 +1,6 @@
 # PLAIN
 
-PLAIN is an interpreted language by Reuben for readable scripts and learning. It combines English statements with familiar Python-style expressions, explicit `end` blocks, lists, dictionaries, and a standard library for text, numbers, data, and local automation.
+PLAIN is a readable, interpreted programming language by Reuben. It combines English-style statements with familiar Python-style expressions, explicit `end` blocks, collections, modules, tests, editor tooling, and a browser playground.
 
 ```plain
 set scores to [80, 90, 100]
@@ -14,68 +14,83 @@ for each score in scores
         say "Passed: " plus score
     end
 end
+
 say "Average: " plus average(scores)
 ```
 
-PLAIN is its own language, not a Python implementation. Indentation is for readability; blocks still need `end`. Keywords and variable/function names are case-insensitive. English `item 1 of scores` and bracket `scores[0]` both select the first item; `scores[-1]` selects the last.
+PLAIN is its own language, not a Python implementation. Indentation improves readability; blocks still close with `end`. Keywords and names are case-insensitive. Both `item 1 of scores` and `scores[0]` select the first item, while `scores[-1]` selects the last.
 
-## Build from source
+## Install from GitHub
 
-Use **Node.js 22 or newer** and npm. CI targets Node 22 and 24 on Windows, macOS, and Linux. From a checkout of this repository:
+Use Node.js 22 or newer and Git.
 
 ```sh
+git clone https://github.com/Reuben123t/plain-lang.git
+cd plain-lang
 npm ci
 npm run build
-node bin/plain.js examples/01_hello.plain
+npm link --ignore-scripts
+plain --version
 ```
 
-Expected output:
+The source installer is also available:
 
-```text
-Hello, world!
+```powershell
+powershell -ExecutionPolicy Bypass -File .\install.ps1
 ```
 
-Start an interactive session with `node bin/plain.js repl`. Use `node bin/plain.js help` for the CLI reference. These commands do not require a global install or a published npm package.
+The installer creates a new `$HOME/.plain` checkout and never replaces an existing installation. To install a different destination, pass `-InstallDir`.
 
-The checked-in manifests currently identify the runtime as **1.2.0** and the VS Code extension as **1.3.0**. Changes described as **Unreleased** belong to this source checkout, not a newly announced release. Existing executable/VSIX files may predate the source; rebuilding JavaScript does not rebuild those artifacts.
+## Run PLAIN
 
-## Everyday commands
-
-Use `node bin/plain.js` in place of `plain` when working from source.
+From a source checkout, use `node bin/plain.js` instead of the global `plain` command.
 
 ```sh
-node bin/plain.js run examples/16_control_flow.plain
-node bin/plain.js check examples/17_collections.plain --json
-node bin/plain.js eval 'say 6 * 7'
-node bin/plain.js fmt --check examples/16_control_flow.plain
-node bin/plain.js test examples/19_assertions.test.plain
-node bin/plain.js run examples/18_script_args.plain -- Ada blue
-node bin/plain.js init my-plain-project
+plain run examples/01_hello.plain
+plain repl
+plain eval 'say 6 * 7'
+plain check examples/17_collections.plain --json
+plain fmt examples/16_control_flow.plain
+plain test examples/19_assertions.test.plain
+plain run examples/18_script_args.plain -- Ada blue
+plain init my-plain-project
 ```
 
-`check` parses without executing; it cannot prove that a program is correct. `test`, `eval`, and normal execution run code. Formatting without `--check` changes files. See [Getting started](docs/getting-started.md) for the workflow and [Compatibility notes](docs/compatibility.md) for this checkout's additions.
+`check` parses without executing. `fmt` formats files unless `--check` is supplied. `test`, `eval`, and `run` execute programs. Run `plain help` for the complete command reference.
 
-## Learn and explore
+## Learn the language
 
-- [Getting started](docs/getting-started.md) — installation, CLI, and editor setup.
-- [Language tour](docs/tutorial.md) — English/Python-style syntax, functions, loops, collections, and tests.
-- [Language reference](docs/language-reference.md) — syntax and compatibility rules.
-- [Standard library](docs/standard-library.md) — generated canonical API catalog; prefer it over old function-count claims.
-- [Example guide](examples/README.md) — deterministic examples and opt-in demos with side effects.
-- [Neural-network contracts](docs/PLAIN_AI_SPECIFICATION.md) — actual API names and dataset shapes, including `train_neural_network(net, dataset, epochs, learning_rate)`.
+- [Getting started](docs/getting-started.md): installation, CLI, and editor setup.
+- [Tutorial](docs/tutorial.md): syntax, functions, loops, collections, and tests.
+- [Language reference](docs/language-reference.md): grammar and compatibility rules.
+- [Standard library](docs/standard-library.md): generated canonical API catalog.
+- [Examples](examples/README.md): runnable programs and optional side-effect demos.
+- [AI specification](docs/PLAIN_AI_SPECIFICATION.md): neural-network APIs and dataset shapes.
 
-Imports support built-in namespaces and local `.plain` modules. They are not an npm/Python package manager or a hosted PLAIN package registry.
+Imports support built-in namespaces and local `.plain` modules. PLAIN does not use npm or Python packages as its module system.
 
-## Execution and trust
+## VS Code extension
 
-- The **static browser playground** uses a Web Worker and a pure-language profile: no Node filesystem, shell, environment, or network APIs. Not every Node builtin is available there.
-- The **Node CLI and Node-backed local tools** execute trusted programs with your account's capabilities. File helpers do not make all automation, imports, or shell commands a security sandbox.
-- Local IDE/playground services are loopback tools, not public multi-user hosting services. Do not expose them through a public bind, proxy, or tunnel.
-- The VS Code extension is maintained in [`editors/vscode`](editors/vscode). Use its source/VSIX workflow; Marketplace availability is not assumed.
+The extension source is in [`editors/vscode`](editors/vscode). Build and package it from the repository root:
 
-See [SECURITY.md](SECURITY.md) before running code from another source or reporting a vulnerability.
+```sh
+npm run package:vscode
+code --install-extension .artifacts/plain-language-support-1.3.0.vsix --force
+```
 
-## Contribute and release
+The extension provides syntax highlighting, snippets, diagnostics, hover information, symbols, completions, and PLAIN execution commands.
+
+## Browser playground
+
+Build the static playground with:
+
+```sh
+npm run build:web
+```
+
+The browser runtime executes in a Web Worker using a pure-language profile. It has no Node filesystem, shell, environment, or network access. Node CLI programs and local tools run with the capabilities of the current user account, so only run trusted code.
+
+## Development checks
 
 ```sh
 npm run typecheck
@@ -83,8 +98,9 @@ npm test
 npm run build
 npm run test:examples
 npm run test:package
+npm run test:catalog
 ```
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for portable and optional native tests, [CHANGELOG.md](CHANGELOG.md) for Unreleased work, and [ROADMAP.md](ROADMAP.md) for future directions. Release candidates follow the [launch checklist](docs/releasing.md); publishing, deployment, repository metadata changes, and replacement of old downloads require separate approval.
+See [CONTRIBUTING.md](CONTRIBUTING.md), [SECURITY.md](SECURITY.md), [CHANGELOG.md](CHANGELOG.md), and [ROADMAP.md](ROADMAP.md) for project policies and release information.
 
 PLAIN is licensed under the [MIT License](LICENSE).
