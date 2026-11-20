@@ -1,4 +1,4 @@
-import { PlainValue, plainToString } from "../runtime/values";
+import { PlainObject, PlainValue, plainToString, createPlainObject, setOwnProperty, isPlainObject } from "../runtime/values";
 import { PlainError } from "../errors/plain-error";
 import { mathBuiltins } from "./math";
 
@@ -165,6 +165,45 @@ export const listBuiltins: Record<string, (...args: any[]) => any> = {
     return res;
   },
 
+  enumerate: (val: PlainValue): PlainValue[][] => ensureList(val, "enumerate").map((item, index) => [index + 1, item]),
+
+  rotate: (val: PlainValue, placesVal: PlainValue = 1): PlainValue[] => {
+    const list = [...ensureList(val, "rotate")];
+    if (!list.length) return list;
+    const places = Math.trunc(mathBuiltins.to_number(placesVal));
+    const offset = ((places % list.length) + list.length) % list.length;
+    return [...list.slice(offset), ...list.slice(0, offset)];
+  },
+
+  adjacent_pairs: (val: PlainValue): PlainValue[][] => {
+    const list = ensureList(val, "adjacent_pairs");
+    return list.slice(0, -1).map((item, index) => [item, list[index + 1]]);
+  },
+
+  interleave: (leftVal: PlainValue, rightVal: PlainValue): PlainValue[] => {
+    const left = ensureList(leftVal, "interleave");
+    const right = ensureList(rightVal, "interleave");
+    const result: PlainValue[] = [];
+    for (let index = 0; index < Math.max(left.length, right.length); index++) {
+      if (index < left.length) result.push(left[index]);
+      if (index < right.length) result.push(right[index]);
+    }
+    return result;
+  },
+
+  group_by: (val: PlainValue, keyVal: PlainValue): PlainObject => {
+    const list = ensureList(val, "group_by");
+    const keyName = plainToString(keyVal);
+    const groups = createPlainObject();
+    for (const item of list) {
+      const key = isPlainObject(item) ? plainToString(item[keyName] ?? null) : "nothing";
+      const group = groups[key];
+      if (Array.isArray(group)) group.push(item);
+      else setOwnProperty(groups, key, [item]);
+    }
+    return groups;
+  },
+
   intersection: (listAVal: PlainValue, listBVal: PlainValue): PlainValue[] => {
     const a = ensureList(listAVal, "intersection");
     const b = ensureList(listBVal, "intersection");
@@ -241,14 +280,24 @@ export const listBuiltins: Record<string, (...args: any[]) => any> = {
 
   fill_list: (val: PlainValue, countVal: PlainValue): PlainValue[] => {
     const count = Math.max(0, Math.round(mathBuiltins.to_number(countVal)));
+    if (!Number.isFinite(count) || count > 1000000) {
+      throw new PlainError("List size must be a finite number no larger than 1000000.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
     return new Array(count).fill(val);
   },
 
   range_list: (startVal: PlainValue, endVal: PlainValue, stepVal?: PlainValue): number[] => {
     const start = mathBuiltins.to_number(startVal);
     const end = mathBuiltins.to_number(endVal);
-    const step = stepVal ? mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
+    const step = stepVal !== undefined ? mathBuiltins.to_number(stepVal) : start <= end ? 1 : -1;
     if (step === 0) throw new PlainError("Step cannot be zero in range.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    if (![start, end, step].every(Number.isFinite)) {
+      throw new PlainError("Range bounds and step must be finite numbers.", { line: 1, column: 1 }, { kind: "TypeError" });
+    }
+    const length = Math.floor((end - start) / step) + 1;
+    if (length > 1000000 || (start !== end && start + step === start)) {
+      throw new PlainError("Range is too large; use a loop or a larger step.", { line: 1, column: 1 }, { kind: "RuntimeError" });
+    }
     const res: number[] = [];
     if (step > 0) {
       for (let i = start; i <= end; i += step) res.push(i);

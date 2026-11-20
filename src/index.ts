@@ -32,6 +32,7 @@ export async function runPlain(
     sourceCode: source,
     sourceFile: options?.filename,
     baseDir: options?.baseDir,
+    args: options?.args,
     onSay: options?.onSay,
     onShow: options?.onShow,
     onAsk: options?.onAsk,

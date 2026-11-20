@@ -1,0 +1,16 @@
+# Deterministic loop control: run with plain run examples/16_control_flow.plain.
+# Expected output: Total: 8
+
+total = 0
+for each number in [1, 2, 3, 4, 5]
+    if number == 2 then
+        continue
+    end
+    if number == 5 then
+        break
+    end
+    total += number
+end
+
+assert_equal(total, 8)
+say "Total: " plus total

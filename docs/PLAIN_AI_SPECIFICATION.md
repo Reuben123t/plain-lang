@@ -1,189 +1,97 @@
-# PLAIN Language Specification & Context for AI Models
+# PLAIN authoring and neural-network contracts
 
-## Overview
-**PLAIN** (`.plain`) is a modern, clean, expressive programming language designed for clarity, rapid scripting, AI deep learning workflows, cybersecurity, network servers, and data science. It supports both Pythonic indentation/colon syntax and classic readable English keyword blocks.
+This document is a compact guide for people and code-generation tools writing PLAIN. The [language reference](language-reference.md) and generated [standard-library catalog](standard-library.md) are authoritative for this checkout; this file is not a separate grammar or a claim of Python compatibility.
 
----
+## Rules for generated programs
 
-## 1. Core Syntax & Statements
+1. Use `.plain` source, UTF-8, and explicit `end` after every block, including Python-style `def`, `if`, `for`, and `while`.
+2. No entry declaration is needed. `Set ABC = Main` is a legacy assignment, not a required runtime setup step. Quote text values.
+3. Keywords and variable/function names are case-insensitive. Dictionary keys and text remain case-sensitive.
+4. Use `entry`, `number`, or another non-keyword as a loop variable. `item`, `add`, and `from` are reserved.
+5. English `item 1 of values` is 1-based. Brackets are 0-based; `values[-1]` is the last value.
+6. Use canonical APIs from the catalog. Do not invent `neural_network`, `train_ai`, `predict_ai`, or `web_server` as builtin names.
+7. Imports load available built-in namespaces or local modules; they do not install Python/npm dependencies or contact a PLAIN package registry.
+8. Browser examples must stay in the pure Worker profile. Node I/O, shell, network, and updater functions are unavailable there.
 
-### Entry Declaration
-Every standard PLAIN application or main module starts with:
+A complete program:
+
 ```plain
-Set ABC = Main
-```
-* Assigns the entry symbol `Main` to variable `ABC`.
-* Establishes the primary runtime context.
-
-### Variables & Assignment
-Standard assignments support standard math operators and Python-style shorthand:
-```plain
-x = 100
-y = 25
-total = (x + y) * 2 - 5 / 2
-power = 2 ** 8
-floor_div = 17 // 3
-mod = 10 % 3
-x += 5
-```
-
-### Printing / Output
-```plain
-say "Hello from PLAIN!"
-say "Result: " + str((x + y) * 2)
-```
-
----
-
-## 2. Type System & Built-in Conversions
-PLAIN provides standard Python-compatible type wrappers:
-* `str(val)`: Converts any type (number, boolean, list, dict) to string.
-* `int(val)`: Converts float or string to integer.
-* `float(val)`: Converts integer or string to float.
-* `bool(val)`: Converts value to boolean (`true` / `false`).
-* `type(val)`: Returns the type name (`"int"`, `"float"`, `"string"`, `"list"`, `"dict"`, `"boolean"`).
-* `len(val)`: Returns length of string, list, or dict.
-
----
-
-## 3. Control Flow & Loops
-
-### If-Else Statements
-```plain
-if score >= 90
-    say "Grade: A"
-otherwise
-    say "Grade: Needs improvement"
-end
-```
-*Python-style syntax with colons is also supported:*
-```plain
-if score >= 90:
-    say "Grade: A"
-else:
-    say "Grade: B"
-```
-
-### Loops
-**Repeat N times:**
-```plain
-repeat 5 times
-    say "Counting..."
-end
-```
-
-**For Each Loop:**
-```plain
-numbers = [10, 20, 30]
-for each item in numbers
-    say "Item: " + str(item)
-end
-```
-
-**While Loop:**
-```plain
-count = 0
-while count < 5:
-    say "Step: " + str(count)
-    count += 1
-```
-
----
-
-## 4. Functions & Procedures
-
-### Python Style (`def`):
-```plain
-def calculate_area(width, height):
+def area_of_rectangle(width, height):
     return width * height
-
-area = calculate_area(10, 20)
-say "Area: " + str(area)
-```
-
-### Classic PLAIN Style (`function` / `end`):
-```plain
-function add_numbers(a, b)
-    give back a + b
 end
+
+shape = {"width": 4, "height": 6}
+say area_of_rectangle(shape.width, shape.height)
 ```
 
----
+Output: `24`.
 
-## 5. Cybersecurity Engine (`import cyber`)
-PLAIN has an extensive offline security audit & threat intelligence engine:
+## Neural-network API
+
+Use these canonical functions:
+
+| Function | Contract |
+| --- | --- |
+| `create_neural_network(layers, activation)` | Creates an in-memory network; `layers` describes input, hidden, and output widths. |
+| `train_neural_network(network, dataset, epochs, learning_rate)` | Updates the network in place and returns training information. |
+| `predict_neural_network(network, input)` | Returns a numeric output list for one numeric input vector. |
+| `load_ai_dataset(name)` | Returns the bundled dataset object, including `inputs` and `targets`. |
+
+`load_dataset` is a registered alias of `load_ai_dataset`. Prefer canonical names in new examples. `sigmoid` is an activation supported by the example below; the catalog/source lists other options.
+
+### Dataset shape
+
+The current source accepts paired matrices:
 
 ```plain
-import cyber
-
-# 1. Port Scanning
-open_ports = cyber.port_scan("127.0.0.1", [21, 22, 80, 443, 8080])
-say "Open Ports: " + str(open_ports)
-
-# 2. Security Headers Audit
-audit = cyber.audit_security_headers("https://google.com")
-say "Score: " + str(audit.score) + "/100 (Grade: " + audit.grade + ")"
-
-# 3. CVE Threat Intelligence
-cve = cyber.cve_lookup("CVE-2021-44228")
-say "Threat: " + cve.id + " -> " + cve.severity
-
-# 4. Web Application Security
-has_sqli = cyber.detect_sqli("SELECT * FROM users WHERE '1'='1'")
-has_xss = cyber.detect_xss("<script>alert(1)</script>")
-clean_html = cyber.sanitize_html("<img src=x onerror=alert(1)>")
-
-# 5. Cryptography & Entropy Analysis
-entropy = cyber.shannon_entropy("random_packed_data_here")
-file_type = cyber.file_signature(buffer)
-subnet = cyber.ipv4_subnet("192.168.1.15/24")
+dataset = {"inputs": [[0, 0], [0, 1], [1, 0], [1, 1]], "targets": [[0], [1], [1], [0]]}
 ```
 
----
+- `inputs` and `targets` must contain the same nonzero number of rows.
+- Each input row must match the network's input width.
+- Each target row must match the output width.
+- Numeric entries must be finite. Supply positive epoch and learning-rate values.
+- The legacy list-of-records form, `[{"input": [0, 0], "output": [0]}, ...]`, remains supported.
 
-## 6. Artificial Intelligence & Neural Networks
-PLAIN includes a built-in multi-layer perceptron neural network library with backpropagation:
+Pass the **whole dataset**, not `dataset.inputs`. A list of input rows alone omits the targets and is not valid supervised training data. Older builds could silently train on empty/malformed data; validation in the Unreleased source rejects it instead.
+
+### Small local example
 
 ```plain
-# Initialize Neural Network: 2 input neurons, 4 hidden neurons, 1 output neuron
-nn = neural_network([2, 4, 1])
+dataset = {"inputs": [[0, 0], [0, 1], [1, 0], [1, 1]], "targets": [[0], [1], [1], [0]]}
+net = create_neural_network([2, 4, 1], "sigmoid")
+history = train_neural_network(net, dataset, 10, 0.1)
+prediction = predict_neural_network(net, [0, 1])
 
-# Training Data (XOR Problem)
-inputs = [[0, 0], [0, 1], [1, 0], [1, 1]]
-targets = [[0], [1], [1], [0]]
-
-# Train Model for 500 epochs
-train_ai(nn, inputs, targets, 500)
-
-# Inference
-prediction = predict_ai(nn, [1, 0])
-say "AI Prediction: " + str(prediction)
+assert_equal(history.epochs, 10)
+assert_equal(count(prediction), 1)
+say "Prediction width: " plus count(prediction)
 ```
 
----
+Output: `Prediction width: 1`.
 
-## 7. Web Servers & Network Deployment
+Initialization and training order use randomness. This example checks the API shape, not learned accuracy; it does not promise XOR convergence in ten epochs. Training information includes `epochs`, `final_loss`, and `loss_history`. Treat the reported loss as the implementation's training statistic, not an independent benchmark.
+
+### Bundled dataset example
+
 ```plain
-# Instant HTTP Web Server on port 8080
-server = web_server(8080)
-say "PLAIN Web Server active on port 8080"
+dataset = load_ai_dataset("iris")
+net = create_neural_network([4, 8, 3], "sigmoid")
+history = train_neural_network(net, dataset, 10, 0.1)
+prediction = predict_neural_network(net, dataset.inputs[0])
+say "Output width: " plus count(prediction)
 ```
 
----
+The bundled datasets are small teaching fixtures, not a substitute for obtaining and validating a complete external dataset. Training and prediction run locally; no remote AI service is needed for these APIs. Other APIs, such as `ai_chat`, have different network/credential requirements and are not part of the browser pure profile.
 
-## 8. File I/O & Diagnostics
-* All files are encoded strictly as **UTF-8 without BOM**.
-* Lexer automatically ignores any stray `\uFEFF` BOM.
-* Read / write functions:
-```plain
-content = read_file("dataset.csv")
-write_file("output.txt", "Processed data")
-exists = file_exists("output.txt")
+## Verification
+
+Build from source, then run:
+
+```sh
+node bin/plain.js check examples/20_neural_contract.plain
+node bin/plain.js run examples/20_neural_contract.plain
+node bin/plain.js test examples/19_assertions.test.plain
 ```
 
----
-
-## 9. Tooling Ecosystem
-1. **CLI**: `plain <file.plain>`, `plain doctor`, `plain ide`.
-2. **Desktop IDE**: `plain-ide.exe` (VS Code-style Dark Modern editor, multi-tab, line gutter, docked terminal, IntelliSense autocomplete).
-3. **VS Code Extension**: `plain-lang.plain-language-support` (`.vsix`) with syntax grammar, snippets, diagnostics, and title bar run button.
+Use [example 14](../examples/14_ai_neural_training.plain) for a longer local demonstration. Do not snapshot random prediction values or describe the existence of this implementation as measured performance, model quality, or production readiness.

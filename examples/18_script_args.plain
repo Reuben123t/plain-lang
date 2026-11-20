@@ -1,0 +1,11 @@
+# Run: plain run examples/18_script_args.plain -- Ada blue
+# Expected output: Arguments: 2 / Hello, Ada
+# With no arguments: Arguments: 0 / Hello, visitor
+
+script_args = args()
+say "Arguments: " plus count(script_args)
+if count(script_args) > 0 then
+    say "Hello, " plus script_args[0]
+otherwise
+    say "Hello, visitor"
+end

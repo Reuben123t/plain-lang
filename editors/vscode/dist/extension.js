@@ -1,3 +1,4 @@
+"use strict";
 var __create = Object.create;
 var __defProp = Object.defineProperty;
 var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
@@ -26,7 +27,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 ));
 var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
 
-// src/extension.ts
+// editors/vscode/src/extension.ts
 var extension_exports = {};
 __export(extension_exports, {
   activate: () => activate,
@@ -37,7 +38,7 @@ var vscode5 = __toESM(require("vscode"));
 var path = __toESM(require("path"));
 var fs = __toESM(require("fs"));
 
-// src/completions.ts
+// editors/vscode/src/completions.ts
 var vscode = __toESM(require("vscode"));
 var BUILTINS_DOCS = [
   {
@@ -267,7 +268,7 @@ var PlainCompletionProvider = class {
   }
 };
 
-// src/hover.ts
+// editors/vscode/src/hover.ts
 var vscode2 = __toESM(require("vscode"));
 var PlainHoverProvider = class {
   provideHover(document, position, token) {
@@ -292,7 +293,7 @@ var PlainHoverProvider = class {
   }
 };
 
-// src/symbols.ts
+// editors/vscode/src/symbols.ts
 var vscode3 = __toESM(require("vscode"));
 var PlainDocumentSymbolProvider = class {
   provideDocumentSymbols(document, token) {
@@ -343,7 +344,7 @@ var PlainDocumentSymbolProvider = class {
   }
 };
 
-// src/diagnostics.ts
+// editors/vscode/src/diagnostics.ts
 var vscode4 = __toESM(require("vscode"));
 var PlainDiagnosticProvider = class {
   diagnosticCollection;
@@ -411,7 +412,7 @@ var PlainDiagnosticProvider = class {
   }
 };
 
-// src/extension.ts
+// editors/vscode/src/extension.ts
 var plainTerminal;
 function getPlainTerminal() {
   if (plainTerminal && !plainTerminal.exitStatus) {

@@ -1,5 +1,6 @@
 import * as fs from "fs";
 import * as path from "path";
+import { createHash } from "crypto";
 import { spawn } from "child_process";
 import { runPlain, formatError } from "../index";
 import { Lexer } from "../lexer/lexer";
@@ -7,25 +8,135 @@ import { Parser } from "../parser/parser";
 import { startRepl } from "./repl";
 import { getHelp } from "./help";
 import { startPlayground } from "../playground/server";
-import { promptUpdateIfAvailable, performUpdate, CURRENT_PLAIN_VERSION } from "../builtins/updater";
+import { performUpdate, CURRENT_PLAIN_VERSION } from "../builtins/updater";
 import { createServerDeployer } from "../builtins/server_deploy";
 import { startPlainIde } from "../ide/server";
 import { PlainSystemManager } from "../setup/installer";
 import { cyberSecurityBuiltins } from "../builtins/cyber_security";
 import { cryptoSecurityBuiltins } from "../builtins/crypto_security";
+import { analyzeSource } from "../tooling/analyzer";
+import { formatSource } from "../tooling/formatter";
+
+function validPort(value: string | undefined, fallback: number): number | undefined {
+  if (value === undefined) return fallback;
+  if (!/^\d+$/.test(value)) return undefined;
+  const port = Number(value);
+  return port >= 1 && port <= 65535 ? port : undefined;
+}
+
+function plainTestFiles(directory: string): string[] {
+  if (!fs.existsSync(directory)) return [];
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(directory, entry.name);
+    if (entry.isDirectory()) return plainTestFiles(full);
+    return entry.isFile() && /^(?:test_.+|.+\.test)\.plain$/i.test(entry.name) ? [full] : [];
+  }).sort((a, b) => a.localeCompare(b));
+}
+
+function collectPlainFiles(directory: string): string[] {
+  return fs.readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(directory, entry.name);
+    return entry.isDirectory() ? collectPlainFiles(full) : entry.isFile() && entry.name.toLowerCase().endsWith(".plain") ? [full] : [];
+  });
+}
 
 export async function main(): Promise<void> {
   const args = process.argv.slice(2);
 
   if (args.length === 0) {
-    await promptUpdateIfAvailable();
     startRepl();
     return;
   }
 
   const command = args[0];
 
+  if (command === "init") {
+    if (args.length !== 2 || args[1].startsWith("-")) { console.error("Usage: plain init <directory>"); process.exitCode = 1; return; }
+    const directory = path.resolve(process.cwd(), args[1]);
+    fs.mkdirSync(path.join(directory, "tests"), { recursive: true });
+    const starter = path.join(directory, "main.plain");
+    const starterTest = path.join(directory, "tests", "test_main.plain");
+    if (!fs.existsSync(starter)) fs.writeFileSync(starter, 'say "Hello from PLAIN!"\n');
+    if (!fs.existsSync(starterTest)) fs.writeFileSync(starterTest, "assert_equal(2 + 2, 4)\n");
+    console.log(`Created PLAIN project at ${directory}`);
+    return;
+  }
+
+  if (command === "eval") {
+    const code = args.slice(1).join(" ");
+    if (!code) { console.error("Usage: plain eval <source>"); process.exitCode = 1; return; }
+    try {
+      const interpreter = await runPlain(code, { filename: "<eval>", baseDir: process.cwd() });
+      const program = new Parser(new Lexer(code, "<eval>").tokenize(), code, "<eval>").parse();
+      const last = program.body[program.body.length - 1];
+      if (last?.type === "ExpressionStatement") console.log(String(await interpreter.evaluate(last.expression)));
+    } catch (error) { console.error(formatError(error, code)); process.exitCode = 1; }
+    return;
+  }
+
+  if (command === "check") {
+    const flags = args.slice(1).filter((arg) => arg.startsWith("-"));
+    const positional = args.slice(1).filter((arg) => !arg.startsWith("-"));
+    const json = flags.includes("--json");
+    const filename = positional[0];
+    const error = flags.some((flag) => flag !== "--json") || positional.length !== 1 || !filename
+      ? "Usage: plain check [--json] <file.plain>"
+      : undefined;
+    const filePath = filename ? path.resolve(process.cwd(), filename) : "";
+    const diagnostics = error ? [] : fs.existsSync(filePath)
+      ? analyzeSource(fs.readFileSync(filePath, "utf8"), filename).diagnostics
+      : [{ message: `File not found: ${filename}`, severity: "error", code: "FileNotFound", range: { start: { line: 0, character: 0 }, end: { line: 0, character: 1 } } }];
+    if (json) console.log(JSON.stringify({ ok: !error && diagnostics.length === 0, file: filename, diagnostics: error ? [{ message: error, severity: "error", code: "UsageError" }] : diagnostics }));
+    else if (error) console.error(error);
+    else if (diagnostics.length) diagnostics.forEach((diagnostic) => console.error(`${filename}: ${diagnostic.message}`));
+    else console.log(`Syntax OK: ${filename}`);
+    if (error || diagnostics.length) process.exitCode = 1;
+    return;
+  }
+
+  if (command === "fmt") {
+    const flags = args.slice(1).filter((arg) => arg.startsWith("-"));
+    const paths = args.slice(1).filter((arg) => !arg.startsWith("-"));
+    const checkOnly = flags.includes("--check");
+    if (flags.some((flag) => flag !== "--check") || (checkOnly && flags.length !== 1)) { console.error("Usage: plain fmt [--check] [file-or-directory ...]"); process.exitCode = 1; return; }
+    const targets = paths.length ? paths.map((target) => path.resolve(process.cwd(), target)) : [process.cwd()];
+    const files = targets.flatMap((target) => fs.existsSync(target) ? (fs.statSync(target).isDirectory() ? collectPlainFiles(target) : [target]) : [target]);
+    let changed = false;
+    let hadError = false;
+    for (const file of [...new Set(files)].sort()) {
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) { console.error(`File not found: ${file}`); changed = true; hadError = true; continue; }
+      const source = fs.readFileSync(file, "utf8");
+      const formatted = formatSource(source);
+      if (formatted !== source) { changed = true; if (!checkOnly) fs.writeFileSync(file, formatted); }
+    }
+    if (checkOnly && changed) console.error("Some files need formatting.");
+    if (!checkOnly && changed) console.log("Formatted PLAIN source files.");
+    if ((checkOnly && changed) || hadError) process.exitCode = 1;
+    return;
+  }
+
+  if (command === "test") {
+    const flags = args.slice(1).filter((arg) => arg.startsWith("-"));
+    const extra = args.slice(1).filter((arg) => !arg.startsWith("-"));
+    if (flags.length || extra.length > 1) { console.error("Usage: plain test [file-or-directory]"); process.exitCode = 1; return; }
+    const target = extra[0] ? path.resolve(process.cwd(), extra[0]) : process.cwd();
+    if (!fs.existsSync(target)) { console.error(`File not found: ${extra[0]}`); process.exitCode = 1; return; }
+    const files = fs.statSync(target).isDirectory() ? plainTestFiles(target) : [target];
+    if (!files.length) { console.error("No PLAIN test files found."); process.exitCode = 1; return; }
+    let passed = 0;
+    let failed = 0;
+    for (const file of files) {
+      const source = fs.readFileSync(file, "utf8");
+      try { await runPlain(source, { filename: file, baseDir: path.dirname(file) }); passed++; console.log(`PASS ${path.relative(process.cwd(), file)}`); }
+      catch (error) { failed++; console.error(`FAIL ${path.relative(process.cwd(), file)}\n${formatError(error, source)}`); }
+    }
+    console.log(`${passed} passed, ${failed} failed`);
+    if (failed) process.exitCode = 1;
+    return;
+  }
+
   if (command === "--version" || command === "-v" || command === "version") {
+    if (args.length !== 1) { console.error("Usage: plain version"); process.exitCode = 1; return; }
     console.log(`PLAIN Language version ${CURRENT_PLAIN_VERSION}`);
     console.log("Author: Reuben");
     console.log("Copyright (C) 2026 Reuben. All rights reserved.");
@@ -33,6 +144,7 @@ export async function main(): Promise<void> {
   }
 
   if (command === "ide" || command === "idle") {
+    if (args.length > 2 || (args[1] === "--port" && !validPort(args[2], 4200))) { console.error("Usage: plain ide [file.plain] or plain ide --port <1-65535>"); process.exitCode = 1; return; }
     const fileArg = args[1] ? path.resolve(process.cwd(), args[1]) : undefined;
 
     // Search for native Windows PLAIN IDE (Python IDLE desktop equivalent)
@@ -101,16 +213,20 @@ export async function main(): Promise<void> {
   }
 
   if (command === "deploy") {
-    const portArg = args[1] && !args[1].endsWith(".plain") ? parseInt(args[1], 10) : 8080;
+    if (args.length > 2) { console.error("Usage: plain deploy [port]"); process.exitCode = 1; return; }
+    const portArg = validPort(args[1], 8080);
+    if (portArg === undefined) { console.error("Port must be an integer from 1 to 65535."); process.exitCode = 1; return; }
     const deployer = createServerDeployer();
     await deployer.deploy_server(portArg, undefined, "0.0.0.0");
     return;
   }
 
   if (command === "scan" || command === "portscan") {
+    if (args.length > 3) { console.error("Usage: plain scan <host> [comma-separated-ports]"); process.exitCode = 1; return; }
     const target = args[1] || "127.0.0.1";
     const rawPortArgs = args.slice(2).join(",");
-    const portList = rawPortArgs ? rawPortArgs.split(",").map(Number).filter((p) => !isNaN(p) && p > 0) : undefined;
+    const portList = rawPortArgs ? rawPortArgs.split(",").map((p) => /^\d+$/.test(p) ? Number(p) : NaN) : undefined;
+    if (portList?.some((port) => !Number.isInteger(port) || port < 1 || port > 65535)) { console.error("Ports must be integers from 1 to 65535."); process.exitCode = 1; return; }
     console.log(`\n🔍 PLAIN Cybersecurity Reconnaissance: Scanning ${target}...`);
     const res: any = await cyberSecurityBuiltins.port_scan(target, portList);
     console.log(`==================================================================`);
@@ -162,11 +278,12 @@ export async function main(): Promise<void> {
       console.error("Usage: plain hash <file>");
       process.exit(1);
     }
+    if (args.length !== 2) { console.error("Usage: plain hash <file>"); process.exitCode = 1; return; }
     const buf = fs.readFileSync(filename);
     console.log(`\nFile: ${filename} (${buf.length} bytes)`);
-    console.log(`MD5:    ${cryptoSecurityBuiltins.md5(buf.toString("latin1"))}`);
-    console.log(`SHA1:   ${cryptoSecurityBuiltins.sha1(buf.toString("latin1"))}`);
-    console.log(`SHA256: ${cryptoSecurityBuiltins.sha256(buf.toString("latin1"))}\n`);
+    console.log(`MD5:    ${createHash("md5").update(buf).digest("hex")}`);
+    console.log(`SHA1:   ${createHash("sha1").update(buf).digest("hex")}`);
+    console.log(`SHA256: ${createHash("sha256").update(buf).digest("hex")}\n`);
     return;
   }
 
@@ -240,7 +357,9 @@ export async function main(): Promise<void> {
   }
 
   if (command === "playground") {
-    const port = args[1] ? parseInt(args[1], 10) : 3000;
+    if (args.length > 2) { console.error("Usage: plain playground [port]"); process.exitCode = 1; return; }
+    const port = validPort(args[1], 3000);
+    if (port === undefined) { console.error("Port must be an integer from 1 to 65535."); process.exitCode = 1; return; }
     startPlayground(port);
     return;
   }
@@ -271,13 +390,12 @@ export async function main(): Promise<void> {
   }
 
   // File execution: `plain run <file.plain>` or `plain <file.plain>`
-  let filename = command;
-  if (command === "run") {
-    if (!args[1]) {
-      console.error("Error: Please provide a .plain file to run.");
-      process.exit(1);
-    }
-    filename = args[1];
+  const divider = args.indexOf("--");
+  const commandArgs = divider >= 0 ? args.slice(0, divider) : args;
+  const scriptArgs = divider >= 0 ? args.slice(divider + 1) : [];
+  const filename = command === "run" ? commandArgs[1] : command;
+  if (!filename || (command === "run" && commandArgs.length !== 2) || (command !== "run" && commandArgs.length !== 1) || (divider >= 0 && command !== "run") || filename.startsWith("-")) {
+    console.error("Usage: plain run <file.plain> [-- script-args...]"); process.exitCode = 1; return;
   }
 
   const filePath = path.resolve(process.cwd(), filename);
@@ -294,7 +412,8 @@ export async function main(): Promise<void> {
   try {
     await runPlain(source, {
       filename,
-      baseDir: path.dirname(filePath)
+      baseDir: path.dirname(filePath),
+      args: scriptArgs
     });
   } catch (err: any) {
     console.error(formatError(err, source));

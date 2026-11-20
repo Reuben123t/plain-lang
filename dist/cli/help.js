@@ -149,7 +149,7 @@ Math with lists:
                          Author: Reuben
 ========================================================================
 PLAIN is designed to be the simplest, most powerful programming language.
-Supports symbols (+, -, *, /, =), 1,250+ functions, AI, and Cybersecurity.
+Supports Python-style expressions, blocks, modules, editor tooling, AI, and cybersecurity.
 
 COMMANDS:
   plain <file.plain>         Run a .plain script
@@ -166,6 +166,11 @@ COMMANDS:
   plain repl                 Start the interactive shell
   plain uninstall            Cleanly uninstall PLAIN and remove shortcuts
   plain check <file.plain>   Check syntax without executing
+  plain check --json <file> Get structured syntax diagnostics
+  plain fmt [--check] [path] Format source or check its formatting
+  plain test [path]          Run matching PLAIN test files
+  plain eval <source>        Evaluate a statement or expression
+  plain init <directory>    Create a starter project and test
   plain help <topic>         Detailed help (topics: variables, conditions,
                              loops, functions, cyber, lists)
 

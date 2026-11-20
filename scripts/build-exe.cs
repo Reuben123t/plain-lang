@@ -4,7 +4,7 @@ using System.Reflection;
 using System.Diagnostics;
 
 [assembly: AssemblyTitle("PLAIN Programming Language")]
-[assembly: AssemblyDescription("The simplest, most powerful programming language. 1,300+ functions, symbols (+, -, *, /, =), AI, server deployment & Cybersecurity.")]
+[assembly: AssemblyDescription("PLAIN is a readable programming language with a 500+ function standard library, editor tooling, browser playground, and local automation.")]
 [assembly: AssemblyCompany("PLAIN Language Foundation")]
 [assembly: AssemblyProduct("PLAIN")]
 [assembly: AssemblyCopyright("Copyright © 2026 PLAIN")]

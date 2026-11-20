@@ -1,0 +1,24 @@
+# Deterministic indexed/member assignment and compound arithmetic.
+# Expected output: First: 12 / Last: 25 / Ada: 12 / Arithmetic: 2
+
+scores = [10, 20, 30]
+scores[0] += 2
+scores[-1] = 25
+student = {"name": "Ada", "score": 0}
+student.score = item 1 of scores
+student["active"] = true
+
+value = 17
+value %= 5
+value **= 3
+value //= 3
+
+assert_equal(scores[0], 12)
+assert_equal(scores[-1], 25)
+assert_equal(student.score, 12)
+assert(student.active)
+assert_equal(value, 2)
+say "First: " plus item 1 of scores
+say "Last: " plus scores[-1]
+say student.name + ": " + student.score
+say "Arithmetic: " plus value

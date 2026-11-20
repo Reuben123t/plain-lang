@@ -1,0 +1,13 @@
+# Short local API-shape check, not an accuracy benchmark.
+# Weights/training order are random; only the output shape is asserted.
+# Expected output: Epochs: 2 / Prediction width: 1
+
+dataset = {"inputs": [[0, 0], [0, 1], [1, 0], [1, 1]], "targets": [[0], [1], [1], [0]]}
+net = create_neural_network([2, 3, 1], "sigmoid")
+history = train_neural_network(net, dataset, 2, 0.1)
+prediction = predict_neural_network(net, [0, 1])
+
+assert_equal(history.epochs, 2)
+assert_equal(count(prediction), 1)
+say "Epochs: " plus history.epochs
+say "Prediction width: " plus count(prediction)

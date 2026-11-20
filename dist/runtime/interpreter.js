@@ -37,6 +37,7 @@ exports.Interpreter = void 0;
 const readline = __importStar(require("readline"));
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
+const async_hooks_1 = require("async_hooks");
 const environment_1 = require("./environment");
 const values_1 = require("./values");
 const lexer_1 = require("../lexer/lexer");
@@ -46,15 +47,23 @@ const math_1 = require("../builtins/math");
 const list_1 = require("../builtins/list");
 const time_1 = require("../builtins/time");
 const builtins_1 = require("../builtins");
+const registry_1 = require("../builtins/registry");
 class ReturnSignal {
     value;
     constructor(value) {
         this.value = value;
     }
 }
+class BreakSignal {
+}
+class ContinueSignal {
+}
 class Interpreter {
     globalEnv;
-    currentEnv;
+    rootEnv;
+    executionEnv = new async_hooks_1.AsyncLocalStorage();
+    get currentEnv() { return this.executionEnv.getStore() || this.rootEnv; }
+    set currentEnv(value) { this.rootEnv = value; }
     sourceCode;
     sourceFile;
     baseDir;
@@ -62,6 +71,7 @@ class Interpreter {
     onShow;
     onAsk;
     onClear;
+    moduleCache = new Map();
     constructor(options) {
         this.sourceCode = options?.sourceCode;
         this.sourceFile = options?.sourceFile;
@@ -85,6 +95,7 @@ class Interpreter {
         this.onClear = options?.onClear || (() => console.clear());
         this.globalEnv = (0, builtins_1.createStandardEnvironment)({
             baseDir: options?.baseDir,
+            args: options?.args,
             onSay: this.onSay,
             onShow: this.onShow,
             onAsk: this.onAsk,
@@ -154,6 +165,8 @@ class Interpreter {
             case "ExpressionStatement":
                 await this.evaluate(statement.expression);
                 break;
+            case "BreakStatement": throw new BreakSignal();
+            case "ContinueStatement": throw new ContinueSignal();
         }
     }
     async executeSet(stmt) {
@@ -165,11 +178,14 @@ class Interpreter {
         else {
             value = await this.evaluate(stmt.value);
         }
-        this.currentEnv.assign(stmt.name, value);
+        const target = await this.prepareTarget(stmt.target || { type: "Identifier", name: stmt.name, location: stmt.location }, stmt.location);
+        target.write(value);
     }
     async executeAssignment(stmt) {
         let rhs;
-        if (stmt.operator === "=" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
+        const target = stmt.target || { type: "Identifier", name: stmt.name, location: stmt.location };
+        const prepared = await this.prepareTarget(target, stmt.location);
+        if (stmt.operator === "=" && target.type === "Identifier" && stmt.value.type === "Identifier" && !this.currentEnv.has(stmt.value.name)) {
             // Unquoted identifier fallback (e.g. ABC = Main -> "Main")
             rhs = stmt.value.name;
         }
@@ -177,10 +193,10 @@ class Interpreter {
             rhs = await this.evaluate(stmt.value);
         }
         if (stmt.operator === "=") {
-            this.currentEnv.assign(stmt.name, rhs);
+            prepared.write(rhs);
             return;
         }
-        const current = this.currentEnv.lookup(stmt.name, stmt.location, this.sourceCode);
+        const current = prepared.read();
         let finalVal = rhs;
         if (stmt.operator === "+=") {
             if (typeof current === "string" || typeof rhs === "string") {
@@ -203,7 +219,58 @@ class Interpreter {
             }
             finalVal = math_1.mathBuiltins.to_number(current) / divisor;
         }
-        this.currentEnv.assign(stmt.name, finalVal);
+        else if (stmt.operator === "%=") {
+            const divisor = math_1.mathBuiltins.to_number(rhs);
+            if (divisor === 0)
+                throw new plain_error_1.PlainError("Cannot use modulo with zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+            finalVal = math_1.mathBuiltins.to_number(current) % divisor;
+        }
+        else if (stmt.operator === "**=") {
+            finalVal = math_1.mathBuiltins.to_number(current) ** math_1.mathBuiltins.to_number(rhs);
+        }
+        else if (stmt.operator === "//=") {
+            const divisor = math_1.mathBuiltins.to_number(rhs);
+            if (divisor === 0)
+                throw new plain_error_1.PlainError("Cannot divide by zero.", stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+            finalVal = Math.floor(math_1.mathBuiltins.to_number(current) / divisor);
+        }
+        prepared.write(finalVal);
+    }
+    async prepareTarget(target, location) {
+        if (target.type === "Identifier")
+            return {
+                read: () => this.currentEnv.lookup(target.name, location, this.sourceCode),
+                write: (value) => this.currentEnv.assign(target.name, value)
+            };
+        if (target.type === "MemberAccessExpression") {
+            const object = await this.evaluate(target.object);
+            if (!(0, values_1.isPlainObject)(object))
+                throw new plain_error_1.PlainError("A member assignment requires a dictionary.", location, { kind: "TypeError", sourceCode: this.sourceCode });
+            return {
+                read: () => object[target.property] ?? null,
+                write: (value) => (0, values_1.setOwnProperty)(object, target.property, value)
+            };
+        }
+        const object = await this.evaluate(target.object);
+        const rawIndex = await this.evaluate(target.index);
+        if (Array.isArray(object)) {
+            const index = Math.trunc(math_1.mathBuiltins.to_number(rawIndex));
+            const normalized = index < 0 ? object.length + index : index;
+            if (normalized < 0 || normalized >= object.length)
+                throw new plain_error_1.PlainError("List assignment index is out of range.", location, { kind: "RuntimeError", sourceCode: this.sourceCode });
+            return {
+                read: () => object[normalized],
+                write: (value) => { object[normalized] = value; }
+            };
+        }
+        if ((0, values_1.isPlainObject)(object)) {
+            const key = (0, values_1.plainToString)(rawIndex);
+            return {
+                read: () => object[key] ?? null,
+                write: (value) => (0, values_1.setOwnProperty)(object, key, value)
+            };
+        }
+        throw new plain_error_1.PlainError("An index assignment requires a list or dictionary.", location, { kind: "TypeError", sourceCode: this.sourceCode });
     }
     async executeImport(stmt) {
         const source = stmt.source.trim();
@@ -214,50 +281,65 @@ class Interpreter {
             localFilePath = path.resolve(this.baseDir, source + ".plain");
         }
         if (fs.existsSync(localFilePath) && fs.statSync(localFilePath).isFile()) {
-            const code = fs.readFileSync(localFilePath, "utf-8");
-            const lexer = new lexer_1.Lexer(code, localFilePath);
-            const tokens = lexer.tokenize();
-            const parser = new parser_1.Parser(tokens, code, localFilePath);
-            const ast = parser.parse();
-            const subInterpreter = new Interpreter({
-                baseDir: path.dirname(localFilePath),
-                onSay: this.onSay,
-                onShow: this.onShow,
-                onAsk: this.onAsk,
-                onClear: this.onClear
-            });
-            // Execute in submodule scope
-            for (const s of ast.body) {
-                await subInterpreter.executeStatement(s);
+            const absolutePath = path.resolve(localFilePath);
+            let moduleExport = this.moduleCache.get(absolutePath);
+            if (!moduleExport) {
+                const code = fs.readFileSync(absolutePath, "utf-8");
+                const ast = new parser_1.Parser(new lexer_1.Lexer(code, absolutePath).tokenize(), code, absolutePath).parse();
+                const subInterpreter = new Interpreter({ baseDir: path.dirname(absolutePath), onSay: this.onSay, onShow: this.onShow, onAsk: this.onAsk, onClear: this.onClear });
+                for (const statement of ast.body)
+                    await subInterpreter.executeStatement(statement);
+                moduleExport = (0, values_1.createPlainObject)();
+                const moduleEnv = subInterpreter.getGlobalEnvironment();
+                const exports = new Set();
+                for (const statement of ast.body) {
+                    if (statement.type === "SetStatement") {
+                        if (statement.target?.type === "Identifier")
+                            exports.add(statement.target.name.toLowerCase());
+                        else if (!statement.target && statement.name)
+                            exports.add(statement.name.toLowerCase());
+                    }
+                    else if (statement.type === "AssignmentStatement") {
+                        if (statement.target?.type === "Identifier")
+                            exports.add(statement.target.name.toLowerCase());
+                        else if (!statement.target && statement.name)
+                            exports.add(statement.name.toLowerCase());
+                    }
+                    else if (statement.type === "FunctionDefStatement")
+                        exports.add(statement.name.toLowerCase());
+                    else if (statement.type === "ImportStatement" && statement.alias)
+                        exports.add(statement.alias.toLowerCase());
+                }
+                for (const name of exports)
+                    if (moduleEnv.has(name))
+                        (0, values_1.setOwnProperty)(moduleExport, name, moduleEnv.lookup(name));
+                this.moduleCache.set(absolutePath, moduleExport);
             }
-            // Collect exported variables
-            const moduleExport = {};
-            const exportedNames = subInterpreter.getGlobalEnvironment().getAllVariableNames();
-            for (const name of exportedNames) {
-                const val = subInterpreter.getGlobalEnvironment().lookup(name);
-                moduleExport[name] = val;
-                if (stmt.symbols && stmt.symbols.includes(name)) {
-                    this.currentEnv.assign(name, val);
+            if (stmt.symbols?.length) {
+                for (const name of stmt.symbols) {
+                    const key = name.toLowerCase();
+                    if (!Object.prototype.hasOwnProperty.call(moduleExport, key))
+                        throw new plain_error_1.PlainError(`Module '${source}' does not export '${name}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+                    this.currentEnv.assign(name, moduleExport[key]);
                 }
             }
-            if (!stmt.symbols || stmt.symbols.length === 0) {
+            else
                 this.currentEnv.assign(alias, moduleExport);
-            }
             return;
         }
-        // Built-in virtual packages
-        const allVars = this.globalEnv.getAllVariableNames();
-        const matchingModuleObj = {};
-        for (const name of allVars) {
-            const val = this.globalEnv.lookup(name);
-            matchingModuleObj[name] = val;
-            if (stmt.symbols && stmt.symbols.includes(name)) {
-                this.currentEnv.assign(name, val);
+        const module = (0, registry_1.getRegisteredModule)(source, this.globalEnv);
+        if (!module)
+            throw new plain_error_1.PlainError(`Cannot find module '${source}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+        if (stmt.symbols?.length) {
+            for (const name of stmt.symbols) {
+                const key = name.toLowerCase();
+                if (!Object.prototype.hasOwnProperty.call(module, key))
+                    throw new plain_error_1.PlainError(`Module '${source}' does not export '${name}'.`, stmt.location, { kind: "ImportError", sourceCode: this.sourceCode });
+                this.currentEnv.assign(name, module[key]);
             }
         }
-        if (!stmt.symbols || stmt.symbols.length === 0) {
-            this.currentEnv.assign(alias, matchingModuleObj);
-        }
+        else
+            this.currentEnv.assign(alias, module);
     }
     async executeSay(stmt) {
         const value = await this.evaluate(stmt.value);
@@ -307,15 +389,31 @@ class Interpreter {
             throw new plain_error_1.PlainError(`Cannot repeat a negative number of times (${count}).`, stmt.location, { kind: "RuntimeError", sourceCode: this.sourceCode });
         }
         for (let i = 0; i < count; i++) {
-            for (const s of stmt.body) {
-                await this.executeStatement(s);
+            try {
+                for (const s of stmt.body)
+                    await this.executeStatement(s);
+            }
+            catch (signal) {
+                if (signal instanceof BreakSignal)
+                    break;
+                if (signal instanceof ContinueSignal)
+                    continue;
+                throw signal;
             }
         }
     }
     async executeRepeatWhile(stmt) {
         while ((0, values_1.plainToBoolean)(await this.evaluate(stmt.condition))) {
-            for (const s of stmt.body) {
-                await this.executeStatement(s);
+            try {
+                for (const s of stmt.body)
+                    await this.executeStatement(s);
+            }
+            catch (signal) {
+                if (signal instanceof BreakSignal)
+                    break;
+                if (signal instanceof ContinueSignal)
+                    continue;
+                throw signal;
             }
         }
     }
@@ -330,8 +428,16 @@ class Interpreter {
         }
         for (const item of listVal) {
             this.currentEnv.assign(stmt.itemVariable, item);
-            for (const s of stmt.body) {
-                await this.executeStatement(s);
+            try {
+                for (const s of stmt.body)
+                    await this.executeStatement(s);
+            }
+            catch (signal) {
+                if (signal instanceof BreakSignal)
+                    break;
+                if (signal instanceof ContinueSignal)
+                    continue;
+                throw signal;
             }
         }
     }
@@ -406,9 +512,9 @@ class Interpreter {
                 return elements;
             }
             case "DictionaryLiteral": {
-                const obj = {};
+                const obj = (0, values_1.createPlainObject)();
                 for (const entry of expr.entries) {
-                    obj[entry.key] = await this.evaluate(entry.value);
+                    (0, values_1.setOwnProperty)(obj, entry.key, await this.evaluate(entry.value));
                 }
                 return obj;
             }
@@ -428,14 +534,14 @@ class Interpreter {
                 }
                 if ((0, values_1.isPlainObject)(target)) {
                     const key = (0, values_1.plainToString)(idxVal);
-                    return target[key] ?? null;
+                    return (0, values_1.getOwnProperty)(target, key);
                 }
                 return null;
             }
             case "MemberAccessExpression": {
                 const target = await this.evaluate(expr.object);
                 if ((0, values_1.isPlainObject)(target)) {
-                    return target[expr.property] ?? null;
+                    return (0, values_1.getOwnProperty)(target, expr.property);
                 }
                 return null;
             }
@@ -594,7 +700,8 @@ class Interpreter {
             }
         }
         // User-Defined Function
-        if (calleeVal.body) {
+        const body = calleeVal.body;
+        if (body) {
             const callEnv = new environment_1.Environment(calleeVal.closure || this.globalEnv);
             // Bind parameters
             for (let i = 0; i < calleeVal.parameters.length; i++) {
@@ -602,23 +709,17 @@ class Interpreter {
                 const argVal = i < evaluatedArgs.length ? evaluatedArgs[i] : null;
                 callEnv.define(paramName, argVal);
             }
-            const previousEnv = this.currentEnv;
-            this.currentEnv = callEnv;
-            try {
-                for (const s of calleeVal.body) {
+            return this.executionEnv.run(callEnv, async () => {
+                for (const s of body) {
                     await this.executeStatement(s);
                 }
                 return null;
-            }
-            catch (signal) {
+            }).catch((signal) => {
                 if (signal instanceof ReturnSignal) {
                     return signal.value;
                 }
                 throw signal;
-            }
-            finally {
-                this.currentEnv = previousEnv;
-            }
+            });
         }
         return null;
     }

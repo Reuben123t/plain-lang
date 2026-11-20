@@ -1,4 +1,38 @@
-import { PlainObject, PlainValue, plainToString } from "../runtime/values";
+import { PlainObject } from "../runtime/values";
+
+const MAX_NETWORK_LAYERS = 128;
+const MAX_LAYER_SIZE = 10_000;
+const MAX_NETWORK_PARAMETERS = 1_000_000;
+const NETWORK_ACTIVATIONS = ["sigmoid", "relu", "leaky_relu", "tanh", "softmax"];
+const TRAINING_NUMERIC_ERROR = "Neural network training produced a non-finite value. Scale the data or reduce the learning rate.";
+
+function validateNetworkVector(value: unknown, size: number, name: string): asserts value is number[] {
+  if (!Array.isArray(value)) {
+    throw new Error(`${name} must be an array of ${size} finite numbers.`);
+  }
+  if (value.length !== size) {
+    throw new Error(`${name} must contain ${size} values; received ${value.length}.`);
+  }
+  for (let i = 0; i < value.length; i++) {
+    if (typeof value[i] !== "number" || !Number.isFinite(value[i])) {
+      throw new Error(`${name}[${i}] must be a finite number.`);
+    }
+  }
+}
+
+function normalizeNetworkVector(value: any, name: string, allowScalar = false): number[] {
+  const vector = Array.isArray(value) ? value : allowScalar ? [value] : null;
+  if (vector === null) {
+    throw new Error(`${name} must be an array of finite numbers.`);
+  }
+  return Array.from(vector, (entry, index) => {
+    const number = typeof entry === "string" && entry.trim() !== "" ? Number(entry) : entry;
+    if (typeof number !== "number" || !Number.isFinite(number)) {
+      throw new Error(`${name}[${index}] must be a finite number.`);
+    }
+    return number;
+  });
+}
 
 // Multi-Layer Perceptron (Neural Network) Implementation
 export class NeuralNetwork {
@@ -8,7 +42,30 @@ export class NeuralNetwork {
   public activation: string;
 
   constructor(layerSizes: number[], activation: string = "sigmoid") {
-    this.layerSizes = layerSizes;
+    if (!Array.isArray(layerSizes) || layerSizes.length < 2) {
+      throw new Error("Neural network layers must be an array with at least 2 layers (input and output).");
+    }
+    if (layerSizes.length > MAX_NETWORK_LAYERS) {
+      throw new Error(`Neural networks support at most ${MAX_NETWORK_LAYERS} layers.`);
+    }
+    let parameterCount = 0;
+    for (let i = 0; i < layerSizes.length; i++) {
+      const size = layerSizes[i];
+      if (!Number.isSafeInteger(size) || size <= 0) {
+        throw new Error(`Neural network layer ${i + 1} must have a positive integer size.`);
+      }
+      if (size > MAX_LAYER_SIZE) {
+        throw new Error(`Neural network layer ${i + 1} exceeds the limit of ${MAX_LAYER_SIZE} nodes.`);
+      }
+      if (i > 0) parameterCount += layerSizes[i - 1] * size + size;
+      if (parameterCount > MAX_NETWORK_PARAMETERS) {
+        throw new Error(`Neural network exceeds the allocation limit of ${MAX_NETWORK_PARAMETERS} weights and biases.`);
+      }
+    }
+    if (!NETWORK_ACTIVATIONS.includes(activation)) {
+      throw new Error(`Unsupported neural network activation '${String(activation)}'. Use ${NETWORK_ACTIVATIONS.join(", ")}.`);
+    }
+    this.layerSizes = [...layerSizes];
     this.activation = activation;
     this.weights = [];
     this.biases = [];
@@ -63,6 +120,7 @@ export class NeuralNetwork {
   }
 
   public forward(input: number[]): { activations: number[][]; zValues: number[][] } {
+    validateNetworkVector(input, this.layerSizes[0], "Network input");
     let current = [...input];
     const activations: number[][] = [current];
     const zValues: number[][] = [];
@@ -76,6 +134,9 @@ export class NeuralNetwork {
         let z = this.biases[l][j];
         for (let k = 0; k < current.length; k++) {
           z += this.weights[l][j][k] * current[k];
+        }
+        if (!Number.isFinite(z)) {
+          throw new Error("Neural network forward pass produced a non-finite value. Check the weights and scale the input data.");
         }
         zLayer.push(z);
         next.push(this.activate(z));
@@ -109,6 +170,27 @@ export class NeuralNetwork {
     learningRate: number = 0.1,
     batchSize: number = 16
   ): { finalLoss: number; lossHistory: number[]; epochs: number } {
+    if (!Number.isSafeInteger(epochs) || epochs <= 0) {
+      throw new Error("Training epochs must be a positive integer.");
+    }
+    if (typeof learningRate !== "number" || !Number.isFinite(learningRate) || learningRate <= 0) {
+      throw new Error("Training learning rate must be a positive finite number.");
+    }
+    if (!Number.isSafeInteger(batchSize) || batchSize <= 0) {
+      throw new Error("Training batch size must be a positive integer.");
+    }
+    if (!Array.isArray(dataset) || dataset.length === 0) {
+      throw new Error("Training dataset must be a non-empty array of {input, output} records.");
+    }
+    // Validate every sample before updating any weights.
+    for (let i = 0; i < dataset.length; i++) {
+      const sample = dataset[i];
+      if (!sample || typeof sample !== "object" || Array.isArray(sample)) {
+        throw new Error(`Training sample ${i + 1} must be an {input, output} record.`);
+      }
+      validateNetworkVector(sample.input, this.layerSizes[0], `Training sample ${i + 1} input`);
+      validateNetworkVector(sample.output, this.layerSizes[this.layerSizes.length - 1], `Training sample ${i + 1} output`);
+    }
     const lossHistory: number[] = [];
 
     for (let epoch = 0; epoch < epochs; epoch++) {
@@ -125,11 +207,21 @@ export class NeuralNetwork {
         // Output error (Mean Squared Error gradient)
         const deltas: number[][] = [];
         const outputDeltas: number[] = [];
-        for (let j = 0; j < output.length; j++) {
-          const target = sample.output[j] ?? 0;
-          const diff = output[j] - target;
+        const differences = output.map((value, j) => value - sample.output[j]);
+        for (const diff of differences) {
           epochLoss += 0.5 * diff * diff;
-          outputDeltas.push(diff * this.activatePrime(output[j]));
+        }
+        if (!Number.isFinite(epochLoss)) throw new Error(TRAINING_NUMERIC_ERROR);
+        // Softmax outputs are coupled; its gradient is not a sigmoid derivative.
+        if (this.activation === "softmax" && output.length > 1) {
+          const weightedError = differences.reduce((sum, diff, j) => sum + diff * output[j], 0);
+          for (let j = 0; j < output.length; j++) {
+            outputDeltas.push(output[j] * (differences[j] - weightedError));
+          }
+        } else {
+          for (let j = 0; j < output.length; j++) {
+            outputDeltas.push(differences[j] * this.activatePrime(output[j]));
+          }
         }
         deltas[L - 1] = outputDeltas;
 
@@ -149,22 +241,28 @@ export class NeuralNetwork {
         // Apply weight and bias updates (Stochastic Gradient Descent)
         for (let l = 0; l < L; l++) {
           for (let j = 0; j < this.weights[l].length; j++) {
+            const adjustment = learningRate * deltas[l][j];
+            if (!Number.isFinite(adjustment)) throw new Error(TRAINING_NUMERIC_ERROR);
             for (let k = 0; k < this.weights[l][j].length; k++) {
-              this.weights[l][j][k] -= learningRate * deltas[l][j] * activations[l][k];
+              const weight = this.weights[l][j][k] - adjustment * activations[l][k];
+              if (!Number.isFinite(weight)) throw new Error(TRAINING_NUMERIC_ERROR);
+              this.weights[l][j][k] = weight;
             }
-            this.biases[l][j] -= learningRate * deltas[l][j];
+            const bias = this.biases[l][j] - adjustment;
+            if (!Number.isFinite(bias)) throw new Error(TRAINING_NUMERIC_ERROR);
+            this.biases[l][j] = bias;
           }
         }
       }
 
-      const meanLoss = epochLoss / Math.max(1, dataset.length);
+      const meanLoss = epochLoss / dataset.length;
       if (epoch % Math.max(1, Math.floor(epochs / 10)) === 0 || epoch === epochs - 1) {
-        lossHistory.push(parseFloat(meanLoss.toFixed(6)));
+        lossHistory.push(meanLoss);
       }
     }
 
     return {
-      finalLoss: lossHistory[lossHistory.length - 1] || 0,
+      finalLoss: lossHistory[lossHistory.length - 1],
       lossHistory,
       epochs
     };
@@ -256,15 +354,15 @@ const PRELOADED_DATASETS: Record<string, { inputs: number[][]; targets: number[]
 export const aiTrainingBuiltins = {
   // 1. Neural Networks & Deep Learning
   create_neural_network: (layers: any, activationVal: any = "sigmoid") => {
-    const layerSizes = Array.isArray(layers)
-      ? layers.map((n) => (typeof n === "number" ? n : parseInt(String(n), 10) || 1))
-      : [2, 4, 1];
-    const act = typeof activationVal === "string" ? activationVal : "sigmoid";
-    const net = new NeuralNetwork(layerSizes, act);
+    // Keep numeric text compatibility without truncating or defaulting invalid sizes.
+    const layerSizes = Array.isArray(layers) && layers.length <= MAX_NETWORK_LAYERS
+      ? Array.from(layers, (n) => typeof n === "string" && n.trim() !== "" ? Number(n) : n)
+      : layers;
+    const net = new NeuralNetwork(layerSizes, activationVal);
     return {
       _type: "NeuralNetwork",
-      layers: layerSizes,
-      activation: act,
+      layers: [...net.layerSizes],
+      activation: net.activation,
       net
     };
   },
@@ -281,6 +379,12 @@ export const aiTrainingBuiltins = {
       dataset = datasetVal.map((item: any) => ({
         input: Array.isArray(item.input) ? item.input.map(Number) : [],
         output: Array.isArray(item.output) ? item.output.map(Number) : [Number(item.output)]
+      }));
+    } else if (datasetVal && typeof datasetVal === "object" && Array.isArray(datasetVal.inputs) && Array.isArray(datasetVal.targets)) {
+      if (datasetVal.inputs.length !== datasetVal.targets.length) throw new Error("Dataset inputs and targets must contain the same number of samples.");
+      dataset = datasetVal.inputs.map((input: any, index: number) => ({
+        input: Array.isArray(input) ? input.map(Number) : [],
+        output: Array.isArray(datasetVal.targets[index]) ? datasetVal.targets[index].map(Number) : [Number(datasetVal.targets[index])]
       }));
     }
 

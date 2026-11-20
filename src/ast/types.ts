@@ -16,6 +16,8 @@ export type Statement =
   | ForEachStatement
   | FunctionDefStatement
   | ReturnStatement
+  | BreakStatement
+  | ContinueStatement
   | ListAddStatement
   | ListRemoveStatement
   | WaitStatement
@@ -25,16 +27,23 @@ export interface BaseNode {
   location: SourceLocation;
 }
 
+export type AssignmentTarget = Identifier | MemberAccessExpression | IndexExpression;
+export type AssignmentOperator = "=" | "+=" | "-=" | "*=" | "/=" | "%=" | "**=" | "//=";
+
 export interface SetStatement extends BaseNode {
   type: "SetStatement";
+  // Retained for consumers of identifier-only ASTs. General targets use target.
   name: string;
+  target?: AssignmentTarget;
   value: Expression;
 }
 
 export interface AssignmentStatement extends BaseNode {
   type: "AssignmentStatement";
+  // Empty for member/index targets; retained for backward compatibility.
   name: string;
-  operator: "=" | "+=" | "-=" | "*=" | "/=";
+  target?: AssignmentTarget;
+  operator: AssignmentOperator;
   value: Expression;
 }
 
@@ -108,6 +117,14 @@ export interface FunctionDefStatement extends BaseNode {
 export interface ReturnStatement extends BaseNode {
   type: "ReturnStatement";
   value?: Expression;
+}
+
+export interface BreakStatement extends BaseNode {
+  type: "BreakStatement";
+}
+
+export interface ContinueStatement extends BaseNode {
+  type: "ContinueStatement";
 }
 
 export interface ListAddStatement extends BaseNode {

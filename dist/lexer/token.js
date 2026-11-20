@@ -58,11 +58,16 @@ var TokenType;
     TokenType["Import"] = "Import";
     TokenType["Def"] = "Def";
     TokenType["Return"] = "Return";
+    TokenType["Break"] = "Break";
+    TokenType["Continue"] = "Continue";
     // Symbols
     TokenType["PlusEqual"] = "PlusEqual";
     TokenType["MinusEqual"] = "MinusEqual";
     TokenType["StarEqual"] = "StarEqual";
     TokenType["SlashEqual"] = "SlashEqual";
+    TokenType["PercentEqual"] = "PercentEqual";
+    TokenType["StarStarEqual"] = "StarStarEqual";
+    TokenType["SlashSlashEqual"] = "SlashSlashEqual";
     TokenType["StarStar"] = "StarStar";
     TokenType["SlashSlash"] = "SlashSlash";
     TokenType["Colon"] = "Colon";

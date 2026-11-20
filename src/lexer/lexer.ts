@@ -52,6 +52,8 @@ const KEYWORDS: Record<string, TokenType> = {
   fn: TokenType.Def,
   function: TokenType.Def,
   return: TokenType.Return,
+  break: TokenType.Break,
+  continue: TokenType.Continue,
 };
 
 export class Lexer {
@@ -127,8 +129,29 @@ export class Lexer {
         continue;
       }
 
-      // Two-character symbols
       const loc = this.currentLocation();
+      // Longest operators first, so **= and //= remain single tokens.
+      const threeChars = this.source.slice(this.pos, this.pos + 3);
+      if (threeChars === "**=" || threeChars === "//=") {
+        this.advance();
+        this.advance();
+        this.advance();
+        tokens.push({
+          type: threeChars === "**=" ? TokenType.StarStarEqual : TokenType.SlashSlashEqual,
+          value: threeChars,
+          raw: threeChars,
+          location: loc
+        });
+        continue;
+      }
+      if (char === "%" && this.peekNext() === "=") {
+        this.advance();
+        this.advance();
+        tokens.push({ type: TokenType.PercentEqual, value: "%=", raw: "%=", location: loc });
+        continue;
+      }
+
+      // Two-character symbols
       if (char === "=" && this.peekNext() === "=") {
         this.advance();
         this.advance();
@@ -417,7 +440,7 @@ export class Lexer {
       return { type: TokenType.Nothing, value: null, raw, location: loc };
     }
 
-    if (KEYWORDS[lower]) {
+    if (Object.prototype.hasOwnProperty.call(KEYWORDS, lower)) {
       return {
         type: KEYWORDS[lower],
         value: lower,

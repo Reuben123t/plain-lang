@@ -1,38 +1,19 @@
-# Task Automation in PLAIN
-# Demonstrates shell execution, file searching, checksums, and structured logging.
+# Opt-in trusted Node automation. Run from the repository root.
+# Executes a local shell command and reads repository files; output varies.
+# No files are created/deleted and no credentials or external hosts are used.
 
 say "=== PLAIN Task Automation Suite ==="
 
-# 1. Structured Logging
-log_info("Starting daily automated maintenance task...")
-log_warn("Scanning workspace directories for temporary files...")
+log_info("Reading local development information...")
 
-# 2. Shell Command Automation
-set node_ver to run_command("node --version")
-say "1. Local Runtime Environment: " + node_ver
+runtime_version = run_command("node --version")
+say "Node runtime: " + runtime_version
 
-# 3. Find Files by Extension
-set plain_files to find_files("examples", ".plain")
-say "2. Discovered " + to_text(count(plain_files)) + " PLAIN example scripts in examples folder:"
-for each f in plain_files
-    say "   - " + f
-end
+plain_files = find_files("examples", ".plain")
+say "Example files: " + count(plain_files)
 
-# 4. File Integrity Checksum (SHA256)
-set checksum to checksum_file("package.json", "sha256")
-say "3. package.json SHA-256 Checksum: " + checksum
+manifest_checksum = checksum_file("package.json", "sha256")
+say "package.json SHA-256: " + manifest_checksum
 
-# 5. Environment File Parsing Simulation
-write_file(".env.demo", "APP_NAME=StudentPortal\nPORT=8080\nDEBUG=true")
-set env_entries to parse_env_file(".env.demo")
-say "4. Parsed Environment Variables:"
-for each entry in env_entries
-    say "   " + entry
-end
-
-# Cleanup demo file
-delete_file(".env.demo")
-
-log_info("All automated workflow tasks completed successfully!")
+log_info("Local automation demonstration finished.")
 say "=== Automation Suite Completed Successfully! ==="
-

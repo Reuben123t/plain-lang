@@ -1,0 +1,1 @@
+{"version":3,"file":"async_hooks.d.ts","sourceRoot":"","sources":["../../../src/browser/shims/async_hooks.ts"],"names":[],"mappings":"AAAA,qBAAa,iBAAiB,CAAC,CAAC;IAC9B,OAAO,CAAC,OAAO,CAAC,CAAI;IACpB,QAAQ,IAAI,CAAC,GAAG,SAAS;IACzB,GAAG,CAAC,CAAC,EAAE,KAAK,EAAE,CAAC,EAAE,QAAQ,EAAE,MAAM,CAAC,GAAG,CAAC;CAYvC"}

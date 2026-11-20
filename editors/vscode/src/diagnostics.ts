@@ -81,3 +81,4 @@ export class PlainDiagnosticProvider {
     this.diagnosticCollection.delete(document.uri);
   }
 }
+

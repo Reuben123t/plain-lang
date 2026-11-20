@@ -10,17 +10,43 @@ export class FileSystemSandbox {
     this.baseDir = path.resolve(baseDir || process.cwd());
   }
 
-  private resolveSafePath(filePath: string): string {
+  public resolvePath(filePath: string): string {
     const resolved = path.resolve(this.baseDir, filePath);
-    // Ensure path is within or relative to baseDir to prevent directory traversal
-    const relative = path.relative(this.baseDir, resolved);
-    if (relative.startsWith("..") && !path.isAbsolute(relative)) {
+    const isContained = (root: string, candidate: string): boolean => {
+      const relative = path.relative(root, candidate);
+      return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
+    };
+    const realPath = (candidate: string): string => {
+      let ancestor = candidate;
+      const suffix: string[] = [];
+      while (!fs.existsSync(ancestor)) {
+        // A dangling symlink is not a safe location for a new file.
+        try {
+          if (fs.lstatSync(ancestor).isSymbolicLink()) {
+            throw new Error("Cannot access a dangling symbolic link.");
+          }
+        } catch (error: any) {
+          if (error.code !== "ENOENT") throw error;
+        }
+        const parent = path.dirname(ancestor);
+        if (parent === ancestor) break;
+        suffix.unshift(path.basename(ancestor));
+        ancestor = parent;
+      }
+      return path.resolve(fs.realpathSync(ancestor), ...suffix);
+    };
+
+    try {
+      if (!isContained(this.baseDir, resolved) || !isContained(realPath(this.baseDir), realPath(resolved))) {
+        throw new Error("Path is outside the project folder.");
+      }
+    } catch {
       throw new PlainError(
         `Access to file outside the project folder is not allowed: "${filePath}".`,
         { line: 1, column: 1 },
         {
           kind: "RuntimeError",
-          suggestion: "Save and read files inside your project directory."
+          suggestion: "Save and read files inside your project directory; symbolic links must stay inside it."
         }
       );
     }
@@ -29,7 +55,7 @@ export class FileSystemSandbox {
 
   public readFile(filePathVal: PlainValue): string {
     const rawPath = plainToString(filePathVal);
-    const safePath = this.resolveSafePath(rawPath);
+    const safePath = this.resolvePath(rawPath);
     if (!fs.existsSync(safePath)) {
       throw new PlainError(
         `File not found: "${rawPath}".`,
@@ -53,7 +79,7 @@ export class FileSystemSandbox {
 
   public writeFile(filePathVal: PlainValue, contentVal: PlainValue): void {
     const rawPath = plainToString(filePathVal);
-    const safePath = this.resolveSafePath(rawPath);
+    const safePath = this.resolvePath(rawPath);
     const content = plainToString(contentVal);
     try {
       const dir = path.dirname(safePath);
@@ -73,7 +99,7 @@ export class FileSystemSandbox {
   public fileExists(filePathVal: PlainValue): boolean {
     const rawPath = plainToString(filePathVal);
     try {
-      const safePath = this.resolveSafePath(rawPath);
+      const safePath = this.resolvePath(rawPath);
       return fs.existsSync(safePath) && fs.statSync(safePath).isFile();
     } catch {
       return false;
@@ -82,7 +108,7 @@ export class FileSystemSandbox {
 
   public appendFile(filePathVal: PlainValue, contentVal: PlainValue): void {
     const rawPath = plainToString(filePathVal);
-    const safePath = this.resolveSafePath(rawPath);
+    const safePath = this.resolvePath(rawPath);
     const content = plainToString(contentVal);
     try {
       const dir = path.dirname(safePath);
@@ -101,7 +127,7 @@ export class FileSystemSandbox {
 
   public deleteFile(filePathVal: PlainValue): boolean {
     const rawPath = plainToString(filePathVal);
-    const safePath = this.resolveSafePath(rawPath);
+    const safePath = this.resolvePath(rawPath);
     if (!fs.existsSync(safePath)) {
       return false;
     }
@@ -119,7 +145,7 @@ export class FileSystemSandbox {
 
   public listFiles(dirPathVal?: PlainValue): string[] {
     const rawDir = dirPathVal !== undefined ? plainToString(dirPathVal) : ".";
-    const safeDir = this.resolveSafePath(rawDir);
+    const safeDir = this.resolvePath(rawDir);
     if (!fs.existsSync(safeDir)) {
       throw new PlainError(
         `Folder not found: "${rawDir}".`,
@@ -140,7 +166,7 @@ export class FileSystemSandbox {
 
   public fileSize(filePathVal: PlainValue): number {
     const rawPath = plainToString(filePathVal);
-    const safePath = this.resolveSafePath(rawPath);
+    const safePath = this.resolvePath(rawPath);
     if (!fs.existsSync(safePath)) {
       throw new PlainError(
         `File not found: "${rawPath}".`,
@@ -153,7 +179,7 @@ export class FileSystemSandbox {
 
   public createFolder(dirPathVal: PlainValue): void {
     const rawDir = plainToString(dirPathVal);
-    const safeDir = this.resolveSafePath(rawDir);
+    const safeDir = this.resolvePath(rawDir);
     try {
       if (!fs.existsSync(safeDir)) {
         fs.mkdirSync(safeDir, { recursive: true });
@@ -170,7 +196,7 @@ export class FileSystemSandbox {
   public folderExists(dirPathVal: PlainValue): boolean {
     const rawDir = plainToString(dirPathVal);
     try {
-      const safeDir = this.resolveSafePath(rawDir);
+      const safeDir = this.resolvePath(rawDir);
       return fs.existsSync(safeDir) && fs.statSync(safeDir).isDirectory();
     } catch {
       return false;

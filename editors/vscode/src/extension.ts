@@ -196,3 +196,4 @@ export function deactivate() {
     plainTerminal.dispose();
   }
 }
+

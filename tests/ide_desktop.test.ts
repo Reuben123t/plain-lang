@@ -12,7 +12,9 @@ describe("PLAIN Native Desktop IDE (Python IDLE Equivalent)", () => {
   const iconPath = path.join(workspaceRoot, "build_assets", "plain.ico");
   const fileIconPath = path.join(workspaceRoot, "build_assets", "plain-file.ico");
 
-  test("verifies that plain-ide.exe, plain.ico and plain-file.ico exist", () => {
+  test("verifies that plain-ide.exe, plain.ico and plain-file.ico exist", {
+    skip: process.env.PLAIN_TEST_NATIVE !== "1" || process.platform !== "win32"
+  }, () => {
     assert.strictEqual(fs.existsSync(distIdeExe), true, "dist/plain-ide.exe should exist");
     assert.strictEqual(fs.existsSync(localAppIdeExe), true, "Local AppData plain-ide.exe should exist");
     assert.strictEqual(fs.existsSync(iconPath), true, "build_assets/plain.ico should exist");

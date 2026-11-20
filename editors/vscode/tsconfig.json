@@ -2,13 +2,15 @@
   "compilerOptions": {
     "module": "commonjs",
     "target": "ES2022",
-    "outDir": "out",
     "lib": ["ES2022"],
-    "sourceMap": true,
-    "rootDir": "src",
-    "strict": false,
+    "rootDir": "../..",
+    "noEmit": true,
+    "strict": true,
     "moduleResolution": "node",
-    "skipLibCheck": true
+    "types": ["node", "vscode"],
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true
   },
-  "include": ["src/**/*"]
+  "include": ["src/**/*.ts"]
 }
+
